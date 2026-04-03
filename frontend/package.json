@@ -9,8 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tomtom-org/maps-sdk": "^0.46.9",
+    "@turf/turf": "^7.3.4",
+    "lodash-es": "^4.18.1",
+    "maplibre-gl": "^5.22.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

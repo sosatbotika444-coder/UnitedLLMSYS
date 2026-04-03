@@ -1,111 +1,162 @@
 :root {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  color: #0f172a;
+  color: #162032;
   background:
-    radial-gradient(circle at top, rgba(14, 165, 233, 0.18), transparent 30%),
-    linear-gradient(135deg, #f8fafc, #dbeafe);
+    radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.09), transparent 28%),
+    linear-gradient(180deg, #eef3f9 0%, #dde6f1 100%);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  min-height: 100vh;
 }
 
 button,
-input {
+input,
+select,
+textarea,
+a {
   font: inherit;
 }
 
-.page {
+button {
+  cursor: pointer;
+}
+
+.auth-shell,
+.dashboard-shell {
   min-height: 100vh;
+  padding: 22px;
+}
+
+.auth-shell {
   display: grid;
   place-items: center;
-  padding: 24px;
 }
 
-.card {
-  width: min(100%, 480px);
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.3);
+.auth-panel,
+.panel {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.auth-panel {
+  width: min(100%, 460px);
+  padding: 28px;
   border-radius: 24px;
-  padding: 32px;
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
 }
 
-.eyebrow {
-  margin: 0 0 8px;
-  text-transform: uppercase;
+.brand-lockup h1,
+.workspace-title h1 {
+  margin: 10px 0 4px;
+  font-size: clamp(28px, 4vw, 38px);
+  letter-spacing: -0.03em;
+}
+
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: #19365e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
-  font-size: 12px;
-  color: #0369a1;
-}
-
-h1,
-h2,
-.subtitle,
-p {
-  margin-top: 0;
-}
-
-.subtitle {
-  color: #475569;
-  margin-bottom: 24px;
+  text-transform: uppercase;
 }
 
 .tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin: 20px 0 18px;
 }
 
 .tabs button,
-.form button,
-.profile button {
+.primary-button,
+.secondary-button,
+.delete-button,
+.map-link {
   border: none;
-  border-radius: 14px;
-  padding: 12px 16px;
-  cursor: pointer;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tabs button {
-  background: #e2e8f0;
-  color: #334155;
+  background: #e9eff8;
+  color: #42516b;
 }
 
 .tabs button.active,
-.form button,
-.profile button {
-  background: linear-gradient(135deg, #0284c7, #0f766e);
-  color: white;
+.primary-button,
+.map-link {
+  background: linear-gradient(135deg, #0f766e, #1d4ed8);
+  color: #fff;
 }
 
-.form {
-  display: grid;
-  gap: 14px;
-}
-
-.form label {
-  display: grid;
-  gap: 8px;
+.secondary-button {
+  background: #eef2f7;
   color: #334155;
 }
 
-.form input {
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: white;
+.auth-form,
+.route-builder {
+  display: grid;
+  gap: 12px;
+}
+
+.route-builder {
+  grid-template-columns: 1.3fr 1.3fr 180px 180px auto;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.auth-form label,
+.toolbar label,
+.route-builder label {
+  display: grid;
+  gap: 6px;
+  color: #42516b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-form input,
+.toolbar input,
+.toolbar select,
+.route-builder input,
+.route-builder select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
 }
 
 .notice {
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
 }
 
 .notice.success {
@@ -118,14 +169,677 @@ p {
   color: #991b1b;
 }
 
-.profile {
+.inline-notice {
+  margin-bottom: 12px;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.workspace-title p,
+.sheet-panel-head span,
+.workspace-meta span,
+.user-badge span,
+.panel-head span,
+.system-state span,
+.fuel-board-head span,
+.route-option-metrics span,
+.fuel-stop-meta span,
+.route-option-top span,
+.fuel-stop-top span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workspace-meta,
+.user-badge,
+.system-state {
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.workspace-meta strong,
+.user-badge strong,
+.system-state strong {
+  font-size: 14px;
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.panel {
+  border-radius: 22px;
+  padding: 16px;
+}
+
+.panel-head,
+.sheet-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.panel-head h2,
+.sheet-panel-head h2,
+.fuel-board-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8fbff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.stat-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b7280;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.stat-card strong {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.stat-card.warning {
+  background: linear-gradient(135deg, rgba(254, 226, 226, 0.95), rgba(255, 237, 213, 0.95));
+}
+
+.stat-card.accent {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.95), rgba(220, 252, 231, 0.95));
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 220px 220px;
+  gap: 10px;
+  align-items: end;
+}
+
+.route-panel {
+  margin-bottom: 14px;
+}
+
+.route-results {
+  display: grid;
+  gap: 16px;
+}
+
+.route-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.route-map-stage {
+  min-width: 0;
+}
+
+.route-side-panel {
   display: grid;
   gap: 12px;
 }
 
-@media (max-width: 540px) {
-  .card {
-    padding: 24px;
+.legend-item,
+.route-option-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.route-options-grid,
+.fuel-stop-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.route-options-grid-compact {
+  grid-template-columns: 1fr;
+}
+
+.fuel-stop-grid-expanded {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.route-option-card,
+.fuel-stop-card,
+.empty-route-card {
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid rgba(219, 229, 241, 0.95);
+}
+
+.route-option-top,
+.fuel-stop-top,
+.fuel-stop-meta,
+.fuel-board-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.route-option-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.fuel-filters-card {
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid rgba(219, 229, 241, 0.95);
+}
+
+.fuel-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.fuel-filter-grid label,
+.price-toggle {
+  display: grid;
+  gap: 6px;
+  color: #42516b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fuel-filter-grid input,
+.fuel-filter-grid select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.fuel-filter-grid input:focus,
+.fuel-filter-grid select:focus {
+  box-shadow: inset 0 0 0 1.5px #2563eb;
+  background: rgba(239, 246, 255, 0.95);
+}
+
+.price-toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.price-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.fuel-filter-note {
+  margin: 12px 0 0;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.fuel-stop-card p {
+  margin: 10px 0;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.sheet-panel {
+  padding-bottom: 12px;
+}
+
+.sheet-frame {
+  border-radius: 18px;
+  overflow: hidden;
+  background: #f7fafe;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+}
+
+.sheet-scroll {
+  overflow: auto;
+}
+
+.dispatch-sheet {
+  width: 100%;
+  min-width: 1540px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.dispatch-sheet th,
+.dispatch-sheet td {
+  border-right: 1px solid #dbe4ef;
+  border-bottom: 1px solid #dbe4ef;
+  vertical-align: middle;
+}
+
+.dispatch-sheet th:first-child,
+.dispatch-sheet td:first-child {
+  border-left: 1px solid #dbe4ef;
+}
+
+.dispatch-sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eaf0f8;
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dispatch-sheet tbody tr:hover td {
+  background: #f8fbff;
+}
+
+.dispatch-sheet td {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.dispatch-sheet input,
+.dispatch-sheet textarea,
+.dispatch-sheet select {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 10px;
+  outline: none;
+}
+
+.dispatch-sheet input:focus,
+.dispatch-sheet textarea:focus,
+.dispatch-sheet select:focus,
+.toolbar input:focus,
+.toolbar select:focus,
+.auth-form input:focus,
+.route-builder input:focus,
+.route-builder select:focus {
+  box-shadow: inset 0 0 0 1.5px #2563eb;
+  background: rgba(239, 246, 255, 0.95);
+}
+
+.dispatch-sheet textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.driver-cell {
+  background: linear-gradient(180deg, #3dff29, #2ede1a) !important;
+}
+
+.driver-cell input {
+  font-weight: 600;
+}
+
+.readonly-cell,
+.empty-state-cell {
+  padding: 10px;
+  text-align: center;
+  font-weight: 700;
+  color: #334155;
+}
+
+.empty-state-cell {
+  background: rgba(241, 245, 249, 0.95) !important;
+  font-weight: 600;
+}
+
+.fuel-cell {
+  min-width: 140px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+
+.fuel-cell input[type="range"] {
+  padding: 0;
+}
+
+.fuel-strong {
+  background: #16e936 !important;
+}
+
+.fuel-good {
+  background: #b8f5b2 !important;
+}
+
+.fuel-watch {
+  background: #ffd2a8 !important;
+}
+
+.fuel-low {
+  background: #ff4c4c !important;
+  color: #fff;
+}
+
+.status-select {
+  margin: 6px;
+  width: calc(100% - 12px) !important;
+  border-radius: 999px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.status-done {
+  background: #167c50 !important;
+  color: #fff;
+}
+
+.status-live {
+  background: #dbeafe !important;
+  color: #18407a;
+}
+
+.status-review {
+  background: #fee2e2 !important;
+  color: #9f1239;
+}
+
+.status-delayed {
+  background: #fde68a !important;
+  color: #854d0e;
+}
+
+.action-cell {
+  text-align: center;
+}
+
+.delete-button {
+  background: #1d5fb8;
+  color: #fff;
+  min-width: 90px;
+}
+
+@media (max-width: 1280px) {
+  .control-grid,
+  .toolbar,
+  .workspace-header,
+  .route-builder,
+  .route-main-grid,
+  .route-options-grid,
+  .fuel-stop-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .workspace-actions {
+    justify-content: stretch;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .live-route-map {
+    height: 520px;
+  }
+
+  .fuel-stop-grid-expanded {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-shell,
+  .dashboard-shell {
+    padding: 14px;
+  }
+
+  .auth-panel,
+  .panel {
+    padding: 14px;
     border-radius: 18px;
   }
+
+  .stats-grid,
+  .fuel-stop-grid-expanded {
+    grid-template-columns: 1fr;
+  }
+
+  .live-route-map {
+    height: 420px;
+  }
+
+  .workspace-title h1,
+  .brand-lockup h1 {
+    font-size: 26px;
+  }
+}
+
+.live-route-map {
+  width: 100%;
+  height: 680px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+}
+
+.tt-marker {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+}
+
+.marker-start {
+  background: #0f766e;
+}
+
+.marker-end {
+  background: #dc2626;
+}
+
+.marker-fuel-best {
+  background: #1d4ed8;
+}
+
+.marker-fuel {
+  background: #2563eb;
+}
+
+.marker-fuel-independent {
+  background: #64748b;
+}
+
+.services-panel {
+  margin-bottom: 14px;
+}
+
+.services-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.service-summary-card,
+.service-card {
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid rgba(219, 229, 241, 0.95);
+}
+
+.service-summary-card span,
+.service-group-head span,
+.service-status {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.service-summary-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
+.service-summary-card.live {
+  background: linear-gradient(135deg, rgba(219, 252, 231, 0.96), rgba(220, 252, 231, 0.82));
+}
+
+.service-summary-card.ready {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.96), rgba(239, 246, 255, 0.88));
+}
+
+.service-summary-card.locked {
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(255, 237, 213, 0.88));
+}
+
+.service-summary-card.total {
+  background: linear-gradient(135deg, rgba(241, 245, 249, 0.98), rgba(226, 232, 240, 0.88));
+}
+
+.service-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.service-group {
+  display: grid;
+  gap: 10px;
+}
+
+.service-group-head,
+.service-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.service-group-head h3,
+.service-card-top strong {
+  margin: 0;
+}
+
+.service-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.service-card p {
+  margin: 10px 0 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.service-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.service-status-live {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.service-status-ready {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.service-status-locked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+@media (max-width: 1280px) {
+  .services-summary-grid,
+  .service-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fuel-price-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(219, 234, 254, 0.6);
+}
+
+.fuel-price-row-muted {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+.fuel-price-row strong {
+  color: #0f172a;
+}
+
+.fuel-price-row span {
+  color: #475569;
+  font-size: 12px;
 }

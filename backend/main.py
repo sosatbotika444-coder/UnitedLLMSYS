@@ -2,10 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import Base, engine
 from app.routes.auth import router as auth_router
+from app.routes.loads import router as loads_router
+from app.routes.navigation import router as navigation_router
 
 
 settings = get_settings()
@@ -17,7 +20,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Simple Auth API", lifespan=lifespan)
+app = FastAPI(title="United Lane System API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +31,13 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(loads_router, prefix="/api")
+app.include_router(navigation_router, prefix="/api")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/api/health")
