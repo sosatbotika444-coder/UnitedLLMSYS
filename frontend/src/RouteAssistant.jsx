@@ -12,9 +12,7 @@ const brandSignals = [
   "love's",
   "loves",
   "love's travel stop",
-  "loves travel stop",
-  "travel center",
-  "travel centre"
+  "loves travel stop"
 ];
 
 const defaultFilters = {
@@ -104,7 +102,7 @@ function getNetworkLabel(stop) {
   const haystack = `${stop.brand || ""} ${stop.name || ""}`.toLowerCase();
   if (haystack.includes("love")) return "Love's";
   if (haystack.includes("pilot") || haystack.includes("flying j")) return "Pilot Flying J";
-  return "Travel Center";
+  return stop.brand || stop.name || "Fuel Stop";
 }
 
 function StopCard({ stop, compact = false }) {
@@ -127,7 +125,7 @@ function StopCard({ stop, compact = false }) {
 
       <div className="fuel-price-row fuel-price-row-brand">
         <div>
-          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Official price unavailable"}</strong>
+          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Price not published"}</strong>
           <span>{stop.price_source || "TomTom + official network pages"}</span>
         </div>
         {stop.source_url ? (
@@ -135,6 +133,11 @@ function StopCard({ stop, compact = false }) {
             Official page
           </a>
         ) : null}
+      </div>
+
+      <div className="fuel-stop-coords">
+        <strong>Coords</strong>
+        <span>{Number(stop.lat).toFixed(5)}, {Number(stop.lon).toFixed(5)}</span>
       </div>
 
       <div className="fuel-stop-stat-grid">
@@ -207,8 +210,8 @@ export default function RouteAssistant({ token }) {
       <div className="route-brand-hero">
         <div className="route-brand-copy">
           <span className="brand-signal-pill">Brand-Only Network Scan</span>
-          <h2>Love's, Pilot, Flying J, and Travel Center route finder</h2>
-          <p>We scan only Love&apos;s and Pilot/Flying J route stops, then hit the official network page for each stop to pull price data when the site publishes it.</p>
+          <h2>Strict Love's and Pilot Flying J route finder</h2>
+          <p>We search with TomTom only, keep only strict Love&apos;s and Pilot/Flying J matches, show official price when published, and otherwise mark the stop as no-price with exact coordinates.</p>
         </div>
         <div className="brand-keyword-cloud">
           {brandSignals.map((signal) => (
@@ -333,7 +336,7 @@ export default function RouteAssistant({ token }) {
             <section className="fuel-board feature-board feature-board-brand">
               <div className="fuel-board-head">
                 <h3>Brand Power</h3>
-                <span>Most explicit Pilot/Love's/travel center matches</span>
+                <span>Most explicit Pilot and Love's matches</span>
               </div>
               <div className="fuel-stop-grid">
                 {brandPowerStops.length ? brandPowerStops.map((stop) => <StopCard key={`brand-${stop.id}`} stop={stop} compact />) : <div className="empty-route-card">No exact brand-family matches found.</div>}
@@ -344,7 +347,7 @@ export default function RouteAssistant({ token }) {
           <div className="fuel-board fuel-board-brand-list">
             <div className="fuel-board-head">
               <h3>All Network Stops</h3>
-              <span>Only Pilot, Flying J, Love's, and travel center keyword matches.</span>
+              <span>Only strict Pilot Flying J and Love's matches.</span>
             </div>
             <div className="fuel-stop-grid fuel-stop-grid-expanded">
               {visibleStops.length ? visibleStops.map((stop) => <StopCard key={stop.id} stop={stop} />) : <div className="empty-route-card">No network stops matched this view.</div>}
@@ -352,7 +355,7 @@ export default function RouteAssistant({ token }) {
           </div>
         </div>
       ) : (
-        <div className="empty-route-card empty-route-card-brand">Enter origin and destination to scan only Pilot, Flying J, Love's, and travel center networks along the route.</div>
+        <div className="empty-route-card empty-route-card-brand">Enter origin and destination to scan only strict Pilot Flying J and Love's stops along the route.</div>
       )}
     </section>
   );

@@ -23,10 +23,11 @@ function buildStopPopup(stop) {
   return [
     `<strong>${stop.brand || stop.name}</strong>`,
     stop.address,
-    stop.price ? `Price: $${stop.price.toFixed(3)}/gal` : "No listed price",
+    stop.price ? `Price: $${stop.price.toFixed(3)}/gal` : "Price not published",
     stop.price_date ? `As of: ${stop.price_date}` : null,
     `Off route: ${Math.round(((stop.off_route_miles || 0) + Number.EPSILON) * 10) / 10} mi`,
-    `Score: ${Math.round(stop.overall_score || 0)}`
+    `Score: ${Math.round(stop.overall_score || 0)}`,
+    `Coords: ${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)}`
   ]
     .filter(Boolean)
     .join("<br/>");

@@ -1180,6 +1180,24 @@ button {
   gap: 4px;
 }
 
+.fuel-stop-coords {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.fuel-stop-coords strong {
+  color: #0f172a;
+}
+
+.fuel-stop-coords span {
+  color: #475569;
+  font-size: 12px;
+}
+
 .fuel-source-link {
   display: inline-flex;
   align-items: center;

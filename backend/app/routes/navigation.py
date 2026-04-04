@@ -39,8 +39,6 @@ TOMTOM_BRAND_KEYWORDS = [
     "loves",
     "love's travel stop",
     "loves travel stop",
-    "travel center",
-    "travel centre",
 ]
 ALONG_ROUTE_PAGE_SIZE = 100
 ALONG_ROUTE_MAX_RESULTS = 180
@@ -405,11 +403,27 @@ def detect_keyword_match(name: str, brand: str) -> str | None:
     return None
 
 
-def keyword_family(keyword: str | None, name: str) -> str:
-    haystack = normalize_text(f"{keyword or ''} {name}")
+def detect_brand_family(name: str, brand: str) -> str | None:
+    haystack = normalize_text(f"{brand} {name}")
+    loves_signals = ["love s", "loves", "love s travel stop", "loves travel stop"]
+    pilot_signals = ["pilot", "pilot travel center", "pilot flying j", "flying j", "flying j travel center"]
+    if any(signal in haystack for signal in loves_signals):
+        return "Love's"
+    if any(signal in haystack for signal in pilot_signals):
+        return "Pilot Flying J"
+    return None
+
+
+def keyword_family(keyword: str | None, name: str, brand: str = "") -> str | None:
+    explicit = detect_brand_family(name, brand)
+    if explicit:
+        return explicit
+    haystack = normalize_text(f"{keyword or ''} {brand} {name}")
     if "love" in haystack:
         return "Love's"
-    return "Pilot Flying J"
+    if "pilot" in haystack or "flying j" in haystack:
+        return "Pilot Flying J"
+    return None
 
 
 def keyword_score(keyword: str | None) -> float:
@@ -418,8 +432,6 @@ def keyword_score(keyword: str | None) -> float:
         return 100
     if normalized in {"pilot", "flying j", "love s", "loves"}:
         return 92
-    if normalized in {"travel center", "travel centre"}:
-        return 76
     return 68
 
 
@@ -429,8 +441,9 @@ def to_fuel_stop(item: dict, matched_keyword: str | None) -> FuelStop:
     position = item.get("position", {})
     brands = poi.get("brands", []) or []
     brand_name = brands[0].get("name") if brands else None
-    display_name = poi.get("name") or brand_name or keyword_family(matched_keyword, "")
-    display_brand = brand_name or keyword_family(matched_keyword, display_name)
+    family = keyword_family(matched_keyword, poi.get("name", ""), brand_name or "") or "Unknown"
+    display_name = poi.get("name") or brand_name or family
+    display_brand = family
     subdivision = address.get("countrySubdivisionCode")
     state_code = subdivision.split("-")[-1] if subdivision else None
     stop = FuelStop(
@@ -501,7 +514,7 @@ def search_tomtom_brand_stops(route_points: list[RoutePoint]) -> list[FuelStop]:
                 brands = poi.get("brands", []) or []
                 brand_name = brands[0].get("name") if brands else ""
                 matched_keyword = detect_keyword_match(poi.get("name", ""), brand_name) or keyword
-                family = keyword_family(matched_keyword, poi.get("name", ""))
+                family = keyword_family(matched_keyword, poi.get("name", ""), brand_name)
                 if family not in {"Love's", "Pilot Flying J"}:
                     continue
                 merge_stop(stops_by_id, to_fuel_stop(item, matched_keyword))
@@ -560,5 +573,5 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         ))
 
     top_fuel_stops = sort_stops(list(combined_stops.values()), payload.sort_by)[:24]
-    price_support = "TomTom finds exact Love's and Pilot/Flying J stops by route, then each stop is checked against the official network page. Love's diesel prices come from the official Love's location page when available; Pilot/Flying J pages are linked, but many do not publish diesel prices."
+    price_support = "TomTom now keeps only strict Love's and Pilot/Flying J brand matches. If an official page publishes a diesel price, we show it. If not, the stop stays visible with a no-price label and exact coordinates."
     return RouteAssistantResponse(origin=origin, destination=destination, routes=routes, top_fuel_stops=top_fuel_stops, price_support=price_support, map_link=build_map_link(origin.label, destination.label), data_source="TomTom + Official Network Pages")
