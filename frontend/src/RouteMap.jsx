@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 
-const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "";
+const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
 const ROUTES_SOURCE_ID = "dispatch-routes";
 const ROUTES_LAYER_ID = "dispatch-routes-line";
@@ -340,7 +340,6 @@ export default function RouteMap({ plan }) {
   }, [allStops, plan]);
 
   if (!TOMTOM_KEY) {
-    return <div className="empty-route-card">Map is disabled because VITE_TOMTOM_API_KEY is missing.</div>;
   }
 
   if (mapError) {

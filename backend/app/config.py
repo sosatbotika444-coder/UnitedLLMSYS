@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60
     cors_origins: str = "https://dpsearch.netlify.app,http://localhost:5173"
-    tomtom_api_key: str = ""
+    tomtom_api_key: str = "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
