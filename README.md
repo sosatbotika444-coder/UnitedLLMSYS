@@ -143,3 +143,29 @@ VITE_TOMTOM_API_KEY=your-tomtom-api-key
 4. Set `VITE_API_URL` in Netlify.
 5. Set `CORS_ORIGINS` in Railway to the Netlify URL.
 6. Redeploy both services after env changes.
+
+
+## Railway build fallback
+
+If Railway imports the repo from the root and shows:
+
+- `Script start.sh not found`
+- `Railpack could not determine how to build the app`
+
+this repo now includes a root `Dockerfile`, so Railway can still deploy the backend without guessing the monorepo layout.
+
+Fastest fix:
+
+1. In Railway, redeploy the same service from the repo root.
+2. Railway should detect the root `Dockerfile` automatically.
+3. Keep using these variables:
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+SECRET_KEY=your-secret
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+CORS_ORIGINS=https://your-netlify-site.netlify.app
+TOMTOM_API_KEY=your-tomtom-api-key
+```
+
+If you prefer Nixpacks instead of Docker, set the service root directory to `backend` manually.
