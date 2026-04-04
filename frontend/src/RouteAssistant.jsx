@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import RouteMap from "./RouteMap";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
 const brandSignals = [
   "pilot",

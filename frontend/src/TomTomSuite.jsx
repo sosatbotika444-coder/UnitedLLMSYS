@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const categoryOrder = ["Maps", "Search", "Routing", "Traffic", "Operations", "Platform"];
 
 async function apiRequest(path, options = {}, token = "") {

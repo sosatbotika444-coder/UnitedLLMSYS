@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import RouteAssistant from "./RouteAssistant";
 import TomTomSuite from "./TomTomSuite";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const emptyRegister = { full_name: "", email: "", password: "" };
