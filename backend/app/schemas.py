@@ -61,6 +61,14 @@ class RouteAssistantRequest(BaseModel):
     destination: str = Field(min_length=2, max_length=255)
     vehicle_type: str = Field(default="Truck", max_length=32)
     fuel_type: str = Field(default="Diesel", max_length=32)
+    allow_no_fuel: bool = False
+    allow_missing_cost: bool = True
+    allow_unattended: bool = False
+    sort_by: str = Field(default="distance", max_length=32)
+    start_range: str = Field(default="", max_length=8)
+    full_range: str = Field(default="", max_length=8)
+    amenities: list[str] = []
+    affiliations: list[str] = []
 
 
 class RoutePoint(BaseModel):
@@ -78,15 +86,24 @@ class FuelStop(BaseModel):
     id: str
     name: str
     brand: str
+    city: str = ""
     address: str
     state_code: str | None = None
     lat: float
     lon: float
     detour_distance_meters: int | None = None
     detour_time_seconds: int | None = None
+    origin_miles: float | None = None
+    off_route_miles: float | None = None
     fuel_types: list[str] = []
     price: float | None = None
+    price_less_tax: float | None = None
     price_source: str | None = None
+    price_date: str | None = None
+    parking_spaces: str | None = None
+    amenity_score: float | None = None
+    overall_score: float | None = None
+    source_url: str | None = None
 
 
 class RouteOption(BaseModel):
@@ -106,6 +123,7 @@ class RouteAssistantResponse(BaseModel):
     top_fuel_stops: list[FuelStop]
     price_support: str
     map_link: str
+    data_source: str = "FindFuelStops"
 
 
 class ApiCapability(BaseModel):

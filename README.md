@@ -1,45 +1,45 @@
-# Simple Full-Stack Auth Starter
+# United Lane System
 
-This repository contains a minimal architecture with:
+This repo is ready for a split deployment:
 
-- `backend/`: FastAPI API with JWT auth and PostgreSQL support
-- `frontend/`: React app with register/login screens
+- `backend/` -> Railway
+- `frontend/` -> Netlify
+- `PostgreSQL` -> Railway managed database
 
-## Architecture
+## Stack
+
+- `backend/`: FastAPI + SQLAlchemy + JWT auth
+- `frontend/`: Vite + React
+- `database`: PostgreSQL on Railway
+
+## Local env
 
 ### Backend
 
-- `app/config.py`: reads `.env` values and normalizes Railway PostgreSQL URLs
-- `app/database.py`: SQLAlchemy engine and session setup
-- `app/models.py`: `User` table
-- `app/routes/auth.py`: register, login, and current-user endpoints
-- `app/auth.py`: password hashing and JWT token helpers
+Create `backend/.env` from `backend/.env.example`.
+
+Required values:
+
+```env
+DATABASE_URL=postgresql://postgres:password@host:5432/railway
+SECRET_KEY=replace-with-a-long-random-secret
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+CORS_ORIGINS=http://localhost:5173,https://your-netlify-site.netlify.app
+TOMTOM_API_KEY=your-tomtom-api-key
+```
 
 ### Frontend
 
-- `src/App.jsx`: auth UI and token/session handling
-- `src/styles.css`: simple responsive styling
-- `VITE_API_URL`: frontend API base URL
-
-## Backend setup
-
-1. Create the backend env file:
-
-```bash
-cd backend
-copy .env.example .env
-```
-
-2. Put your Railway PostgreSQL URL in `backend/.env`:
+Create `frontend/.env` from `frontend/.env.example`.
 
 ```env
-DATABASE_URL=postgresql://postgres:password@hostname:5432/railway
-SECRET_KEY=replace-with-a-long-random-secret
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-CORS_ORIGINS=http://localhost:5173
+VITE_API_URL=http://localhost:8000/api
+VITE_TOMTOM_API_KEY=your-tomtom-api-key
 ```
 
-3. Install dependencies and run the API:
+## Local run
+
+### Backend
 
 ```bash
 cd backend
@@ -49,19 +49,12 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-API will run at `http://localhost:8000`.
-Open `http://localhost:8000/docs` in the browser, or check `http://localhost:8000/api/health`.
+Backend health check:
 
-## Frontend setup
+- `http://localhost:8000/api/health`
+- `http://localhost:8000/docs`
 
-1. Create the frontend env file:
-
-```bash
-cd frontend
-copy .env.example .env
-```
-
-2. Install dependencies and run the frontend:
+### Frontend
 
 ```bash
 cd frontend
@@ -69,7 +62,71 @@ npm install
 npm run dev
 ```
 
-Frontend will run at `http://localhost:5173`.
+Frontend local URL:
+
+- `http://localhost:5173`
+
+## Railway backend deploy
+
+The backend folder already includes:
+
+- `Procfile`
+- `runtime.txt`
+- `railway.json`
+
+### Steps
+
+1. Push this repo to GitHub.
+2. In Railway, create a new project.
+3. Add a `PostgreSQL` service.
+4. Add a second service from GitHub and set its root directory to `backend`.
+5. In the backend Railway service variables, add a reference variable:
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+6. In backend service settings, set the root directory to `/backend`.
+7. If you use config-as-code, point Railway to `/backend/railway.json` because config files do not automatically follow the root directory.
+8. Set the remaining backend env vars in Railway:
+
+```env
+SECRET_KEY=replace-with-a-long-random-secret
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+CORS_ORIGINS=https://your-netlify-site.netlify.app
+TOMTOM_API_KEY=your-tomtom-api-key
+```
+
+9. Deploy.
+10. Open `https://your-railway-backend-url/api/health` and confirm `{"status":"ok"}`.
+
+Notes:
+
+- Railway often gives a `postgresql://` URL; backend config normalizes it for SQLAlchemy automatically.
+- Tables are created automatically on backend startup.
+- If you use a custom Netlify domain, add it to `CORS_ORIGINS` too.
+- Railway service-to-service startup ordering works best when the backend references Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+
+## Netlify frontend deploy
+
+The repo root already includes `netlify.toml` configured to build the `frontend` app.
+
+### Steps
+
+1. In Netlify, import the GitHub repo.
+2. Leave the repo root as-is.
+3. Netlify will use:
+   - base dir: `frontend`
+   - build command: `npm run build`
+   - publish dir: `dist`
+4. Add frontend env vars in Netlify:
+
+```env
+VITE_API_URL=https://your-railway-backend-url/api
+VITE_TOMTOM_API_KEY=your-tomtom-api-key
+```
+
+5. Deploy.
 
 ## Auth endpoints
 
@@ -78,8 +135,11 @@ Frontend will run at `http://localhost:5173`.
 - `GET /api/auth/me`
 - `GET /api/health`
 
-## Notes
+## Deployment checklist
 
-- Tables are created automatically on backend startup.
-- Railway often provides a `postgresql://` URL; the backend converts it automatically for SQLAlchemy.
-- The frontend stores the JWT token in local storage for a simple starter implementation.
+1. Create Railway PostgreSQL.
+2. Deploy backend from `backend/`.
+3. Copy Railway backend URL.
+4. Set `VITE_API_URL` in Netlify.
+5. Set `CORS_ORIGINS` in Railway to the Netlify URL.
+6. Redeploy both services after env changes.

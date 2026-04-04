@@ -5,6 +5,12 @@ import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
+const ROUTES_SOURCE_ID = "dispatch-routes";
+const ROUTES_LAYER_ID = "dispatch-routes-line";
+const STOPS_SOURCE_ID = "clustered-fuel-stops";
+const CLUSTERS_LAYER_ID = "fuel-stop-clusters";
+const CLUSTER_COUNT_LAYER_ID = "fuel-stop-cluster-count";
+const UNCLUSTERED_LAYER_ID = "fuel-stop-points";
 
 function createMarkerElement(className, label) {
   const el = document.createElement("div");
@@ -13,10 +19,25 @@ function createMarkerElement(className, label) {
   return el;
 }
 
+function buildStopPopup(stop) {
+  return [
+    `<strong>${stop.brand || stop.name}</strong>`,
+    stop.address,
+    stop.price ? `Price: $${stop.price.toFixed(3)}/gal` : "No listed price",
+    stop.price_date ? `As of: ${stop.price_date}` : null,
+    `Off route: ${Math.round(((stop.off_route_miles || 0) + Number.EPSILON) * 10) / 10} mi`,
+    `Score: ${Math.round(stop.overall_score || 0)}`
+  ]
+    .filter(Boolean)
+    .join("<br/>");
+}
+
 export default function RouteMap({ plan }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const popupRef = useRef(null);
+  const handlersBoundRef = useRef(false);
   const [mapError, setMapError] = useState("");
 
   const allStops = useMemo(() => {
@@ -35,14 +56,79 @@ export default function RouteMap({ plan }) {
     }
 
     let active = true;
-    let map = null;
+    let mapInstance = null;
 
-    const renderMap = () => {
-      if (!active || !map) {
+    const bindMapHandlers = (mapLibreMap) => {
+      if (handlersBoundRef.current) {
         return;
       }
 
-      const mapLibreMap = map.mapLibreMap;
+      mapLibreMap.on("click", CLUSTERS_LAYER_ID, (event) => {
+        const features = mapLibreMap.queryRenderedFeatures(event.point, { layers: [CLUSTERS_LAYER_ID] });
+        const clusterFeature = features[0];
+        if (!clusterFeature) {
+          return;
+        }
+
+        const clusterId = clusterFeature.properties?.cluster_id;
+        const source = mapLibreMap.getSource(STOPS_SOURCE_ID);
+        if (!source || clusterId === undefined) {
+          return;
+        }
+
+        source.getClusterExpansionZoom(clusterId, (error, zoom) => {
+          if (error) {
+            return;
+          }
+          mapLibreMap.easeTo({
+            center: clusterFeature.geometry.coordinates,
+            zoom,
+            duration: 500
+          });
+        });
+      });
+
+      mapLibreMap.on("click", UNCLUSTERED_LAYER_ID, (event) => {
+        const feature = event.features?.[0];
+        if (!feature) {
+          return;
+        }
+
+        const coordinates = [...feature.geometry.coordinates];
+        const stop = JSON.parse(feature.properties.stop);
+
+        if (popupRef.current) {
+          popupRef.current.remove();
+        }
+
+        popupRef.current = new maplibregl.Popup({ offset: 18 })
+          .setLngLat(coordinates)
+          .setHTML(buildStopPopup(stop))
+          .addTo(mapLibreMap);
+      });
+
+      mapLibreMap.on("mouseenter", CLUSTERS_LAYER_ID, () => {
+        mapLibreMap.getCanvas().style.cursor = "pointer";
+      });
+      mapLibreMap.on("mouseleave", CLUSTERS_LAYER_ID, () => {
+        mapLibreMap.getCanvas().style.cursor = "";
+      });
+      mapLibreMap.on("mouseenter", UNCLUSTERED_LAYER_ID, () => {
+        mapLibreMap.getCanvas().style.cursor = "pointer";
+      });
+      mapLibreMap.on("mouseleave", UNCLUSTERED_LAYER_ID, () => {
+        mapLibreMap.getCanvas().style.cursor = "";
+      });
+
+      handlersBoundRef.current = true;
+    };
+
+    const renderMap = () => {
+      if (!active || !mapInstance) {
+        return;
+      }
+
+      const mapLibreMap = mapInstance.mapLibreMap;
       const routeFeatures = plan.routes.map((route, index) => ({
         type: "Feature",
         geometry: {
@@ -56,33 +142,139 @@ export default function RouteMap({ plan }) {
         }
       }));
 
-      const routesGeoJson = {
-        type: "FeatureCollection",
-        features: routeFeatures
-      };
+      const stopFeatures = allStops.map((stop) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [stop.lon, stop.lat]
+        },
+        properties: {
+          id: stop.id,
+          isBest: plan.top_fuel_stops.some((item) => item.id === stop.id),
+          isIndependent: stop.brand === "Independent",
+          price: stop.price ?? null,
+          score: stop.overall_score ?? 0,
+          stop: JSON.stringify(stop)
+        }
+      }));
 
-      if (mapLibreMap.getLayer("dispatch-routes-line")) {
-        mapLibreMap.removeLayer("dispatch-routes-line");
+      if (mapLibreMap.getLayer(ROUTES_LAYER_ID)) {
+        mapLibreMap.removeLayer(ROUTES_LAYER_ID);
       }
-      if (mapLibreMap.getSource("dispatch-routes")) {
-        mapLibreMap.removeSource("dispatch-routes");
+      if (mapLibreMap.getSource(ROUTES_SOURCE_ID)) {
+        mapLibreMap.removeSource(ROUTES_SOURCE_ID);
       }
 
-      mapLibreMap.addSource("dispatch-routes", {
+      [CLUSTERS_LAYER_ID, CLUSTER_COUNT_LAYER_ID, UNCLUSTERED_LAYER_ID].forEach((layerId) => {
+        if (mapLibreMap.getLayer(layerId)) {
+          mapLibreMap.removeLayer(layerId);
+        }
+      });
+      if (mapLibreMap.getSource(STOPS_SOURCE_ID)) {
+        mapLibreMap.removeSource(STOPS_SOURCE_ID);
+      }
+
+      mapLibreMap.addSource(ROUTES_SOURCE_ID, {
         type: "geojson",
-        data: routesGeoJson
+        data: {
+          type: "FeatureCollection",
+          features: routeFeatures
+        }
       });
 
       mapLibreMap.addLayer({
-        id: "dispatch-routes-line",
+        id: ROUTES_LAYER_ID,
         type: "line",
-        source: "dispatch-routes",
+        source: ROUTES_SOURCE_ID,
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["get", "width"],
           "line-opacity": 0.9
         }
       });
+
+      mapLibreMap.addSource(STOPS_SOURCE_ID, {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: stopFeatures
+        },
+        cluster: true,
+        clusterMaxZoom: 9,
+        clusterRadius: 42
+      });
+
+      mapLibreMap.addLayer({
+        id: CLUSTERS_LAYER_ID,
+        type: "circle",
+        source: STOPS_SOURCE_ID,
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": [
+            "step",
+            ["get", "point_count"],
+            "#1d4ed8",
+            12,
+            "#0f766e",
+            32,
+            "#ea580c"
+          ],
+          "circle-radius": [
+            "step",
+            ["get", "point_count"],
+            18,
+            12,
+            24,
+            32,
+            30
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 0.9
+        }
+      });
+
+      mapLibreMap.addLayer({
+        id: CLUSTER_COUNT_LAYER_ID,
+        type: "symbol",
+        source: STOPS_SOURCE_ID,
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": ["get", "point_count_abbreviated"],
+          "text-font": ["Open Sans Bold"],
+          "text-size": 12
+        },
+        paint: {
+          "text-color": "#ffffff"
+        }
+      });
+
+      mapLibreMap.addLayer({
+        id: UNCLUSTERED_LAYER_ID,
+        type: "circle",
+        source: STOPS_SOURCE_ID,
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-color": [
+            "case",
+            ["boolean", ["get", "isBest"], false],
+            "#1d4ed8",
+            ["boolean", ["get", "isIndependent"], false],
+            "#64748b",
+            "#2563eb"
+          ],
+          "circle-radius": [
+            "case",
+            ["boolean", ["get", "isBest"], false],
+            8,
+            6
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff"
+        }
+      });
+
+      bindMapHandlers(mapLibreMap);
 
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
@@ -94,8 +286,6 @@ export default function RouteMap({ plan }) {
       bounds.extend([plan.destination.lon, plan.destination.lat]);
       mapLibreMap.fitBounds(bounds, { padding: 50, duration: 0 });
 
-      const bestIds = new Set(plan.top_fuel_stops.map((stop) => stop.id));
-
       const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A") })
         .setLngLat([plan.origin.lon, plan.origin.lat])
         .addTo(mapLibreMap);
@@ -104,26 +294,6 @@ export default function RouteMap({ plan }) {
         .addTo(mapLibreMap);
 
       markersRef.current.push(startMarker, endMarker);
-
-      allStops.forEach((stop) => {
-        const markerClass = bestIds.has(stop.id)
-          ? "marker-fuel-best"
-          : stop.brand === "Independent"
-            ? "marker-fuel-independent"
-            : "marker-fuel";
-        const markerLabel = bestIds.has(stop.id) ? "Top" : stop.brand === "Independent" ? "Ind" : "Fuel";
-
-        const popup = new maplibregl.Popup({ offset: 18 }).setHTML(
-          `<strong>${stop.brand || stop.name}</strong><br/>${stop.address}<br/>${stop.price ? `Avg diesel: $${stop.price.toFixed(3)}/gal<br/>` : ""}Detour: ${Math.round((stop.detour_distance_meters || 0) * 0.000621371 * 10) / 10} mi`
-        );
-
-        const marker = new maplibregl.Marker({ element: createMarkerElement(markerClass, markerLabel) })
-          .setLngLat([stop.lon, stop.lat])
-          .setPopup(popup)
-          .addTo(mapLibreMap);
-
-        markersRef.current.push(marker);
-      });
     };
 
     const initializeMap = () => {
@@ -131,7 +301,7 @@ export default function RouteMap({ plan }) {
         setMapError("");
         TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
 
-        map = new TomTomMap({
+        mapInstance = new TomTomMap({
           mapLibre: {
             container: containerRef.current,
             center: [plan.origin.lon, plan.origin.lat],
@@ -139,12 +309,12 @@ export default function RouteMap({ plan }) {
           }
         });
 
-        mapRef.current = map;
+        mapRef.current = mapInstance;
 
-        if (map.mapLibreMap.isStyleLoaded()) {
+        if (mapInstance.mapLibreMap.isStyleLoaded()) {
           renderMap();
         } else {
-          map.mapLibreMap.once("styledata", renderMap);
+          mapInstance.mapLibreMap.once("styledata", renderMap);
         }
       } catch (error) {
         setMapError(error instanceof Error ? error.message : "Map failed to initialize.");
@@ -155,6 +325,11 @@ export default function RouteMap({ plan }) {
 
     return () => {
       active = false;
+      handlersBoundRef.current = false;
+      if (popupRef.current) {
+        popupRef.current.remove();
+        popupRef.current = null;
+      }
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       if (mapRef.current?.mapLibreMap) {
