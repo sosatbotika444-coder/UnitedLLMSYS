@@ -1,4 +1,4 @@
-﻿import json
+import json
 import math
 import re
 import ssl
@@ -25,6 +25,8 @@ from app.schemas import (
     RouteOption,
     RoutePoint,
     TomTomCapabilityCatalog,
+    UnitedLaneChatRequest,
+    UnitedLaneChatResponse,
 )
 
 router = APIRouter(prefix="/navigation", tags=["navigation"])
