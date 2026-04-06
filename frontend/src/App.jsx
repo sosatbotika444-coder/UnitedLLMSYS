@@ -7,11 +7,37 @@ const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production
 const TOKEN_KEY = "auth_token";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const workspaceTabs = [
-  { id: "command", label: "Overview", detail: "Operations summary" },
-  { id: "routing", label: "Routing", detail: "Station map" },
-  { id: "loads", label: "Loads", detail: "Dispatch board" },
-  { id: "ai", label: "Assistant", detail: "Workspace support" }
+  { id: "command", label: "Overview", detail: "Fleet snapshot", icon: "OV" },
+  { id: "routing", label: "Routing", detail: "Station analysis", icon: "RT" },
+  { id: "loads", label: "Loads", detail: "Dispatch board", icon: "LD" },
+  { id: "ai", label: "Assistant", detail: "Workspace support", icon: "AI" }
 ];
+const workspaceCopy = {
+  command: {
+    title: "Overview",
+    subtitle: "A cleaner control room for route planning, station pricing, and dispatch visibility.",
+    bannerTitle: "Official station network is active",
+    bannerText: "Love's and Pilot parsing, route analysis, and the rest of the workspace tools are ready to use."
+  },
+  routing: {
+    title: "Routing",
+    subtitle: "Review the corridor, compare official station prices, and inspect route options on one map.",
+    bannerTitle: "Price labels are pinned to the map",
+    bannerText: "As stations enter view, diesel and auto-diesel pricing stays visible directly under the point for faster scanning."
+  },
+  loads: {
+    title: "Loads",
+    subtitle: "Edit dispatch rows directly, filter the board, and keep load status organized in one place.",
+    bannerTitle: "Dispatch board stays editable",
+    bannerText: "Search, status filters, and in-place updates remain live while the layout is optimized for easier daily use."
+  },
+  ai: {
+    title: "Assistant",
+    subtitle: "Use the assistant for route notes, station comparisons, writing help, and operational support.",
+    bannerTitle: "Assistant workspace is available",
+    bannerText: "You can keep route context, dispatch notes, and general workspace questions in one threaded view."
+  }
+};
 const emptyRegister = { full_name: "", email: "", password: "" };
 const emptyLogin = { email: "", password: "" };
 const emptyRow = {
@@ -175,6 +201,10 @@ export default function App() {
       }).format(new Date()),
     []
   );
+
+  const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
+  const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id];
+  const loadStatusTabs = ["All", ...statusOptions];
 
   function updateLocalRow(id, field, value) {
     setRows((currentRows) =>
@@ -383,300 +413,374 @@ export default function App() {
   }
 
   return (
-    <main className="dashboard-shell dashboard-shell-commercial">
-      <header className="workspace-header workspace-header-commercial">
-        <div className="workspace-title workspace-title-commercial">
-          <span className="brand-pill">United Lane System</span>
-          <h1>UnitedLane Operations</h1>
-          <p>Route planning, official station data, dispatch visibility, and workspace support in one place.</p>
-        </div>
-
-        <div className="workspace-actions">
-          <div className="workspace-meta workspace-meta-hero">
-            <span>{currentDate}</span>
-            <strong>{savingId ? `Saving row #${savingId}` : "Official station engine online"}</strong>
-          </div>
-          <div className="user-badge">
-            <strong>{user.full_name}</strong>
-            <span>{user.email}</span>
-          </div>
-          <button className="primary-button" onClick={createRow}>
-            New Load
-          </button>
-          <button className="secondary-button" onClick={logout}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {message ? <div className="notice success inline-notice">{message}</div> : null}
-      {error ? <div className="notice error inline-notice">{error}</div> : null}
-
-      <section className="workspace-commercial-grid">
-        <article className="panel summary-panel summary-panel-commercial">
-          <div className="panel-head">
-            <h2>Fleet Snapshot</h2>
-            <span>Live</span>
-          </div>
-          <div className="stats-grid compact">
-            <article className="stat-card stat-card-commercial">
-              <span>Total Loads</span>
-              <strong>{metrics.total}</strong>
-            </article>
-            <article className="stat-card stat-card-commercial">
-              <span>Open Loads</span>
-              <strong>{metrics.activeLoads}</strong>
-            </article>
-            <article className="stat-card warning stat-card-commercial">
-              <span>Low Fuel</span>
-              <strong>{metrics.lowFuelCount}</strong>
-            </article>
-            <article className="stat-card accent stat-card-commercial">
-              <span>Average Fuel</span>
-              <strong>{metrics.avgFuel}%</strong>
-            </article>
-          </div>
-        </article>
-
-        <article className="panel filter-panel filter-panel-commercial">
-          <div className="panel-head">
-            <h2>Filters</h2>
-            <span>{filteredRows.length} visible</span>
-          </div>
-          <section className="toolbar">
-            <label className="toolbar-search">
-              <span>Search</span>
-              <input
-                type="text"
-                placeholder="Driver, truck, pickup, delivery"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-
-            <label className="toolbar-filter">
-              <span>Status</span>
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="All">All Statuses</option>
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="system-state system-state-commercial">
-              <span>{gridLoading ? "Loading dispatch data" : "Auto-save enabled"}</span>
-              <strong>{gridLoading ? "Syncing..." : "Route and station data ready"}</strong>
-            </div>
-          </section>
-        </article>
-      </section>
-
-      <section className="workspace-nav-panel panel">
-        <div className="workspace-nav-head">
-          <div>
-            <h2>Sections</h2>
-            <span>Move between overview, routing, loads, and assistant tools.</span>
+    <main className="workspace-app-shell">
+      <aside className="workspace-sidebar-shell">
+        <div className="workspace-sidebar-brand">
+          <div className="workspace-sidebar-logo">UL</div>
+          <div className="workspace-sidebar-brand-copy">
+            <strong>UnitedLane</strong>
+            <span>{user.full_name}</span>
+            <small>{user.email}</small>
           </div>
         </div>
-        <div className="workspace-nav-grid">
+
+        <button className="workspace-sidebar-create" type="button" onClick={createRow}>
+          + Create
+        </button>
+
+        <nav className="workspace-sidebar-nav">
           {workspaceTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`workspace-nav-button ${activeWorkspace === tab.id ? "active" : ""}`}
+              className={`workspace-sidebar-link ${activeWorkspace === tab.id ? "active" : ""}`}
               onClick={() => setActiveWorkspace(tab.id)}
             >
-              <strong>{tab.label}</strong>
-              <span>{tab.detail}</span>
+              <span className="workspace-sidebar-link-icon">{tab.icon}</span>
+              <span className="workspace-sidebar-link-copy">
+                <strong>{tab.label}</strong>
+                <small>{tab.detail}</small>
+              </span>
             </button>
           ))}
+        </nav>
+
+        <div className="workspace-sidebar-footer">
+          <div className="workspace-sidebar-footer-card">
+            <span>{currentDate}</span>
+            <strong>{savingId ? `Saving row #${savingId}` : "Workspace ready"}</strong>
+          </div>
+          <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
+            Logout
+          </button>
         </div>
-      </section>
+      </aside>
 
-      {activeWorkspace === "command" ? (
-        <section className="workspace-stack">
-          <section className="panel workspace-commercial-callout">
-            <div className="panel-head">
-              <h2>Overview</h2>
-              <span>UnitedLane</span>
-            </div>
-            <p>
-              Keep route review, official Love&apos;s and Pilot pricing, load tracking, and workspace assistance together in one quiet layout.
-            </p>
-          </section>
-          <TomTomSuite token={token} />
-        </section>
-      ) : null}
-
-      {activeWorkspace === "routing" ? <RouteAssistant token={token} /> : null}
-
-      {activeWorkspace === "loads" ? (
-        <section className="panel sheet-panel">
-          <div className="sheet-panel-head">
-            <div>
-              <h2>Load Board</h2>
-              <span>Edit cells directly. Changes save to the backend.</span>
-            </div>
+      <section className="workspace-main-shell">
+        <header className="workspace-main-header">
+          <div className="workspace-main-heading">
+            <span className="workspace-main-kicker">UnitedLane Workspace</span>
+            <h1>{activeWorkspaceCopy.title}</h1>
+            <p>{activeWorkspaceCopy.subtitle}</p>
           </div>
 
-          <div className="sheet-frame">
-            <div className="sheet-scroll">
-              <table className="dispatch-sheet">
-                <thead>
-                  <tr>
-                    <th>Driver</th>
-                    <th>Truck #</th>
-                    <th>Approx MPG</th>
-                    <th>Status</th>
-                    <th>Miles to Empty</th>
-                    <th>Tank Capacity</th>
-                    <th>Fuel %</th>
-                    <th>Full Load Miles</th>
-                    <th>PU City</th>
-                    <th>1st Stop</th>
-                    <th>2nd Stop</th>
-                    <th>3rd Stop</th>
-                    <th>Del City</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length ? (
-                    filteredRows.map((row) => {
-                      const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+          <div className="workspace-main-meta">
+            <div className="workspace-main-usercard">
+              <span>Signed in</span>
+              <strong>{user.full_name}</strong>
+            </div>
+            <div className="workspace-main-usercard subdued">
+              <span>Status</span>
+              <strong>{gridLoading ? "Syncing data" : "Live"}</strong>
+            </div>
+          </div>
+        </header>
 
-                      return (
-                        <tr key={row.id}>
-                          <td className="driver-cell">
-                            <input
-                              value={row.driver}
-                              onChange={(event) => updateLocalRow(row.id, "driver", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, driver: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              value={row.truck}
-                              onChange={(event) => updateLocalRow(row.id, "truck", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, truck: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              value={row.mpg}
-                              onChange={(event) => updateLocalRow(row.id, "mpg", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, mpg: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <select
-                              className={`status-select ${getStatusTone(row.status)}`}
-                              value={row.status}
-                              onChange={async (event) => {
-                                const value = event.target.value;
-                                updateLocalRow(row.id, "status", value);
-                                await saveRow({ ...row, status: value });
-                              }}
-                            >
-                              {statusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              value={row.miles_to_empty}
-                              onChange={(event) => updateLocalRow(row.id, "miles_to_empty", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, miles_to_empty: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              value={row.tank_capacity}
-                              onChange={(event) => updateLocalRow(row.id, "tank_capacity", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, tank_capacity: event.target.value })}
-                            />
-                          </td>
-                          <td className={getFuelTone(Number(row.fuel_level))}>
-                            <div className="fuel-cell">
-                              <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={row.fuel_level}
-                                onChange={async (event) => {
-                                  const value = Number(event.target.value);
-                                  updateLocalRow(row.id, "fuel_level", value);
-                                  await saveRow({ ...row, fuel_level: value, miles_to_empty: computeMilesToEmpty({ ...row, fuel_level: value }) });
-                                }}
-                              />
-                              <span>{row.fuel_level}%</span>
-                            </div>
-                          </td>
-                          <td className="readonly-cell">{fullLoadMiles}</td>
-                          <td>
-                            <input
-                              value={row.pickup_city}
-                              onChange={(event) => updateLocalRow(row.id, "pickup_city", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, pickup_city: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <textarea
-                              value={row.stop1}
-                              onChange={(event) => updateLocalRow(row.id, "stop1", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, stop1: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <textarea
-                              value={row.stop2}
-                              onChange={(event) => updateLocalRow(row.id, "stop2", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, stop2: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <textarea
-                              value={row.stop3}
-                              onChange={(event) => updateLocalRow(row.id, "stop3", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, stop3: event.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              value={row.delivery_city}
-                              onChange={(event) => updateLocalRow(row.id, "delivery_city", event.target.value)}
-                              onBlur={(event) => saveRow({ ...row, delivery_city: event.target.value })}
-                            />
-                          </td>
-                          <td className="action-cell">
-                            <button className="delete-button" onClick={() => deleteRow(row.id)}>
-                              Delete
-                            </button>
+        {message ? <div className="notice success inline-notice">{message}</div> : null}
+        {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+        <section className="workspace-banner-card">
+          <div className="workspace-banner-accent" />
+          <div className="workspace-banner-copy">
+            <strong>{activeWorkspaceCopy.bannerTitle}</strong>
+            <p>{activeWorkspaceCopy.bannerText}</p>
+          </div>
+        </section>
+
+        {activeWorkspace === "command" ? (
+          <section className="workspace-content-stack">
+            <section className="workspace-summary-cards">
+              <article className="workspace-summary-card emphasis">
+                <span>Total Loads</span>
+                <strong>{metrics.total}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Open Loads</span>
+                <strong>{metrics.activeLoads}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Low Fuel</span>
+                <strong>{metrics.lowFuelCount}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Average Fuel</span>
+                <strong>{metrics.avgFuel}%</strong>
+              </article>
+            </section>
+
+            <section className="workspace-balance-card">
+              <div className="workspace-balance-main">
+                <span>Current overview</span>
+                <strong>{metrics.activeLoads} active loads</strong>
+                <p>Track routing, dispatch, and station analysis from one cleaner operational workspace.</p>
+              </div>
+              <div className="workspace-balance-side">
+                <span>Official networks</span>
+                <strong>Love&apos;s and Pilot</strong>
+                <small>Station data and pricing are ready for route review.</small>
+              </div>
+            </section>
+
+            <section className="panel workspace-tool-surface">
+              <div className="panel-head">
+                <h2>Services</h2>
+                <span>Core workspace tools</span>
+              </div>
+              <TomTomSuite token={token} />
+            </section>
+          </section>
+        ) : null}
+
+        {activeWorkspace === "routing" ? (
+          <section className="workspace-content-stack">
+            <section className="workspace-summary-cards condensed">
+              <article className="workspace-summary-card emphasis">
+                <span>Open Loads</span>
+                <strong>{metrics.activeLoads}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Low Fuel</span>
+                <strong>{metrics.lowFuelCount}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Average Fuel</span>
+                <strong>{metrics.avgFuel}%</strong>
+              </article>
+            </section>
+            <RouteAssistant token={token} />
+          </section>
+        ) : null}
+
+        {activeWorkspace === "loads" ? (
+          <section className="workspace-content-stack">
+            <section className="workspace-balance-card loads-balance-card">
+              <div className="workspace-balance-main">
+                <span>Visible rows</span>
+                <strong>{filteredRows.length}</strong>
+                <p>Use the status tabs and search box to tighten the board without leaving the page.</p>
+              </div>
+              <div className="workspace-balance-side">
+                <span>Board state</span>
+                <strong>{gridLoading ? "Syncing" : "Editable"}</strong>
+                <small>{savingId ? `Saving row #${savingId}` : "Changes save directly to the backend."}</small>
+              </div>
+            </section>
+
+            <div className="workspace-inline-tabs">
+              {loadStatusTabs.map((status) => {
+                const total = status === "All" ? rows.length : rows.filter((row) => row.status === status).length;
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`workspace-inline-tab ${statusFilter === status ? "active" : ""}`}
+                    onClick={() => setStatusFilter(status)}
+                  >
+                    {status}
+                    <span>{total}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <section className="panel workspace-table-panel">
+              <div className="workspace-table-toolbar">
+                <label className="workspace-table-search">
+                  <span>Search loads</span>
+                  <input
+                    type="text"
+                    placeholder="Driver, truck, pickup, delivery"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </label>
+
+                <div className="workspace-table-toolbar-actions">
+                  <div className="workspace-main-usercard subdued compact">
+                    <span>Rows shown</span>
+                    <strong>{filteredRows.length}</strong>
+                  </div>
+                  <button className="primary-button workspace-table-create" type="button" onClick={createRow}>
+                    New Load
+                  </button>
+                </div>
+              </div>
+
+              <div className="sheet-frame">
+                <div className="sheet-scroll">
+                  <table className="dispatch-sheet">
+                    <thead>
+                      <tr>
+                        <th>Driver</th>
+                        <th>Truck #</th>
+                        <th>Approx MPG</th>
+                        <th>Status</th>
+                        <th>Miles to Empty</th>
+                        <th>Tank Capacity</th>
+                        <th>Fuel %</th>
+                        <th>Full Load Miles</th>
+                        <th>PU City</th>
+                        <th>1st Stop</th>
+                        <th>2nd Stop</th>
+                        <th>3rd Stop</th>
+                        <th>Del City</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.length ? (
+                        filteredRows.map((row) => {
+                          const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+
+                          return (
+                            <tr key={row.id}>
+                              <td className="driver-cell">
+                                <input
+                                  value={row.driver}
+                                  onChange={(event) => updateLocalRow(row.id, "driver", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, driver: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.truck}
+                                  onChange={(event) => updateLocalRow(row.id, "truck", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, truck: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.mpg}
+                                  onChange={(event) => updateLocalRow(row.id, "mpg", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, mpg: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  className={`status-select ${getStatusTone(row.status)}`}
+                                  value={row.status}
+                                  onChange={async (event) => {
+                                    const value = event.target.value;
+                                    updateLocalRow(row.id, "status", value);
+                                    await saveRow({ ...row, status: value });
+                                  }}
+                                >
+                                  {statusOptions.map((status) => (
+                                    <option key={status} value={status}>
+                                      {status}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  value={row.miles_to_empty}
+                                  onChange={(event) => updateLocalRow(row.id, "miles_to_empty", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, miles_to_empty: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.tank_capacity}
+                                  onChange={(event) => updateLocalRow(row.id, "tank_capacity", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, tank_capacity: event.target.value })}
+                                />
+                              </td>
+                              <td className={getFuelTone(Number(row.fuel_level))}>
+                                <div className="fuel-cell">
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={row.fuel_level}
+                                    onChange={async (event) => {
+                                      const value = Number(event.target.value);
+                                      updateLocalRow(row.id, "fuel_level", value);
+                                      await saveRow({ ...row, fuel_level: value, miles_to_empty: computeMilesToEmpty({ ...row, fuel_level: value }) });
+                                    }}
+                                  />
+                                  <span>{row.fuel_level}%</span>
+                                </div>
+                              </td>
+                              <td className="readonly-cell">{fullLoadMiles}</td>
+                              <td>
+                                <input
+                                  value={row.pickup_city}
+                                  onChange={(event) => updateLocalRow(row.id, "pickup_city", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, pickup_city: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <textarea
+                                  value={row.stop1}
+                                  onChange={(event) => updateLocalRow(row.id, "stop1", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, stop1: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <textarea
+                                  value={row.stop2}
+                                  onChange={(event) => updateLocalRow(row.id, "stop2", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, stop2: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <textarea
+                                  value={row.stop3}
+                                  onChange={(event) => updateLocalRow(row.id, "stop3", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, stop3: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.delivery_city}
+                                  onChange={(event) => updateLocalRow(row.id, "delivery_city", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, delivery_city: event.target.value })}
+                                />
+                              </td>
+                              <td className="action-cell">
+                                <button className="delete-button" onClick={() => deleteRow(row.id)}>
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan="14" className="empty-state-cell">
+                            {gridLoading ? "Loading dispatch data..." : "No loads yet. Create your first row."}
                           </td>
                         </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="14" className="empty-state-cell">
-                        {gridLoading ? "Loading dispatch data..." : "No loads yet. Create your first row."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      ) : null}
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </section>
+        ) : null}
 
-      {activeWorkspace === "ai" ? <UnitedLaneChat token={token} user={user} /> : null}
+        {activeWorkspace === "ai" ? (
+          <section className="workspace-content-stack">
+            <section className="workspace-summary-cards condensed">
+              <article className="workspace-summary-card emphasis">
+                <span>Open Loads</span>
+                <strong>{metrics.activeLoads}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Low Fuel</span>
+                <strong>{metrics.lowFuelCount}</strong>
+              </article>
+              <article className="workspace-summary-card">
+                <span>Average Fuel</span>
+                <strong>{metrics.avgFuel}%</strong>
+              </article>
+            </section>
+            <UnitedLaneChat token={token} user={user} />
+          </section>
+        ) : null}
+      </section>
     </main>
   );
 }

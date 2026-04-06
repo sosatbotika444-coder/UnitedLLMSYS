@@ -57,6 +57,9 @@ def http_json(url: str, headers: dict | None = None):
 
 
 
+
+
+
 def normalize_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 

@@ -146,7 +146,7 @@ function StopCard({ stop, compact = false }) {
       {(stop.highway || stop.exit_number || stop.parking_spaces) ? (
         <div className="fuel-stop-coords">
           <strong>Truck Info</strong>
-          <span>{[stop.highway, stop.exit_number, stop.parking_spaces].filter(Boolean).join(" ? ")}</span>
+          <span>{[stop.highway, stop.exit_number, stop.parking_spaces].filter(Boolean).join(" / ")}</span>
         </div>
       ) : null}
 
@@ -282,7 +282,7 @@ export default function RouteAssistant({ token }) {
               <div className="route-map-toolbar">
                 <div className="route-map-toolbar-copy">
                   <strong>Map</strong>
-                  <span>Hover a station to compare diesel pricing.</span>
+                  <span>Prices remain visible under each station as you zoom in.</span>
                 </div>
                 <button className="secondary-button route-map-expand-button" type="button" onClick={() => setMapFullscreen((value) => !value)}>
                   {mapFullscreen ? "Exit Full Screen" : "Open Full Screen"}
