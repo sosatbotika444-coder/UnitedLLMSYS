@@ -40,6 +40,7 @@ CATALOG_PATH = Path(__file__).resolve().parent / "data" / "official_station_cata
 
 
 def safe_http_request(url: str, headers: dict | None = None) -> str | None:
+    #here is main problem where can be srtuted are all other continiuds
     request = Request(url, headers=headers or OFFICIAL_SITE_HEADERS)
     try:
         with urlopen(request, timeout=30, context=ssl_context) as response:

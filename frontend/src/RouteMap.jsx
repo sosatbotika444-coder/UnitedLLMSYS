@@ -11,6 +11,7 @@ const STOPS_SOURCE_ID = "clustered-fuel-stops";
 const CLUSTERS_LAYER_ID = "fuel-stop-clusters";
 const CLUSTER_COUNT_LAYER_ID = "fuel-stop-cluster-count";
 const UNCLUSTERED_LAYER_ID = "fuel-stop-points";
+const PRICE_LABEL_LAYER_ID = "fuel-stop-price-labels";
 
 function createMarkerElement(className, label) {
   const el = document.createElement("div");
@@ -51,14 +52,10 @@ function buildStopPopup(stop) {
     .join("<br/>");
 }
 
-function buildHoverPopup(stop) {
-  return `
-    <div class="route-stop-hover-card">
-      <strong>${stop.brand || stop.name}</strong>
-      <span>Diesel: ${formatMoney(stop.diesel_price)}</span>
-      <span>Auto Diesel: ${formatMoney(stop.auto_diesel_price)}</span>
-    </div>
-  `;
+function buildPriceLabel(stop) {
+  const diesel = stop.diesel_price !== null && stop.diesel_price !== undefined ? `$${Number(stop.diesel_price).toFixed(3)}` : "-";
+  const autoDiesel = stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `$${Number(stop.auto_diesel_price).toFixed(3)}` : "-";
+  return `D ${diesel}\nAD ${autoDiesel}`;
 }
 
 export default function RouteMap({ plan, isFullscreen = false }) {
@@ -66,7 +63,6 @@ export default function RouteMap({ plan, isFullscreen = false }) {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const popupRef = useRef(null);
-  const hoverPopupRef = useRef(null);
   const handlersBoundRef = useRef(false);
   const [mapError, setMapError] = useState("");
 
@@ -105,13 +101,6 @@ export default function RouteMap({ plan, isFullscreen = false }) {
 
     let active = true;
     let mapInstance = null;
-
-    const hideHoverPopup = () => {
-      if (hoverPopupRef.current) {
-        hoverPopupRef.current.remove();
-        hoverPopupRef.current = null;
-      }
-    };
 
     const bindMapHandlers = (mapLibreMap) => {
       if (handlersBoundRef.current) {
@@ -152,7 +141,6 @@ export default function RouteMap({ plan, isFullscreen = false }) {
         const coordinates = [...feature.geometry.coordinates];
         const stop = JSON.parse(feature.properties.stop);
 
-        hideHoverPopup();
         if (popupRef.current) {
           popupRef.current.remove();
         }
@@ -169,43 +157,11 @@ export default function RouteMap({ plan, isFullscreen = false }) {
       mapLibreMap.on("mouseleave", CLUSTERS_LAYER_ID, () => {
         mapLibreMap.getCanvas().style.cursor = "";
       });
-
-      mapLibreMap.on("mouseenter", UNCLUSTERED_LAYER_ID, (event) => {
+      mapLibreMap.on("mouseenter", UNCLUSTERED_LAYER_ID, () => {
         mapLibreMap.getCanvas().style.cursor = "pointer";
-        const feature = event.features?.[0];
-        if (!feature) {
-          return;
-        }
-
-        const coordinates = [...feature.geometry.coordinates];
-        const stop = JSON.parse(feature.properties.stop);
-        hideHoverPopup();
-        hoverPopupRef.current = new maplibregl.Popup({
-          closeButton: false,
-          closeOnClick: false,
-          className: "route-stop-hover-popup",
-          anchor: "top",
-          offset: 12
-        })
-          .setLngLat(coordinates)
-          .setHTML(buildHoverPopup(stop))
-          .addTo(mapLibreMap);
       });
-
-      mapLibreMap.on("mousemove", UNCLUSTERED_LAYER_ID, (event) => {
-        const feature = event.features?.[0];
-        if (!feature || !hoverPopupRef.current) {
-          return;
-        }
-
-        const coordinates = [...feature.geometry.coordinates];
-        const stop = JSON.parse(feature.properties.stop);
-        hoverPopupRef.current.setLngLat(coordinates).setHTML(buildHoverPopup(stop));
-      });
-
       mapLibreMap.on("mouseleave", UNCLUSTERED_LAYER_ID, () => {
         mapLibreMap.getCanvas().style.cursor = "";
-        hideHoverPopup();
       });
 
       handlersBoundRef.current = true;
@@ -242,6 +198,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
           isIndependent: stop.brand === "Independent",
           price: stop.price ?? null,
           score: stop.overall_score ?? 0,
+          priceLabel: buildPriceLabel(stop),
           stop: JSON.stringify(stop)
         }
       }));
@@ -253,7 +210,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
         mapLibreMap.removeSource(ROUTES_SOURCE_ID);
       }
 
-      [CLUSTERS_LAYER_ID, CLUSTER_COUNT_LAYER_ID, UNCLUSTERED_LAYER_ID].forEach((layerId) => {
+      [CLUSTERS_LAYER_ID, CLUSTER_COUNT_LAYER_ID, UNCLUSTERED_LAYER_ID, PRICE_LABEL_LAYER_ID].forEach((layerId) => {
         if (mapLibreMap.getLayer(layerId)) {
           mapLibreMap.removeLayer(layerId);
         }
@@ -362,6 +319,38 @@ export default function RouteMap({ plan, isFullscreen = false }) {
         }
       });
 
+      mapLibreMap.addLayer({
+        id: PRICE_LABEL_LAYER_ID,
+        type: "symbol",
+        source: STOPS_SOURCE_ID,
+        minzoom: 6,
+        filter: ["!", ["has", "point_count"]],
+        layout: {
+          "text-field": ["get", "priceLabel"],
+          "text-font": ["Open Sans Bold"],
+          "text-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            6, 10,
+            8, 11,
+            10, 12
+          ],
+          "text-offset": [0, 1.8],
+          "text-anchor": "top",
+          "text-line-height": 1.1,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+          "symbol-sort-key": ["-", ["get", "score"]]
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "rgba(15, 23, 42, 0.9)",
+          "text-halo-width": 4,
+          "text-halo-blur": 1
+        }
+      });
+
       bindMapHandlers(mapLibreMap);
 
       markersRef.current.forEach((marker) => marker.remove());
@@ -414,7 +403,6 @@ export default function RouteMap({ plan, isFullscreen = false }) {
     return () => {
       active = false;
       handlersBoundRef.current = false;
-      hideHoverPopup();
       if (popupRef.current) {
         popupRef.current.remove();
         popupRef.current = null;
