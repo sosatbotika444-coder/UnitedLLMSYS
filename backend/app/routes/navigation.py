@@ -16,6 +16,7 @@ from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_chat_reply,
 from app.auth import get_current_user
 from app.config import get_settings
 from app.models import User
+from app.official_stations import find_official_stations_along_route
 from app.schemas import (
     ApiCapability,
     FuelStop,
@@ -359,8 +360,7 @@ def select_loves_candidate(stop: FuelStop) -> dict | None:
 
     target_city = normalize_text(stop.city)
     target_state = (stop.state_code or '').upper()
-    street_line = normalize_text(extract_street_line(stop.address))
-    house_number = extract_house_number(stop.address)
+    street_line = extract_street_line(stop.address)
 
     candidates = [entry['url'] for entry in load_loves_location_index() if entry['state'] == target_state and entry['city'] == target_city]
     if not candidates and target_city:
@@ -376,19 +376,17 @@ def select_loves_candidate(stop: FuelStop) -> dict | None:
             continue
         score = 0
         if normalize_text(summary.get('city', '')) == target_city:
-            score += 24
+            score += 20
         if (summary.get('state') or '').upper() == target_state:
-            score += 18
-        summary_house_number = summary.get('house_number')
-        if house_number and summary_house_number and house_number == summary_house_number:
-            score += 42
-        summary_street = normalize_text(summary.get('street', ''))
-        if street_line and summary_street:
-            score += int(SequenceMatcher(None, street_line, summary_street).ratio() * 36)
+            score += 16
+        score += min(address_consistency_score(summary.get('street', ''), street_line), 84)
         if score > best_score:
             best_match = summary
             best_score = score
-    return best_match if best_score >= 40 else None
+
+    if best_score < 78:
+        return None
+    return best_match
 
 
 
@@ -544,14 +542,14 @@ def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: 
     return http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points}/json?{params}").get("routes", [])
 
 
-def to_route_points(route: dict) -> list[RoutePoint]:
+def to_route_points(route: dict, max_points: int = 220) -> list[RoutePoint]:
     points: list[RoutePoint] = []
     for leg in route.get("legs", []):
         for point in leg.get("points", []):
             points.append(RoutePoint(lat=point.get("latitude"), lon=point.get("longitude")))
-    if len(points) <= 220:
+    if len(points) <= max_points:
         return points
-    step = max(1, len(points) // 220)
+    step = max(1, len(points) // max_points)
     sampled = points[::step]
     if sampled[-1] != points[-1]:
         sampled.append(points[-1])
@@ -765,7 +763,8 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     for index, route in enumerate(raw_routes[:3], start=1):
         summary = route.get("summary", {})
         route_points = to_route_points(route)
-        fuel_stops = sort_stops(search_tomtom_brand_stops(route_points), payload.sort_by)
+        routing_points = to_route_points(route, max_points=700)
+        fuel_stops = sort_stops(find_official_stations_along_route(routing_points, payload.vehicle_type, payload.fuel_type), payload.sort_by)
         for stop in fuel_stops:
             merge_stop(combined_stops, stop)
         routes.append(RouteOption(
@@ -782,7 +781,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = top_fuel_stops[0] if top_fuel_stops else None
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane now keeps only Love's and Pilot Flying J stations that we can confirm against the official network pages, then ranks them against your route and available services."
+    price_support = "UnitedLane now parses official Love's and Pilot station pages, matches those official coordinates to your route, and returns diesel or auto-diesel pricing where the network publishes it."
     return RouteAssistantResponse(
         origin=origin,
         destination=destination,
@@ -794,7 +793,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         price_support=price_support,
         map_link=build_map_link(origin.label, destination.label),
         station_map_link=station_map_link,
-        data_source="TomTom routing + official Love's/Pilot locations + UnitedLane guidance",
+        data_source="TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance",
     )
 
 @router.post("/assistant-chat", response_model=UnitedLaneChatResponse)

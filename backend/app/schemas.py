@@ -89,6 +89,7 @@ class FuelStop(BaseModel):
     city: str = ""
     address: str
     state_code: str | None = None
+    postal_code: str | None = None
     lat: float
     lon: float
     detour_distance_meters: int | None = None
@@ -100,7 +101,15 @@ class FuelStop(BaseModel):
     price_less_tax: float | None = None
     price_source: str | None = None
     price_date: str | None = None
+    diesel_price: float | None = None
+    auto_diesel_price: float | None = None
+    unleaded_price: float | None = None
     parking_spaces: str | None = None
+    phone: str | None = None
+    fax: str | None = None
+    store_number: str | None = None
+    highway: str | None = None
+    exit_number: str | None = None
     amenity_score: float | None = None
     overall_score: float | None = None
     source_url: str | None = None

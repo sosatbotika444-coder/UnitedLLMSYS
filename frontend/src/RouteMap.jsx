@@ -22,14 +22,18 @@ function createMarkerElement(className, label) {
 function buildStopPopup(stop) {
   return [
     `<strong>${stop.brand || stop.name}</strong>`,
-    stop.location_type || null,
+    stop.location_type ? `${stop.location_type}${stop.store_number ? ` ? #${stop.store_number}` : ""}` : (stop.store_number ? `Store #${stop.store_number}` : null),
     stop.address,
-    stop.official_match ? "Verified on official Love's/Pilot page" : null,
-    stop.price ? `Price: $${stop.price.toFixed(3)}/gal` : "Price not published",
+    stop.phone ? `Phone: ${stop.phone}` : null,
+    stop.official_match ? "Parsed from official Love's/Pilot location page" : null,
+    stop.diesel_price !== null && stop.diesel_price !== undefined ? `Diesel: $${stop.diesel_price.toFixed(3)}` : null,
+    stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: $${stop.auto_diesel_price.toFixed(3)}` : null,
+    stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: $${stop.unleaded_price.toFixed(3)}` : null,
     stop.price_date ? `As of: ${stop.price_date}` : null,
+    stop.parking_spaces ? `Parking: ${stop.parking_spaces}` : null,
     `Off route: ${Math.round(((stop.off_route_miles || 0) + Number.EPSILON) * 10) / 10} mi`,
     `Score: ${Math.round(stop.overall_score || 0)}`,
-    stop.amenities?.length ? `Services: ${stop.amenities.slice(0, 6).join(", ")}` : null,
+    stop.amenities?.length ? `Services: ${stop.amenities.slice(0, 8).join(", ")}` : null,
     `Coords: ${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)}`
   ]
     .filter(Boolean)

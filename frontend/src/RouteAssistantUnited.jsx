@@ -114,7 +114,7 @@ function StopCard({ stop, compact = false }) {
           <span className="network-chip">{getNetworkLabel(stop)}</span>
           <strong>{stop.brand || stop.name}</strong>
           <span>{stop.city}{stop.state_code ? `, ${stop.state_code}` : ""}</span>
-          {stop.location_type ? <span>{stop.location_type}</span> : null}
+          {stop.location_type ? <span>{stop.location_type}{stop.store_number ? ` ? #${stop.store_number}` : ""}</span> : stop.store_number ? <span>Store #{stop.store_number}</span> : null}
         </div>
         <div className="fuel-stop-score">
           <strong>{Math.round(stop.overall_score || 0)}</strong>
@@ -126,7 +126,7 @@ function StopCard({ stop, compact = false }) {
 
       <div className="fuel-price-row fuel-price-row-brand">
         <div>
-          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Price not published"}</strong>
+          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Diesel price not published"}</strong>
           <span>{stop.price_source || "Official Love's/Pilot network page"}</span>
         </div>
         {stop.source_url ? (
@@ -134,6 +134,13 @@ function StopCard({ stop, compact = false }) {
             Official page
           </a>
         ) : null}
+      </div>
+
+      <div className="fuel-stop-stat-grid">
+        <span><strong>Diesel</strong>{stop.diesel_price !== null && stop.diesel_price !== undefined ? `$${stop.diesel_price.toFixed(3)}` : "-"}</span>
+        <span><strong>Auto Diesel</strong>{stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `$${stop.auto_diesel_price.toFixed(3)}` : "-"}</span>
+        <span><strong>Unleaded</strong>{stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `$${stop.unleaded_price.toFixed(3)}` : "-"}</span>
+        <span><strong>Phone</strong>{stop.phone || "-"}</span>
       </div>
 
       <div className="fuel-stop-coords">
@@ -147,6 +154,13 @@ function StopCard({ stop, compact = false }) {
         <span><strong>Route match</strong>{Math.round(stop.amenity_score || 0)}</span>
         <span><strong>Distance</strong>{formatDistance(stop.detour_distance_meters)}</span>
       </div>
+
+      {(stop.highway || stop.exit_number || stop.parking_spaces) ? (
+        <div className="fuel-stop-coords">
+          <strong>Truck Info</strong>
+          <span>{[stop.highway, stop.exit_number, stop.parking_spaces].filter(Boolean).join(" ? ")}</span>
+        </div>
+      ) : null}
 
       {stop.amenities?.length ? (
         <div className="fuel-stop-coords">
