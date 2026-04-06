@@ -1230,3 +1230,48 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.unitedlane-briefing-card {
+  gap: 16px;
+}
+
+.unitedlane-head {
+  align-items: flex-start;
+}
+
+.unitedlane-stop-summary {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1), rgba(15, 118, 110, 0.08));
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.unitedlane-stop-summary strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.unitedlane-stop-summary span {
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.unitedlane-message {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.75;
+  color: #1e293b;
+}
+
+.unitedlane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.unitedlane-map-button {
+  text-decoration: none;
+}

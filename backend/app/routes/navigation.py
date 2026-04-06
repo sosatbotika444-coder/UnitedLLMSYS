@@ -1,4 +1,4 @@
-import json
+﻿import json
 import math
 import re
 import ssl
@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 import certifi
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_route_guidance
 from app.auth import get_current_user
 from app.config import get_settings
 from app.models import User
@@ -100,7 +101,6 @@ def http_json(url: str, method: str = "GET", body: dict | None = None, headers: 
         data = json.dumps(body).encode("utf-8")
         request_headers["Content-Type"] = "application/json"
     return json.loads(http_request(url, method=method, body=data, headers=request_headers))
-
 
 
 
@@ -364,6 +364,10 @@ def build_map_link(origin: str, destination: str) -> str:
     return f"https://www.google.com/maps/dir/?api=1&origin={quote(origin)}&destination={quote(destination)}&travelmode=driving"
 
 
+def build_station_map_link(origin: GeocodedPoint, stop: FuelStop) -> str:
+    return f"https://www.google.com/maps/dir/?api=1&origin={quote(origin.label)}&destination={stop.lat},{stop.lon}&travelmode=driving"
+
+
 def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: str):
     route_points = f"{origin.lat},{origin.lon}:{destination.lat},{destination.lon}"
     params = urlencode({
@@ -535,6 +539,38 @@ def sort_stops(stops: list[FuelStop], sort_key: str) -> list[FuelStop]:
     return sorted(stops, key=lambda stop: (-(stop.overall_score or 0), stop.detour_distance_meters or 999999, stop.name.lower()))
 
 
+def format_price_text(stop: FuelStop, fuel_type: str) -> str:
+    if stop.price is None:
+        return f"not currently published for {fuel_type.lower()}"
+    return f"${stop.price:.3f} per gallon"
+
+
+def minutes_from_seconds(value: int | None) -> int | None:
+    if value is None:
+        return None
+    return max(1, math.ceil(value / 60))
+
+
+def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, stop: FuelStop | None, fuel_type: str, station_map_link: str | None) -> str:
+    if not stop or not station_map_link:
+        return (
+            f"Hello, this is {UNITEDLANE_IDENTITY}, your AI route and fuel assistant. "
+            f"I could map your trip from {origin.label} to {destination.label}, but I could not confirm a nearby Love's or Pilot Flying J stop on this pass. "
+            "Please keep the live route open and try a nearby city, highway exit, or a wider search so I can guide you more precisely."
+        )
+    return generate_unitedlane_route_guidance(
+        origin_label=origin.label,
+        destination_label=destination.label,
+        station_name=stop.name or stop.brand,
+        station_address=stop.address,
+        fuel_type=fuel_type,
+        price_text=format_price_text(stop, fuel_type),
+        off_route_miles=stop.off_route_miles,
+        detour_time_minutes=minutes_from_seconds(stop.detour_time_seconds),
+        map_link=station_map_link,
+    )
+
+
 @router.get("/tomtom-capabilities", response_model=TomTomCapabilityCatalog)
 def tomtom_capabilities(current_user: User = Depends(get_current_user)):
     live = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Live")
@@ -573,5 +609,20 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         ))
 
     top_fuel_stops = sort_stops(list(combined_stops.values()), payload.sort_by)[:24]
-    price_support = "TomTom now keeps only strict Love's and Pilot/Flying J brand matches. If an official page publishes a diesel price, we show it. If not, the stop stays visible with a no-price label and exact coordinates."
-    return RouteAssistantResponse(origin=origin, destination=destination, routes=routes, top_fuel_stops=top_fuel_stops, price_support=price_support, map_link=build_map_link(origin.label, destination.label), data_source="TomTom + Official Network Pages")
+    selected_stop = top_fuel_stops[0] if top_fuel_stops else None
+    station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
+    assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
+    price_support = "UnitedLane picks the strongest nearby Love's or Pilot Flying J stop, shows any official price we can confirm, and explains the drive in polite English. Use the live map for the final live turns into the station."
+    return RouteAssistantResponse(
+        origin=origin,
+        destination=destination,
+        routes=routes,
+        top_fuel_stops=top_fuel_stops,
+        selected_stop=selected_stop,
+        assistant_name=UNITEDLANE_IDENTITY,
+        assistant_message=assistant_message,
+        price_support=price_support,
+        map_link=build_map_link(origin.label, destination.label),
+        station_map_link=station_map_link,
+        data_source="TomTom + Official Network Pages + UnitedLane Guidance",
+    )

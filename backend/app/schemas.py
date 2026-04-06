@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+﻿from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
@@ -121,8 +121,12 @@ class RouteAssistantResponse(BaseModel):
     destination: GeocodedPoint
     routes: list[RouteOption]
     top_fuel_stops: list[FuelStop]
+    selected_stop: FuelStop | None = None
+    assistant_name: str = "UnitedLane"
+    assistant_message: str = ""
     price_support: str
     map_link: str
+    station_map_link: str | None = None
     data_source: str = "FindFuelStops"
 
 
