@@ -61,7 +61,7 @@ function buildHoverPopup(stop) {
   `;
 }
 
-export default function RouteMap({ plan }) {
+export default function RouteMap({ plan, isFullscreen = false }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -79,6 +79,24 @@ export default function RouteMap({ plan }) {
     });
     return [...byId.values()];
   }, [plan]);
+
+  useEffect(() => {
+    if (!mapRef.current?.mapLibreMap) {
+      return undefined;
+    }
+
+    const resizeMap = () => {
+      mapRef.current?.mapLibreMap.resize();
+    };
+
+    const frame = window.requestAnimationFrame(resizeMap);
+    const timeout = window.setTimeout(resizeMap, 180);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [isFullscreen, plan]);
 
   useEffect(() => {
     if (!containerRef.current || !TOMTOM_KEY) {

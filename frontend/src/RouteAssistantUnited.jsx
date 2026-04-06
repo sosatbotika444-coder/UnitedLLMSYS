@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import RouteMap from "./RouteMap";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
@@ -184,6 +184,7 @@ export default function RouteAssistant({ token }) {
   const [routeError, setRouteError] = useState("");
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
 
   const visibleStops = useMemo(() => {
     if (!routePlan) return [];
@@ -202,6 +203,25 @@ export default function RouteAssistant({ token }) {
   const bestStops = useMemo(() => sortStops(visibleStops, "best").slice(0, 4), [visibleStops]);
   const closestStops = useMemo(() => sortStops(visibleStops, "closest").slice(0, 4), [visibleStops]);
   const brandPowerStops = useMemo(() => sortStops(visibleStops, "brand").slice(0, 4), [visibleStops]);
+
+  useEffect(() => {
+    document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setMapFullscreen(false);
+      }
+    }
+
+    if (mapFullscreen) {
+      window.addEventListener("keydown", handleEscape);
+    }
+
+    return () => {
+      document.body.classList.remove("map-fullscreen-active");
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [mapFullscreen]);
 
   async function buildRoutePlan(nextFilters = activeFilters) {
     if (!token) return;
@@ -276,8 +296,17 @@ export default function RouteAssistant({ token }) {
       {routePlan ? (
         <div className="route-results">
           <div className="route-main-grid route-main-grid-brand">
-            <div className="route-map-stage route-map-stage-brand">
-              <RouteMap plan={routePlan} />
+            <div className={`route-map-stage route-map-stage-brand ${mapFullscreen ? "route-map-stage-fullscreen" : ""}`}>
+              <div className="route-map-toolbar">
+                <div className="route-map-toolbar-copy">
+                  <strong>Route Analysis Map</strong>
+                  <span>Hover any station to compare diesel prices faster.</span>
+                </div>
+                <button className="secondary-button route-map-expand-button" type="button" onClick={() => setMapFullscreen((value) => !value)}>
+                  {mapFullscreen ? "Exit Full Screen" : "Open Full Screen"}
+                </button>
+              </div>
+              <RouteMap plan={routePlan} isFullscreen={mapFullscreen} />
             </div>
 
             <aside className="route-side-panel">

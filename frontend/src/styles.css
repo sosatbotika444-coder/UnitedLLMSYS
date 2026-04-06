@@ -1771,3 +1771,74 @@ button {
     max-width: 100%;
   }
 }
+
+body.map-fullscreen-active {
+  overflow: hidden;
+}
+
+.route-map-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.route-map-toolbar-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.route-map-toolbar-copy strong {
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.route-map-toolbar-copy span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.route-map-expand-button {
+  white-space: nowrap;
+}
+
+.route-map-stage-fullscreen {
+  position: fixed;
+  inset: 18px;
+  z-index: 1200;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(248, 250, 252, 0.98);
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.26);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.route-map-stage-fullscreen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+}
+
+.route-map-stage-fullscreen .live-route-map {
+  height: calc(100vh - 122px);
+}
+
+@media (max-width: 760px) {
+  .route-map-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .route-map-stage-fullscreen {
+    inset: 10px;
+    padding: 14px;
+  }
+
+  .route-map-stage-fullscreen .live-route-map {
+    height: calc(100vh - 156px);
+  }
+}
