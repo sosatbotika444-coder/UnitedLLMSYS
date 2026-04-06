@@ -463,10 +463,12 @@ def apply_official_summary(stop: FuelStop, summary: dict, brand_name: str, price
 
 
 
-def enrich_loves_stop(stop: FuelStop) -> FuelStop | None:
+def enrich_loves_stop(stop: FuelStop) -> FuelStop:
     match = select_loves_candidate(stop)
     if not match:
-        return None
+        stop.brand = "Love's"
+        stop.price_source = stop.price_source or "Love's route candidate (official page match unavailable)"
+        return stop
     stop = apply_official_summary(stop, match, "Love's", "Love's official site")
     if match.get('diesel_price') is not None:
         stop.price = match.get('diesel_price')
@@ -478,10 +480,12 @@ def enrich_loves_stop(stop: FuelStop) -> FuelStop | None:
 
 
 
-def enrich_pilot_stop(stop: FuelStop) -> FuelStop | None:
+def enrich_pilot_stop(stop: FuelStop) -> FuelStop:
     match = select_pilot_candidate(stop)
     if not match:
-        return None
+        stop.brand = 'Pilot Flying J'
+        stop.price_source = stop.price_source or 'Pilot Flying J route candidate (official page match unavailable)'
+        return stop
     return apply_official_summary(stop, match, 'Pilot Flying J', 'Pilot Flying J official site (diesel price not published)')
 
 
@@ -492,7 +496,7 @@ def enrich_stop_with_official_site(stop: FuelStop) -> FuelStop | None:
         return enrich_loves_stop(stop)
     if 'pilot' in haystack or 'flying j' in haystack:
         return enrich_pilot_stop(stop)
-    return None
+    return stop
 
 
 
