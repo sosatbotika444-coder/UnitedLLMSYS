@@ -6,12 +6,19 @@ import brandAvatar from "../../templates/DPsearchfuel logo with digital globe.pn
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
+const THEME_KEY = "dpsearchfuels_theme";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const workspaceTabs = [
   { id: "command", label: "Overview", detail: "Fleet snapshot", icon: "OV" },
   { id: "routing", label: "Routing", detail: "Station analysis", icon: "RT" },
   { id: "loads", label: "Loads", detail: "Dispatch board", icon: "LD" },
-  { id: "ai", label: "Assistant", detail: "Workspace support", icon: "AI" }
+  { id: "ai", label: "Assistant", detail: "Workspace support", icon: "AI" },
+  { id: "settings", label: "Settings", detail: "Appearance", icon: "ST" }
+];
+const themeOptions = [
+  { id: "light", label: "White", detail: "Clean neutral workspace" },
+  { id: "dark", label: "Black", detail: "Low-glare dark view" },
+  { id: "blue", label: "Blue", detail: "Cool dashboard palette" }
 ];
 const workspaceCopy = {
   command: {
@@ -37,6 +44,12 @@ const workspaceCopy = {
     subtitle: "Use the assistant for route notes, station comparisons, writing help, and operational support.",
     bannerTitle: "Assistant workspace is available",
     bannerText: "You can keep route context, dispatch notes, and general workspace questions in one threaded view."
+  },
+  settings: {
+    title: "Settings",
+    subtitle: "Adjust appearance and keep the workspace feeling comfortable for long sessions.",
+    bannerTitle: "Theme settings are local to this browser",
+    bannerText: "Switch between white, black, and blue themes. The selected look is saved automatically on the frontend."
   }
 };
 const emptyRegister = { full_name: "", email: "", password: "" };
@@ -117,6 +130,7 @@ export default function App() {
   const [registerForm, setRegisterForm] = useState(emptyRegister);
   const [loginForm, setLoginForm] = useState(emptyLogin);
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || "");
+  const [theme, setTheme] = useState(localStorage.getItem(THEME_KEY) || "light");
   const [user, setUser] = useState(null);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
@@ -168,6 +182,17 @@ export default function App() {
       ignore = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    const body = document.body;
+    body.classList.remove("theme-light", "theme-dark", "theme-blue");
+    body.classList.add(`theme-${theme}`);
+    localStorage.setItem(THEME_KEY, theme);
+
+    return () => {
+      body.classList.remove("theme-light", "theme-dark", "theme-blue");
+    };
+  }, [theme]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -469,10 +494,6 @@ export default function App() {
             <div className="workspace-main-usercard">
               <span>Signed in</span>
               <strong>{user.full_name}</strong>
-            </div>
-            <div className="workspace-main-usercard subdued">
-              <span>Status</span>
-              <strong>{gridLoading ? "Syncing data" : "Live"}</strong>
             </div>
           </div>
         </header>
@@ -779,6 +800,54 @@ export default function App() {
               </article>
             </section>
             <UnitedLaneChat token={token} user={user} />
+          </section>
+        ) : null}
+
+        {activeWorkspace === "settings" ? (
+          <section className="workspace-content-stack">
+            <section className="settings-grid">
+              <article className="panel settings-panel-card">
+                <div className="panel-head">
+                  <h2>Theme</h2>
+                  <span>Frontend appearance</span>
+                </div>
+                <div className="theme-option-grid">
+                  {themeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`theme-option-card ${theme === option.id ? "active" : ""}`}
+                      onClick={() => setTheme(option.id)}
+                    >
+                      <span className={`theme-option-swatch theme-option-swatch-${option.id}`} />
+                      <strong>{option.label}</strong>
+                      <small>{option.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel settings-panel-card">
+                <div className="panel-head">
+                  <h2>Workspace</h2>
+                  <span>Current state</span>
+                </div>
+                <div className="settings-summary-list">
+                  <div>
+                    <span>Selected theme</span>
+                    <strong>{themeOptions.find((option) => option.id === theme)?.label || "White"}</strong>
+                  </div>
+                  <div>
+                    <span>Saved in browser</span>
+                    <strong>Yes</strong>
+                  </div>
+                  <div>
+                    <span>Official station mode</span>
+                    <strong>Active</strong>
+                  </div>
+                </div>
+              </article>
+            </section>
           </section>
         ) : null}
       </section>

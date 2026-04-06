@@ -2588,3 +2588,272 @@ body {
   object-fit: cover;
   display: block;
 }
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.6fr);
+  gap: 18px;
+}
+
+.settings-panel-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.04);
+}
+
+.theme-option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.theme-option-card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fbfcfd;
+  color: #0f172a;
+}
+
+.theme-option-card strong {
+  font-size: 1rem;
+}
+
+.theme-option-card small {
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.theme-option-card.active {
+  border-color: rgba(69, 218, 147, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(69, 218, 147, 0.28);
+}
+
+.theme-option-swatch {
+  display: block;
+  height: 92px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.theme-option-swatch-light {
+  background: linear-gradient(135deg, #ffffff 0%, #edf1f5 100%);
+}
+
+.theme-option-swatch-dark {
+  background: linear-gradient(135deg, #0f1720 0%, #1c2531 100%);
+}
+
+.theme-option-swatch-blue {
+  background: linear-gradient(135deg, #dcecff 0%, #a8c9ff 100%);
+}
+
+.settings-summary-list {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-summary-list div {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.settings-summary-list span {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.settings-summary-list strong {
+  color: #111827;
+}
+
+body.theme-dark {
+  background: linear-gradient(180deg, #0b1016 0%, #131b24 100%);
+  color: #e5edf6;
+}
+
+body.theme-dark .workspace-app-shell {
+  background: #0b1016;
+}
+
+body.theme-dark .workspace-sidebar-shell {
+  background: linear-gradient(180deg, #111823 0%, #151d29 100%);
+  border-right-color: rgba(255, 255, 255, 0.06);
+}
+
+body.theme-dark .workspace-main-shell,
+body.theme-dark .workspace-main-heading h1,
+body.theme-dark .workspace-main-usercard strong,
+body.theme-dark .workspace-banner-copy strong,
+body.theme-dark .workspace-summary-card strong,
+body.theme-dark .workspace-balance-main strong,
+body.theme-dark .workspace-balance-side strong,
+body.theme-dark .panel-head h2,
+body.theme-dark .sheet-panel-head h2,
+body.theme-dark .fuel-board-head h3,
+body.theme-dark .workspace-sidebar-brand-copy strong,
+body.theme-dark .workspace-sidebar-footer-card strong,
+body.theme-dark .theme-option-card strong,
+body.theme-dark .settings-summary-list strong {
+  color: #f8fbff;
+}
+
+body.theme-dark .workspace-main-heading p,
+body.theme-dark .workspace-sidebar-brand-copy span,
+body.theme-dark .workspace-sidebar-brand-copy small,
+body.theme-dark .workspace-sidebar-link-copy small,
+body.theme-dark .workspace-banner-copy p,
+body.theme-dark .workspace-main-kicker,
+body.theme-dark .workspace-summary-card span,
+body.theme-dark .workspace-balance-main p,
+body.theme-dark .workspace-balance-main span,
+body.theme-dark .workspace-balance-side span,
+body.theme-dark .workspace-balance-side small,
+body.theme-dark .workspace-main-usercard span,
+body.theme-dark .theme-option-card small,
+body.theme-dark .settings-summary-list span,
+body.theme-dark .panel-head span,
+body.theme-dark .sheet-panel-head span,
+body.theme-dark .fuel-board-head span,
+body.theme-dark .route-map-toolbar-copy span,
+body.theme-dark .fuel-filter-note,
+body.theme-dark .fuel-stop-coords span,
+body.theme-dark .fuel-price-row span,
+body.theme-dark .unitedlane-message,
+body.theme-dark .unitedlane-stop-summary span,
+body.theme-dark .unitedlane-ai-formbar span,
+body.theme-dark .unitedlane-ai-thinking,
+body.theme-dark .unitedlane-ai-status span,
+body.theme-dark .unitedlane-ai-sidebar-card p,
+body.theme-dark .unitedlane-ai-bubble p,
+body.theme-dark .workspace-sidebar-link {
+  color: #9ba9bb;
+}
+
+body.theme-dark .workspace-sidebar-link.active,
+body.theme-dark .workspace-sidebar-link:hover,
+body.theme-dark .workspace-main-usercard,
+body.theme-dark .workspace-banner-card,
+body.theme-dark .workspace-summary-card,
+body.theme-dark .workspace-balance-card,
+body.theme-dark .workspace-tool-surface,
+body.theme-dark .workspace-table-panel,
+body.theme-dark .settings-panel-card,
+body.theme-dark .settings-summary-list div,
+body.theme-dark .theme-option-card,
+body.theme-dark .workspace-sidebar-footer-card,
+body.theme-dark .workspace-main-shell .route-panel-brand-mode,
+body.theme-dark .workspace-main-shell .unitedlane-ai-workspace,
+body.theme-dark .workspace-main-shell .route-option-card-brand,
+body.theme-dark .workspace-main-shell .feature-board-brand,
+body.theme-dark .workspace-main-shell .fuel-board-brand-list,
+body.theme-dark .workspace-main-shell .fuel-filters-brand-mode,
+body.theme-dark .workspace-main-shell .unitedlane-ai-chatcard,
+body.theme-dark .workspace-main-shell .unitedlane-ai-sidebar-card,
+body.theme-dark .workspace-main-shell .unitedlane-ai-sidebar-card.subdued,
+body.theme-dark .workspace-main-shell .route-brand-hero,
+body.theme-dark .workspace-main-shell .sheet-frame {
+  background: #131b25;
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+body.theme-dark .workspace-sidebar-link.active {
+  background: #1a2330;
+}
+
+body.theme-dark .workspace-sidebar-link-icon,
+body.theme-dark .workspace-inline-tab span,
+body.theme-dark .fuel-stop-score,
+body.theme-dark .fuel-stop-stat-grid span,
+body.theme-dark .fuel-stop-coords,
+body.theme-dark .fuel-price-row,
+body.theme-dark .unitedlane-stop-summary,
+body.theme-dark .workspace-main-shell .unitedlane-ai-bubble-assistant,
+body.theme-dark .workspace-main-shell .unitedlane-ai-log,
+body.theme-dark .workspace-main-usercard.subdued {
+  background: #182230;
+}
+
+body.theme-dark .workspace-table-search input,
+body.theme-dark .workspace-main-shell .route-builder input,
+body.theme-dark .workspace-main-shell .route-builder select,
+body.theme-dark .workspace-main-shell .fuel-filter-grid input,
+body.theme-dark .workspace-main-shell .fuel-filter-grid select,
+body.theme-dark .workspace-main-shell .unitedlane-ai-form textarea,
+body.theme-dark .dispatch-sheet input,
+body.theme-dark .dispatch-sheet textarea,
+body.theme-dark .dispatch-sheet select {
+  background: #0f1620;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+}
+
+body.theme-dark .workspace-main-shell .dispatch-sheet thead th {
+  background: #131b25;
+  color: #9ba9bb;
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+body.theme-dark .workspace-main-shell .dispatch-sheet td,
+body.theme-dark .workspace-main-shell .dispatch-sheet tbody tr:hover td,
+body.theme-dark .workspace-main-shell .driver-cell {
+  background: #131b25 !important;
+  color: #f8fbff;
+}
+
+body.theme-dark .secondary-button,
+body.theme-dark .workspace-main-shell .delete-button,
+body.theme-dark .fuel-source-link {
+  background: #182230;
+  color: #f8fbff;
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+body.theme-blue {
+  background: linear-gradient(180deg, #e7f0ff 0%, #dbe8fb 100%);
+}
+
+body.theme-blue .workspace-app-shell {
+  background: #e7f0ff;
+}
+
+body.theme-blue .workspace-sidebar-shell {
+  background: linear-gradient(180deg, #dce8fb 0%, #d2e1f8 100%);
+}
+
+body.theme-blue .workspace-banner-card {
+  background: linear-gradient(180deg, #dbeafe, #d6e8ff);
+}
+
+body.theme-blue .workspace-summary-card,
+body.theme-blue .workspace-balance-card,
+body.theme-blue .workspace-tool-surface,
+body.theme-blue .workspace-table-panel,
+body.theme-blue .settings-panel-card,
+body.theme-blue .workspace-main-shell .route-panel-brand-mode,
+body.theme-blue .workspace-main-shell .unitedlane-ai-workspace {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(37, 99, 235, 0.12);
+}
+
+body.theme-blue .workspace-sidebar-link.active,
+body.theme-blue .workspace-main-usercard,
+body.theme-blue .workspace-sidebar-footer-card,
+body.theme-blue .settings-summary-list div,
+body.theme-blue .theme-option-card {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+@media (max-width: 1180px) {
+  .settings-grid,
+  .theme-option-grid {
+    grid-template-columns: 1fr;
+  }
+}
