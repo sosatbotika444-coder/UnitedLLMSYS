@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import RouteAssistant from "./RouteAssistantUnited";
 import TomTomSuite from "./TomTomSuite";
 import UnitedLaneChat from "./UnitedLaneChat";
+import brandAvatar from "../../templates/DPsearchfuel logo with digital globe.png";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
@@ -320,7 +321,7 @@ export default function App() {
       <main className="auth-shell">
         <section className="auth-panel">
           <div className="brand-lockup">
-            <span className="brand-pill">United Lane System</span>
+            <span className="brand-pill">dpsearchfuels</span>
             <h1>Dispatch Workspace</h1>
           </div>
 
@@ -416,9 +417,9 @@ export default function App() {
     <main className="workspace-app-shell">
       <aside className="workspace-sidebar-shell">
         <div className="workspace-sidebar-brand">
-          <div className="workspace-sidebar-logo">UL</div>
+          <div className="workspace-sidebar-logo"><img src={brandAvatar} alt="dpsearchfuels" className="workspace-sidebar-logo-image" /></div>
           <div className="workspace-sidebar-brand-copy">
-            <strong>UnitedLane</strong>
+            <strong>dpsearchfuels</strong>
             <span>{user.full_name}</span>
             <small>{user.email}</small>
           </div>
@@ -459,7 +460,7 @@ export default function App() {
       <section className="workspace-main-shell">
         <header className="workspace-main-header">
           <div className="workspace-main-heading">
-            <span className="workspace-main-kicker">UnitedLane Workspace</span>
+            <span className="workspace-main-kicker">dpsearchfuels</span>
             <h1>{activeWorkspaceCopy.title}</h1>
             <p>{activeWorkspaceCopy.subtitle}</p>
           </div>
