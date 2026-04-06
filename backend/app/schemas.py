@@ -144,3 +144,12 @@ class TomTomCapabilityCatalog(BaseModel):
     ready: int
     requires_access: int
     capabilities: list[ApiCapability]
+
+class UnitedLaneChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    context: str = Field(default="", max_length=4000)
+
+
+class UnitedLaneChatResponse(BaseModel):
+    assistant_name: str = "UnitedLane"
+    message: str

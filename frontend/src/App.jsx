@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import RouteAssistant from "./RouteAssistantUnited";
 import TomTomSuite from "./TomTomSuite";
+import UnitedLaneChat from "./UnitedLaneChat";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
@@ -632,6 +633,7 @@ export default function App() {
     </main>
   );
 }
+
 
 
 

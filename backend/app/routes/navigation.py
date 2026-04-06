@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 import certifi
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_route_guidance
+from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_chat_reply, generate_unitedlane_route_guidance
 from app.auth import get_current_user
 from app.config import get_settings
 from app.models import User
@@ -626,3 +626,8 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         station_map_link=station_map_link,
         data_source="TomTom + Official Network Pages + UnitedLane Guidance",
     )
+
+@router.post("/assistant-chat", response_model=UnitedLaneChatResponse)
+def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(get_current_user)):
+    reply = generate_unitedlane_chat_reply(message=payload.message, context=payload.context)
+    return UnitedLaneChatResponse(assistant_name=UNITEDLANE_IDENTITY, message=reply)

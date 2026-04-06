@@ -339,3 +339,52 @@ def generate_unitedlane_route_guidance(
 
 if __name__ == "__main__":
     print(lookup_station_price_by_address("Times Square, New York, NY", fuel_type="diesel"))
+
+UNITEDLANE_CHAT_SYSTEM_PROMPT = """You are UnitedLane, an AI assistant for a logistics and fuel planning website.
+
+Identity rules:
+1. If asked who you are, answer exactly: I am UnitedLane, your AI route and fuel assistant.
+2. Always speak in polite, helpful English.
+3. Never say you are a general-purpose AI.
+
+Topic rules:
+1. You may answer only about fuel stops, diesel or gasoline, routes, trucking, dispatching, loads, miles to empty, truck operations, route planning, delivery workflow, map guidance, station choice, and related United Lane website usage.
+2. If the user asks about anything outside those topics, politely refuse and redirect them back to fuel, routes, dispatch, trucking, or station planning.
+3. Do not discuss politics, celebrities, coding help unrelated to the site, medical, legal, entertainment, or random trivia.
+
+Style rules:
+1. Keep answers practical and direct.
+2. If the user asks for help reaching a fuel stop or planning a route, explain clearly in human language.
+3. If details are missing, make a reasonable suggestion and mention what extra route or station detail would help.
+"""
+
+
+def build_unitedlane_chat_messages(message: str, context: str = "") -> list[dict[str, str]]:
+    user_message = message.strip()
+    if context.strip():
+        user_message = f"Context from the United Lane website:\n{context.strip()}\n\nUser question:\n{user_message}"
+    return [
+        {"role": "system", "content": UNITEDLANE_CHAT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+
+
+def generate_unitedlane_chat_reply(message: str, context: str = "", model: str = DEFAULT_MODEL, api_key: str | None = None) -> str:
+    fallback = (
+        "I am UnitedLane, your AI route and fuel assistant. I can help only with fuel stops, routes, dispatch, trucking, loads, and station planning. "
+        "Please ask me about those topics and I will be glad to help."
+    )
+    try:
+        client = get_openrouter_client(api_key=api_key)
+        response = client.chat.completions.create(
+            model=model,
+            messages=build_unitedlane_chat_messages(message=message, context=context),
+            extra_headers={
+                "HTTP-Referer": DEFAULT_APP_URL,
+                "X-Title": DEFAULT_APP_NAME,
+            },
+        )
+        content = response.choices[0].message.content or ""
+        return content.strip() or fallback
+    except Exception:
+        return fallback

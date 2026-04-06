@@ -1275,3 +1275,134 @@ button {
 .unitedlane-map-button {
   text-decoration: none;
 }
+
+.unitedlane-chat-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 74px;
+  height: 74px;
+  border: none;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #60a5fa, #1d4ed8 55%, #0f172a 100%);
+  color: #ffffff;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.3);
+  cursor: pointer;
+  z-index: 90;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.unitedlane-chat-shell {
+  position: fixed;
+  right: 24px;
+  bottom: 112px;
+  width: min(380px, calc(100vw - 32px));
+  z-index: 90;
+}
+
+.unitedlane-chat-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #f8fbff, #eef6ff);
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.unitedlane-chat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.unitedlane-chat-head strong {
+  display: block;
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
+.unitedlane-chat-head span {
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.unitedlane-chat-close {
+  border: none;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.unitedlane-chat-log {
+  max-height: 360px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.unitedlane-chat-bubble {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.unitedlane-chat-bubble strong {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.unitedlane-chat-bubble p {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.unitedlane-chat-bubble-assistant {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.unitedlane-chat-bubble-user {
+  background: linear-gradient(180deg, #1d4ed8, #1e40af);
+  color: #ffffff;
+}
+
+.unitedlane-chat-status {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.unitedlane-chat-form {
+  display: grid;
+  gap: 10px;
+}
+
+.unitedlane-chat-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 88px;
+}
+
+@media (max-width: 640px) {
+  .unitedlane-chat-fab {
+    right: 16px;
+    bottom: 16px;
+    width: 66px;
+    height: 66px;
+  }
+
+  .unitedlane-chat-shell {
+    right: 16px;
+    bottom: 92px;
+    width: calc(100vw - 32px);
+  }
+}
