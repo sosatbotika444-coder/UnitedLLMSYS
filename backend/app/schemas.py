@@ -104,6 +104,9 @@ class FuelStop(BaseModel):
     amenity_score: float | None = None
     overall_score: float | None = None
     source_url: str | None = None
+    amenities: list[str] = []
+    location_type: str | None = None
+    official_match: bool = False
 
 
 class RouteOption(BaseModel):

@@ -114,6 +114,7 @@ function StopCard({ stop, compact = false }) {
           <span className="network-chip">{getNetworkLabel(stop)}</span>
           <strong>{stop.brand || stop.name}</strong>
           <span>{stop.city}{stop.state_code ? `, ${stop.state_code}` : ""}</span>
+          {stop.location_type ? <span>{stop.location_type}</span> : null}
         </div>
         <div className="fuel-stop-score">
           <strong>{Math.round(stop.overall_score || 0)}</strong>
@@ -126,7 +127,7 @@ function StopCard({ stop, compact = false }) {
       <div className="fuel-price-row fuel-price-row-brand">
         <div>
           <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Price not published"}</strong>
-          <span>{stop.price_source || "TomTom + official network pages"}</span>
+          <span>{stop.price_source || "Official Love's/Pilot network page"}</span>
         </div>
         {stop.source_url ? (
           <a className="fuel-source-link" href={stop.source_url} target="_blank" rel="noreferrer">
@@ -136,8 +137,8 @@ function StopCard({ stop, compact = false }) {
       </div>
 
       <div className="fuel-stop-coords">
-        <strong>Coords</strong>
-        <span>{Number(stop.lat).toFixed(5)}, {Number(stop.lon).toFixed(5)}</span>
+        <strong>{stop.official_match ? "Verified" : "Coords"}</strong>
+        <span>{stop.official_match ? `Official Love's/Pilot location (${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)})` : `${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)}`}</span>
       </div>
 
       <div className="fuel-stop-stat-grid">
@@ -146,6 +147,13 @@ function StopCard({ stop, compact = false }) {
         <span><strong>Route match</strong>{Math.round(stop.amenity_score || 0)}</span>
         <span><strong>Distance</strong>{formatDistance(stop.detour_distance_meters)}</span>
       </div>
+
+      {stop.amenities?.length ? (
+        <div className="fuel-stop-coords">
+          <strong>Services</strong>
+          <span>{stop.amenities.slice(0, 8).join(", ")}</span>
+        </div>
+      ) : null}
     </article>
   );
 }

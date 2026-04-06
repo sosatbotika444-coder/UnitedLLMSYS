@@ -22,11 +22,14 @@ function createMarkerElement(className, label) {
 function buildStopPopup(stop) {
   return [
     `<strong>${stop.brand || stop.name}</strong>`,
+    stop.location_type || null,
     stop.address,
+    stop.official_match ? "Verified on official Love's/Pilot page" : null,
     stop.price ? `Price: $${stop.price.toFixed(3)}/gal` : "Price not published",
     stop.price_date ? `As of: ${stop.price_date}` : null,
     `Off route: ${Math.round(((stop.off_route_miles || 0) + Number.EPSILON) * 10) / 10} mi`,
     `Score: ${Math.round(stop.overall_score || 0)}`,
+    stop.amenities?.length ? `Services: ${stop.amenities.slice(0, 6).join(", ")}` : null,
     `Coords: ${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)}`
   ]
     .filter(Boolean)

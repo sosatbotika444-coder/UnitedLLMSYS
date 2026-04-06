@@ -50,7 +50,9 @@ OFFICIAL_SITE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
 }
 LOVES_SITEMAP_URL = "https://www.loves.com/sitemap-locations.xml"
+PILOT_SITEMAP_URL = "https://locations.pilotflyingj.com/sitemap.xml"
 MAX_LOVES_CITY_CANDIDATES = 6
+MAX_PILOT_CITY_CANDIDATES = 8
 SORT_CODE_MAP = {
     "cheapest": "price",
     "lowest_retail": "price",
@@ -162,6 +164,31 @@ def load_loves_location_index() -> list[dict[str, str]]:
     return entries
 
 
+@lru_cache(maxsize=1)
+def load_pilot_location_index() -> list[dict[str, str]]:
+    xml_text = safe_http_request(PILOT_SITEMAP_URL, headers=OFFICIAL_SITE_HEADERS)
+    if not xml_text:
+        return []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    entries: list[dict[str, str]] = []
+    for node in root.findall('.//sm:loc', namespace):
+        url = (node.text or '').strip()
+        match = re.search(r'/us/([a-z]{2})/([^/]+)/([^?#]+)$', url)
+        if not match:
+            continue
+        entries.append({
+            "url": url,
+            "state": match.group(1).upper(),
+            "city": normalize_text(match.group(2).replace('-', ' ')),
+            "street_slug": normalize_text(match.group(3).replace('-', ' ')),
+        })
+    return entries
+
+
 def extract_jsonld_objects(html: str) -> list[dict]:
     objects: list[dict] = []
     for payload in re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.I | re.S):
@@ -186,14 +213,31 @@ def load_loves_page_summary(url: str) -> dict | None:
     city = ""
     state = ""
     postal_code = ""
+    lat = None
+    lon = None
+    location_name = ""
+    amenities: set[str] = set()
     for entry in extract_jsonld_objects(html):
         address = entry.get("address")
-        if isinstance(address, dict) and address.get("streetAddress"):
+        if isinstance(address, dict) and address.get("streetAddress") and not street:
             street = address.get("streetAddress", "")
             city = address.get("addressLocality", "")
             state = address.get("addressRegion", "")
             postal_code = address.get("postalCode", "")
-            break
+        geo = entry.get("geo")
+        if isinstance(geo, dict):
+            lat = geo.get("latitude", lat)
+            lon = geo.get("longitude", lon)
+        if entry.get("name") and not location_name:
+            location_name = str(entry.get("name"))
+        for feature in entry.get("amenityFeature", []) or []:
+            if isinstance(feature, dict) and feature.get("value") and feature.get("name"):
+                amenities.add(str(feature.get("name")).strip())
+        catalog = entry.get("hasOfferCatalog")
+        if isinstance(catalog, dict):
+            for item in catalog.get("itemListElement", []) or []:
+                if isinstance(item, dict) and item.get("name"):
+                    amenities.add(str(item.get("name")).strip())
 
     if not street:
         street_match = re.search(r'"streetAddress"\s*:\s*"([^"]+)"', html)
@@ -204,6 +248,12 @@ def load_loves_page_summary(url: str) -> dict | None:
         city = city_match.group(1) if city_match else ""
         state = state_match.group(1) if state_match else ""
         postal_code = postal_match.group(1) if postal_match else ""
+
+    if lat is None or lon is None:
+        lat_match = re.search(r'"latitude"\s*:\s*"?([0-9\.-]+)"?', html)
+        lon_match = re.search(r'"longitude"\s*:\s*"?([0-9\.-]+)"?', html)
+        lat = float(lat_match.group(1)) if lat_match else None
+        lon = float(lon_match.group(1)) if lon_match else None
 
     prices: dict[str, float] = {}
     for base_value, superscript_digit, label in re.findall(r'<h3>\$(\d+\.\d+)<sup>(\d)</sup></h3><span>\s*([^<]+?)\s*</span>', html, re.I):
@@ -216,11 +266,15 @@ def load_loves_page_summary(url: str) -> dict | None:
     return {
         "url": url,
         "html": html,
+        "name": location_name or "Love's",
         "street": street,
         "city": city,
         "state": state,
         "postal_code": postal_code,
         "house_number": extract_house_number(street),
+        "lat": lat,
+        "lon": lon,
+        "amenities": sorted(amenities),
         "diesel_price": prices.get("diesel") or prices.get("auto diesel"),
         "diesel_time": diesel_time_match.group(1) if diesel_time_match else None,
         "auto_diesel_price": prices.get("auto diesel"),
@@ -228,18 +282,89 @@ def load_loves_page_summary(url: str) -> dict | None:
     }
 
 
+@lru_cache(maxsize=256)
+def load_pilot_page_summary(url: str) -> dict | None:
+    html = fetch_official_page(url)
+    if not html:
+        return None
+
+    street_match = re.search(r'itemprop="streetAddress"\s+content="([^"]+)"', html)
+    city_match = re.search(r'itemprop="addressLocality"\s+content="([^"]+)"', html)
+    state_match = re.search(r'itemprop="addressRegion"(?:\s+content="([A-Z]{2})"|>\s*([A-Z]{2}))', html)
+    postal_match = re.search(r'itemprop="postalCode"\s+content="([^"]+)"', html)
+    lat_match = re.search(r'itemprop="latitude"[^>]*content="([0-9\.-]+)"', html)
+    lon_match = re.search(r'itemprop="longitude"[^>]*content="([0-9\.-]+)"', html)
+    title_match = re.search(r'<title>(.*?)</title>', html, re.I | re.S)
+    title_text = re.sub(r'\s+', ' ', title_match.group(1)).strip() if title_match else 'Pilot Flying J'
+    state = ''
+    if state_match:
+        state = state_match.group(1) or state_match.group(2) or ''
+    if not state:
+        fallback_state = re.search(r' in .*?,\s*([A-Z]{2})\s*\|', title_text)
+        state = fallback_state.group(1) if fallback_state else ''
+
+    amenities: list[str] = []
+    amenity_signals = [
+        ('Truck Parking', r'truck parking'),
+        ('Showers', r'showers'),
+        ('CAT Scale', r'cat scale|\bscale\b'),
+        ('Laundry', r'laundry'),
+        ('Truck Care', r'truck care'),
+        ('Restaurants', r'restaurants?'),
+        ('Fast Food', r'fast food|food'),
+        ('ATM', r'\batm\b'),
+        ('Bulk Propane', r'bulk propane'),
+        ('DEF', r'\bdef\b'),
+        ('RV Services', r'\brv\b'),
+        ('Wi-Fi', r'wi-?fi'),
+    ]
+    lowered_html = html.lower()
+    for label, pattern in amenity_signals:
+        if re.search(pattern, lowered_html):
+            amenities.append(label)
+
+    return {
+        'url': url,
+        'html': html,
+        'name': title_text.split('|')[0].strip(),
+        'street': street_match.group(1) if street_match else '',
+        'city': city_match.group(1) if city_match else '',
+        'state': state,
+        'postal_code': postal_match.group(1) if postal_match else '',
+        'house_number': extract_house_number(street_match.group(1) if street_match else ''),
+        'lat': float(lat_match.group(1)) if lat_match else None,
+        'lon': float(lon_match.group(1)) if lon_match else None,
+        'amenities': amenities,
+    }
+
+
+
+def derive_location_type(name: str) -> str | None:
+    haystack = normalize_text(name)
+    if 'travel center' in haystack:
+        return 'Travel Center'
+    if 'country store' in haystack:
+        return 'Country Store'
+    if 'truck care' in haystack:
+        return 'Truck Care'
+    if 'rv stop' in haystack:
+        return 'RV Stop'
+    if 'service center' in haystack:
+        return 'Service Center'
+    return None
+
 def select_loves_candidate(stop: FuelStop) -> dict | None:
     if not stop.city or not stop.state_code:
         return None
 
     target_city = normalize_text(stop.city)
-    target_state = (stop.state_code or "").upper()
+    target_state = (stop.state_code or '').upper()
     street_line = normalize_text(extract_street_line(stop.address))
     house_number = extract_house_number(stop.address)
 
-    candidates = [entry["url"] for entry in load_loves_location_index() if entry["state"] == target_state and entry["city"] == target_city]
+    candidates = [entry['url'] for entry in load_loves_location_index() if entry['state'] == target_state and entry['city'] == target_city]
     if not candidates and target_city:
-        candidates = [entry["url"] for entry in load_loves_location_index() if entry["state"] == target_state and target_city.replace(" ", "-") in entry["url"]]
+        candidates = [entry['url'] for entry in load_loves_location_index() if entry['state'] == target_state and target_city.replace(' ', '-') in entry['url']]
     if not candidates:
         return None
 
@@ -250,20 +375,21 @@ def select_loves_candidate(stop: FuelStop) -> dict | None:
         if not summary:
             continue
         score = 0
-        if normalize_text(summary.get("city", "")) == target_city:
+        if normalize_text(summary.get('city', '')) == target_city:
             score += 24
-        if (summary.get("state") or "").upper() == target_state:
+        if (summary.get('state') or '').upper() == target_state:
             score += 18
-        summary_house_number = summary.get("house_number")
+        summary_house_number = summary.get('house_number')
         if house_number and summary_house_number and house_number == summary_house_number:
             score += 42
-        summary_street = normalize_text(summary.get("street", ""))
+        summary_street = normalize_text(summary.get('street', ''))
         if street_line and summary_street:
             score += int(SequenceMatcher(None, street_line, summary_street).ratio() * 36)
         if score > best_score:
             best_match = summary
             best_score = score
     return best_match if best_score >= 40 else None
+
 
 
 def address_consistency_score(left: str, right: str) -> int:
@@ -279,64 +405,95 @@ def address_consistency_score(left: str, right: str) -> int:
     return score
 
 
-def resolve_pilot_official_url(stop: FuelStop) -> str | None:
+
+def select_pilot_candidate(stop: FuelStop) -> dict | None:
     if not stop.state_code or not stop.city or not stop.address:
         return None
+
+    target_state = (stop.state_code or '').upper()
+    target_city = normalize_text(stop.city)
     street_line = extract_street_line(stop.address)
-    if not street_line:
+    candidates = [entry['url'] for entry in load_pilot_location_index() if entry['state'] == target_state and entry['city'] == target_city]
+    if not candidates:
         return None
-    candidate = f"https://locations.pilotflyingj.com/us/{slugify_segment(stop.state_code)}/{slugify_segment(stop.city)}/{slugify_segment(street_line)}"
-    html = fetch_official_page(candidate)
-    if not html:
-        return None
-    street_match = re.search(r'itemprop="streetAddress"\s+content="([^"]+)"', html)
-    city_match = re.search(r'itemprop="addressLocality"\s+content="([^"]+)"', html)
-    state_match = re.search(r'itemprop="addressRegion">?([A-Z]{2})', html)
-    candidate_street = street_match.group(1) if street_match else ""
-    candidate_city = city_match.group(1) if city_match else ""
-    candidate_state = state_match.group(1) if state_match else (stop.state_code or "")
-    if normalize_text(candidate_city) != normalize_text(stop.city):
-        return None
-    if (candidate_state or "").upper() != (stop.state_code or "").upper():
-        return None
-    if address_consistency_score(candidate_street, extract_street_line(stop.address)) < 55:
-        return None
-    return candidate
+
+    best_match = None
+    best_score = -1
+    for url in candidates[:MAX_PILOT_CITY_CANDIDATES]:
+        summary = load_pilot_page_summary(url)
+        if not summary:
+            continue
+        score = 0
+        if normalize_text(summary.get('city', '')) == target_city:
+            score += 24
+        if (summary.get('state') or '').upper() == target_state:
+            score += 18
+        score += min(address_consistency_score(summary.get('street', ''), street_line), 70)
+        if score > best_score:
+            best_match = summary
+            best_score = score
+    return best_match if best_score >= 72 else None
 
 
-def enrich_loves_stop(stop: FuelStop) -> FuelStop:
+
+def apply_official_summary(stop: FuelStop, summary: dict, brand_name: str, price_source: str) -> FuelStop:
+    official_name = summary.get('name') or stop.name
+    street = summary.get('street') or extract_street_line(stop.address)
+    city = summary.get('city') or stop.city
+    state = (summary.get('state') or stop.state_code or '').upper() or None
+    postal_code = summary.get('postal_code') or ''
+    full_address = ', '.join(part for part in [street, ', '.join(part for part in [city, state] if part).strip(', '), postal_code] if part)
+
+    stop.id = summary.get('url') or stop.id
+    stop.name = official_name
+    stop.brand = brand_name
+    stop.city = city
+    stop.state_code = state
+    stop.address = full_address or stop.address
+    stop.lat = float(summary.get('lat')) if summary.get('lat') is not None else stop.lat
+    stop.lon = float(summary.get('lon')) if summary.get('lon') is not None else stop.lon
+    stop.source_url = summary.get('url')
+    stop.location_type = derive_location_type(official_name)
+    stop.amenities = list(summary.get('amenities') or [])
+    stop.official_match = True
+    stop.price_source = price_source
+    stop.amenity_score = round((stop.amenity_score or 0) + min(len(stop.amenities), 12) * 1.4 + 18, 1)
+    stop.overall_score = round((stop.overall_score or 0) + 28 + min(len(stop.amenities), 10) * 1.6, 1)
+    return stop
+
+
+
+def enrich_loves_stop(stop: FuelStop) -> FuelStop | None:
     match = select_loves_candidate(stop)
     if not match:
-        stop.price_source = stop.price_source or "Love's official page match unavailable"
-        return stop
-    stop.source_url = match.get("url")
-    if match.get("diesel_price") is not None:
-        stop.price = match.get("diesel_price")
-        stop.price_date = match.get("diesel_time")
-        stop.price_source = "Love's official site"
+        return None
+    stop = apply_official_summary(stop, match, "Love's", "Love's official site")
+    if match.get('diesel_price') is not None:
+        stop.price = match.get('diesel_price')
+        stop.price_date = match.get('diesel_time')
         stop.overall_score = round((stop.overall_score or 0) + 10, 1)
     else:
         stop.price_source = "Love's official site (diesel price unavailable)"
     return stop
 
 
-def enrich_pilot_stop(stop: FuelStop) -> FuelStop:
-    official_url = resolve_pilot_official_url(stop)
-    if not official_url:
-        stop.price_source = stop.price_source or "Pilot Flying J official page match unavailable"
-        return stop
-    stop.source_url = official_url
-    stop.price_source = "Pilot Flying J official site (diesel price not published)"
-    return stop
+
+def enrich_pilot_stop(stop: FuelStop) -> FuelStop | None:
+    match = select_pilot_candidate(stop)
+    if not match:
+        return None
+    return apply_official_summary(stop, match, 'Pilot Flying J', 'Pilot Flying J official site (diesel price not published)')
 
 
-def enrich_stop_with_official_site(stop: FuelStop) -> FuelStop:
-    haystack = normalize_text(f"{stop.brand} {stop.name}")
-    if "love" in haystack:
+
+def enrich_stop_with_official_site(stop: FuelStop) -> FuelStop | None:
+    haystack = normalize_text(f'{stop.brand} {stop.name}')
+    if 'love' in haystack:
         return enrich_loves_stop(stop)
-    if "pilot" in haystack or "flying j" in haystack:
+    if 'pilot' in haystack or 'flying j' in haystack:
         return enrich_pilot_stop(stop)
-    return stop
+    return None
+
 
 
 def enrich_stops_with_official_sites(stops: list[FuelStop]) -> list[FuelStop]:
@@ -344,10 +501,11 @@ def enrich_stops_with_official_sites(stops: list[FuelStop]) -> list[FuelStop]:
         return []
     max_workers = min(8, len(stops))
     if max_workers <= 1:
-        return [enrich_stop_with_official_site(stop) for stop in stops]
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        return list(executor.map(enrich_stop_with_official_site, stops))
-
+        results = [enrich_stop_with_official_site(stop) for stop in stops]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(enrich_stop_with_official_site, stops))
+    return [stop for stop in results if stop is not None]
 
 def geocode_address(query: str) -> GeocodedPoint:
     encoded_query = quote(query)
@@ -468,10 +626,13 @@ def to_fuel_stop(item: dict, matched_keyword: str | None) -> FuelStop:
         fuel_types=poi.get("fuelTypes", []),
         price=None,
         price_less_tax=None,
-        price_source="TomTom Brand Search",
+        price_source="TomTom route candidate",
         amenity_score=keyword_score(matched_keyword),
         overall_score=0,
         source_url=None,
+        amenities=[],
+        location_type=derive_location_type(display_name),
+        official_match=False,
     )
     stop.off_route_miles = round((stop.detour_distance_meters or 0) * 0.000621371, 1) if stop.detour_distance_meters is not None else None
     stop.overall_score = round((stop.amenity_score or 0) * 0.65 + max(0, 34 - (stop.off_route_miles or 0)), 1)
@@ -481,6 +642,9 @@ def to_fuel_stop(item: dict, matched_keyword: str | None) -> FuelStop:
 def merge_stop(stops_by_id: dict[str, FuelStop], stop: FuelStop):
     existing = stops_by_id.get(stop.id)
     if not existing:
+        stops_by_id[stop.id] = stop
+        return
+    if stop.official_match and not existing.official_match:
         stops_by_id[stop.id] = stop
         return
     current_score = existing.overall_score if existing.overall_score is not None else -1
@@ -614,7 +778,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = top_fuel_stops[0] if top_fuel_stops else None
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane picks the strongest nearby Love's or Pilot Flying J stop, shows any official price we can confirm, and explains the drive in polite English. Use the live map for the final live turns into the station."
+    price_support = "UnitedLane now keeps only Love's and Pilot Flying J stations that we can confirm against the official network pages, then ranks them against your route and available services."
     return RouteAssistantResponse(
         origin=origin,
         destination=destination,
@@ -626,7 +790,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         price_support=price_support,
         map_link=build_map_link(origin.label, destination.label),
         station_map_link=station_map_link,
-        data_source="TomTom + Official Network Pages + UnitedLane Guidance",
+        data_source="TomTom routing + official Love's/Pilot locations + UnitedLane guidance",
     )
 
 @router.post("/assistant-chat", response_model=UnitedLaneChatResponse)
