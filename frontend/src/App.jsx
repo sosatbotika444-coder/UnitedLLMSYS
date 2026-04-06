@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RouteAssistant from "./RouteAssistantUnited";
 import TomTomSuite from "./TomTomSuite";
 import UnitedLaneChat from "./UnitedLaneChat";
@@ -6,6 +6,12 @@ import UnitedLaneChat from "./UnitedLaneChat";
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
+const workspaceTabs = [
+  { id: "command", label: "Command Center", detail: "Commercial overview" },
+  { id: "routing", label: "Routing", detail: "Official station map" },
+  { id: "loads", label: "Loads", detail: "Dispatch board" },
+  { id: "ai", label: "UnitedLane AI", detail: "Company assistant" }
+];
 const emptyRegister = { full_name: "", email: "", password: "" };
 const emptyLogin = { email: "", password: "" };
 const emptyRow = {
@@ -93,6 +99,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
+  const [activeWorkspace, setActiveWorkspace] = useState("command");
 
   useEffect(() => {
     if (!token) {
@@ -252,6 +259,7 @@ export default function App() {
       );
 
       setRows((currentRows) => [normalizeRow(created), ...currentRows]);
+      setActiveWorkspace("loads");
     } catch (createError) {
       setError(createError.message);
     }
@@ -375,18 +383,18 @@ export default function App() {
   }
 
   return (
-    <main className="dashboard-shell">
-      <header className="workspace-header">
-        <div className="workspace-title">
+    <main className="dashboard-shell dashboard-shell-commercial">
+      <header className="workspace-header workspace-header-commercial">
+        <div className="workspace-title workspace-title-commercial">
           <span className="brand-pill">United Lane System</span>
-          <h1>Dispatch Control</h1>
-          <p>Operations board</p>
+          <h1>UnitedLane Command Workspace</h1>
+          <p>Commercial route intelligence, official station pricing, dispatch loads, and company AI in one system.</p>
         </div>
 
         <div className="workspace-actions">
-          <div className="workspace-meta">
+          <div className="workspace-meta workspace-meta-hero">
             <span>{currentDate}</span>
-            <strong>{savingId ? `Saving row #${savingId}` : "System ready"}</strong>
+            <strong>{savingId ? `Saving row #${savingId}` : "Official station engine online"}</strong>
           </div>
           <div className="user-badge">
             <strong>{user.full_name}</strong>
@@ -404,35 +412,35 @@ export default function App() {
       {message ? <div className="notice success inline-notice">{message}</div> : null}
       {error ? <div className="notice error inline-notice">{error}</div> : null}
 
-      <section className="control-grid">
-        <article className="panel summary-panel">
+      <section className="workspace-commercial-grid">
+        <article className="panel summary-panel summary-panel-commercial">
           <div className="panel-head">
-            <h2>Overview</h2>
+            <h2>Fleet Snapshot</h2>
             <span>Live</span>
           </div>
           <div className="stats-grid compact">
-            <article className="stat-card">
+            <article className="stat-card stat-card-commercial">
               <span>Total Loads</span>
               <strong>{metrics.total}</strong>
             </article>
-            <article className="stat-card">
+            <article className="stat-card stat-card-commercial">
               <span>Open Loads</span>
               <strong>{metrics.activeLoads}</strong>
             </article>
-            <article className="stat-card warning">
+            <article className="stat-card warning stat-card-commercial">
               <span>Low Fuel</span>
               <strong>{metrics.lowFuelCount}</strong>
             </article>
-            <article className="stat-card accent">
+            <article className="stat-card accent stat-card-commercial">
               <span>Average Fuel</span>
               <strong>{metrics.avgFuel}%</strong>
             </article>
           </div>
         </article>
 
-        <article className="panel filter-panel">
+        <article className="panel filter-panel filter-panel-commercial">
           <div className="panel-head">
-            <h2>Filters</h2>
+            <h2>Commercial Filters</h2>
             <span>{filteredRows.length} visible</span>
           </div>
           <section className="toolbar">
@@ -458,182 +466,218 @@ export default function App() {
               </select>
             </label>
 
-            <div className="system-state">
-              <span>{gridLoading ? "Loading data" : "Auto save enabled"}</span>
-              <strong>{gridLoading ? "Syncing..." : "Blur any field to save"}</strong>
+            <div className="system-state system-state-commercial">
+              <span>{gridLoading ? "Loading dispatch data" : "Auto save enabled"}</span>
+              <strong>{gridLoading ? "Syncing..." : "Official route and station analysis ready"}</strong>
             </div>
           </section>
         </article>
       </section>
 
-      <TomTomSuite token={token} />
-
-      <RouteAssistant token={token} />
-
-      <section className="panel sheet-panel">
-        <div className="sheet-panel-head">
+      <section className="workspace-nav-panel panel">
+        <div className="workspace-nav-head">
           <div>
-            <h2>Load Board</h2>
-            <span>Edit cells directly. Changes save to the backend.</span>
+            <h2>Workspace Sections</h2>
+            <span>Switch between operations, routing, loads, and UnitedLane AI.</span>
           </div>
         </div>
-
-        <div className="sheet-frame">
-          <div className="sheet-scroll">
-            <table className="dispatch-sheet">
-              <thead>
-                <tr>
-                  <th>Driver</th>
-                  <th>Truck #</th>
-                  <th>Approx MPG</th>
-                  <th>Status</th>
-                  <th>Miles to Empty</th>
-                  <th>Tank Capacity</th>
-                  <th>Fuel %</th>
-                  <th>Full Load Miles</th>
-                  <th>PU City</th>
-                  <th>1st Stop</th>
-                  <th>2nd Stop</th>
-                  <th>3rd Stop</th>
-                  <th>Del City</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.length ? (
-                  filteredRows.map((row) => {
-                    const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
-
-                    return (
-                      <tr key={row.id}>
-                        <td className="driver-cell">
-                          <input
-                            value={row.driver}
-                            onChange={(event) => updateLocalRow(row.id, "driver", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, driver: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            value={row.truck}
-                            onChange={(event) => updateLocalRow(row.id, "truck", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, truck: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            value={row.mpg}
-                            onChange={(event) => updateLocalRow(row.id, "mpg", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, mpg: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <select
-                            className={`status-select ${getStatusTone(row.status)}`}
-                            value={row.status}
-                            onChange={async (event) => {
-                              const value = event.target.value;
-                              updateLocalRow(row.id, "status", value);
-                              await saveRow({ ...row, status: value });
-                            }}
-                          >
-                            {statusOptions.map((status) => (
-                              <option key={status} value={status}>
-                                {status}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            value={row.miles_to_empty}
-                            onChange={(event) => updateLocalRow(row.id, "miles_to_empty", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, miles_to_empty: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            value={row.tank_capacity}
-                            onChange={(event) => updateLocalRow(row.id, "tank_capacity", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, tank_capacity: event.target.value })}
-                          />
-                        </td>
-                        <td className={getFuelTone(Number(row.fuel_level))}>
-                          <div className="fuel-cell">
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={row.fuel_level}
-                              onChange={async (event) => {
-                                const value = Number(event.target.value);
-                                updateLocalRow(row.id, "fuel_level", value);
-                                await saveRow({ ...row, fuel_level: value, miles_to_empty: computeMilesToEmpty({ ...row, fuel_level: value }) });
-                              }}
-                            />
-                            <span>{row.fuel_level}%</span>
-                          </div>
-                        </td>
-                        <td className="readonly-cell">{fullLoadMiles}</td>
-                        <td>
-                          <input
-                            value={row.pickup_city}
-                            onChange={(event) => updateLocalRow(row.id, "pickup_city", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, pickup_city: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <textarea
-                            value={row.stop1}
-                            onChange={(event) => updateLocalRow(row.id, "stop1", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, stop1: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <textarea
-                            value={row.stop2}
-                            onChange={(event) => updateLocalRow(row.id, "stop2", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, stop2: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <textarea
-                            value={row.stop3}
-                            onChange={(event) => updateLocalRow(row.id, "stop3", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, stop3: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            value={row.delivery_city}
-                            onChange={(event) => updateLocalRow(row.id, "delivery_city", event.target.value)}
-                            onBlur={(event) => saveRow({ ...row, delivery_city: event.target.value })}
-                          />
-                        </td>
-                        <td className="action-cell">
-                          <button className="delete-button" onClick={() => deleteRow(row.id)}>
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="14" className="empty-state-cell">
-                      {gridLoading ? "Loading dispatch data..." : "No loads yet. Create your first row."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="workspace-nav-grid">
+          {workspaceTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`workspace-nav-button ${activeWorkspace === tab.id ? "active" : ""}`}
+              onClick={() => setActiveWorkspace(tab.id)}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.detail}</span>
+            </button>
+          ))}
         </div>
       </section>
+
+      {activeWorkspace === "command" ? (
+        <section className="workspace-stack">
+          <section className="panel workspace-commercial-callout">
+            <div className="panel-head">
+              <h2>Command Center</h2>
+              <span>UnitedLane</span>
+            </div>
+            <p>
+              This commercial workspace is tuned for fleet analysis: official Love&apos;s and Pilot pricing, route-facing station matching,
+              load visibility, and a dedicated company AI assistant.
+            </p>
+          </section>
+          <TomTomSuite token={token} />
+        </section>
+      ) : null}
+
+      {activeWorkspace === "routing" ? <RouteAssistant token={token} /> : null}
+
+      {activeWorkspace === "loads" ? (
+        <section className="panel sheet-panel">
+          <div className="sheet-panel-head">
+            <div>
+              <h2>Load Board</h2>
+              <span>Edit cells directly. Changes save to the backend.</span>
+            </div>
+          </div>
+
+          <div className="sheet-frame">
+            <div className="sheet-scroll">
+              <table className="dispatch-sheet">
+                <thead>
+                  <tr>
+                    <th>Driver</th>
+                    <th>Truck #</th>
+                    <th>Approx MPG</th>
+                    <th>Status</th>
+                    <th>Miles to Empty</th>
+                    <th>Tank Capacity</th>
+                    <th>Fuel %</th>
+                    <th>Full Load Miles</th>
+                    <th>PU City</th>
+                    <th>1st Stop</th>
+                    <th>2nd Stop</th>
+                    <th>3rd Stop</th>
+                    <th>Del City</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.length ? (
+                    filteredRows.map((row) => {
+                      const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+
+                      return (
+                        <tr key={row.id}>
+                          <td className="driver-cell">
+                            <input
+                              value={row.driver}
+                              onChange={(event) => updateLocalRow(row.id, "driver", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, driver: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={row.truck}
+                              onChange={(event) => updateLocalRow(row.id, "truck", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, truck: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={row.mpg}
+                              onChange={(event) => updateLocalRow(row.id, "mpg", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, mpg: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className={`status-select ${getStatusTone(row.status)}`}
+                              value={row.status}
+                              onChange={async (event) => {
+                                const value = event.target.value;
+                                updateLocalRow(row.id, "status", value);
+                                await saveRow({ ...row, status: value });
+                              }}
+                            >
+                              {statusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              value={row.miles_to_empty}
+                              onChange={(event) => updateLocalRow(row.id, "miles_to_empty", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, miles_to_empty: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={row.tank_capacity}
+                              onChange={(event) => updateLocalRow(row.id, "tank_capacity", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, tank_capacity: event.target.value })}
+                            />
+                          </td>
+                          <td className={getFuelTone(Number(row.fuel_level))}>
+                            <div className="fuel-cell">
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={row.fuel_level}
+                                onChange={async (event) => {
+                                  const value = Number(event.target.value);
+                                  updateLocalRow(row.id, "fuel_level", value);
+                                  await saveRow({ ...row, fuel_level: value, miles_to_empty: computeMilesToEmpty({ ...row, fuel_level: value }) });
+                                }}
+                              />
+                              <span>{row.fuel_level}%</span>
+                            </div>
+                          </td>
+                          <td className="readonly-cell">{fullLoadMiles}</td>
+                          <td>
+                            <input
+                              value={row.pickup_city}
+                              onChange={(event) => updateLocalRow(row.id, "pickup_city", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, pickup_city: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <textarea
+                              value={row.stop1}
+                              onChange={(event) => updateLocalRow(row.id, "stop1", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, stop1: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <textarea
+                              value={row.stop2}
+                              onChange={(event) => updateLocalRow(row.id, "stop2", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, stop2: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <textarea
+                              value={row.stop3}
+                              onChange={(event) => updateLocalRow(row.id, "stop3", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, stop3: event.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={row.delivery_city}
+                              onChange={(event) => updateLocalRow(row.id, "delivery_city", event.target.value)}
+                              onBlur={(event) => saveRow({ ...row, delivery_city: event.target.value })}
+                            />
+                          </td>
+                          <td className="action-cell">
+                            <button className="delete-button" onClick={() => deleteRow(row.id)}>
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="14" className="empty-state-cell">
+                        {gridLoading ? "Loading dispatch data..." : "No loads yet. Create your first row."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeWorkspace === "ai" ? <UnitedLaneChat token={token} user={user} /> : null}
     </main>
   );
 }
-
-
-
-

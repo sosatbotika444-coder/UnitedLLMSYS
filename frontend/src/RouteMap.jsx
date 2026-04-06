@@ -19,16 +19,27 @@ function createMarkerElement(className, label) {
   return el;
 }
 
+function formatMoney(value) {
+  return value !== null && value !== undefined ? `$${Number(value).toFixed(3)}` : "N/A";
+}
+
 function buildStopPopup(stop) {
+  const title = stop.brand || stop.name;
+  const subtitle = stop.location_type
+    ? `${stop.location_type}${stop.store_number ? ` - Store #${stop.store_number}` : ""}`
+    : stop.store_number
+      ? `Store #${stop.store_number}`
+      : null;
+
   return [
-    `<strong>${stop.brand || stop.name}</strong>`,
-    stop.location_type ? `${stop.location_type}${stop.store_number ? ` ? #${stop.store_number}` : ""}` : (stop.store_number ? `Store #${stop.store_number}` : null),
+    `<strong>${title}</strong>`,
+    subtitle,
     stop.address,
     stop.phone ? `Phone: ${stop.phone}` : null,
-    stop.official_match ? "Parsed from official Love's/Pilot location page" : null,
-    stop.diesel_price !== null && stop.diesel_price !== undefined ? `Diesel: $${stop.diesel_price.toFixed(3)}` : null,
-    stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: $${stop.auto_diesel_price.toFixed(3)}` : null,
-    stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: $${stop.unleaded_price.toFixed(3)}` : null,
+    stop.official_match ? "Official Love's/Pilot station page matched" : null,
+    stop.diesel_price !== null && stop.diesel_price !== undefined ? `Diesel: ${formatMoney(stop.diesel_price)}` : null,
+    stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: ${formatMoney(stop.auto_diesel_price)}` : null,
+    stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: ${formatMoney(stop.unleaded_price)}` : null,
     stop.price_date ? `As of: ${stop.price_date}` : null,
     stop.parking_spaces ? `Parking: ${stop.parking_spaces}` : null,
     `Off route: ${Math.round(((stop.off_route_miles || 0) + Number.EPSILON) * 10) / 10} mi`,
@@ -40,11 +51,22 @@ function buildStopPopup(stop) {
     .join("<br/>");
 }
 
+function buildHoverPopup(stop) {
+  return `
+    <div class="route-stop-hover-card">
+      <strong>${stop.brand || stop.name}</strong>
+      <span>Diesel: ${formatMoney(stop.diesel_price)}</span>
+      <span>Auto Diesel: ${formatMoney(stop.auto_diesel_price)}</span>
+    </div>
+  `;
+}
+
 export default function RouteMap({ plan }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const popupRef = useRef(null);
+  const hoverPopupRef = useRef(null);
   const handlersBoundRef = useRef(false);
   const [mapError, setMapError] = useState("");
 
@@ -65,6 +87,13 @@ export default function RouteMap({ plan }) {
 
     let active = true;
     let mapInstance = null;
+
+    const hideHoverPopup = () => {
+      if (hoverPopupRef.current) {
+        hoverPopupRef.current.remove();
+        hoverPopupRef.current = null;
+      }
+    };
 
     const bindMapHandlers = (mapLibreMap) => {
       if (handlersBoundRef.current) {
@@ -105,6 +134,7 @@ export default function RouteMap({ plan }) {
         const coordinates = [...feature.geometry.coordinates];
         const stop = JSON.parse(feature.properties.stop);
 
+        hideHoverPopup();
         if (popupRef.current) {
           popupRef.current.remove();
         }
@@ -121,11 +151,43 @@ export default function RouteMap({ plan }) {
       mapLibreMap.on("mouseleave", CLUSTERS_LAYER_ID, () => {
         mapLibreMap.getCanvas().style.cursor = "";
       });
-      mapLibreMap.on("mouseenter", UNCLUSTERED_LAYER_ID, () => {
+
+      mapLibreMap.on("mouseenter", UNCLUSTERED_LAYER_ID, (event) => {
         mapLibreMap.getCanvas().style.cursor = "pointer";
+        const feature = event.features?.[0];
+        if (!feature) {
+          return;
+        }
+
+        const coordinates = [...feature.geometry.coordinates];
+        const stop = JSON.parse(feature.properties.stop);
+        hideHoverPopup();
+        hoverPopupRef.current = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          className: "route-stop-hover-popup",
+          anchor: "top",
+          offset: 12
+        })
+          .setLngLat(coordinates)
+          .setHTML(buildHoverPopup(stop))
+          .addTo(mapLibreMap);
       });
+
+      mapLibreMap.on("mousemove", UNCLUSTERED_LAYER_ID, (event) => {
+        const feature = event.features?.[0];
+        if (!feature || !hoverPopupRef.current) {
+          return;
+        }
+
+        const coordinates = [...feature.geometry.coordinates];
+        const stop = JSON.parse(feature.properties.stop);
+        hoverPopupRef.current.setLngLat(coordinates).setHTML(buildHoverPopup(stop));
+      });
+
       mapLibreMap.on("mouseleave", UNCLUSTERED_LAYER_ID, () => {
         mapLibreMap.getCanvas().style.cursor = "";
+        hideHoverPopup();
       });
 
       handlersBoundRef.current = true;
@@ -334,6 +396,7 @@ export default function RouteMap({ plan }) {
     return () => {
       active = false;
       handlersBoundRef.current = false;
+      hideHoverPopup();
       if (popupRef.current) {
         popupRef.current.remove();
         popupRef.current = null;
@@ -346,9 +409,6 @@ export default function RouteMap({ plan }) {
       mapRef.current = null;
     };
   }, [allStops, plan]);
-
-  if (!TOMTOM_KEY) {
-  }
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;
