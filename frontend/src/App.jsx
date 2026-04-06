@@ -7,10 +7,10 @@ const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production
 const TOKEN_KEY = "auth_token";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const workspaceTabs = [
-  { id: "command", label: "Command Center", detail: "Commercial overview" },
-  { id: "routing", label: "Routing", detail: "Official station map" },
+  { id: "command", label: "Overview", detail: "Operations summary" },
+  { id: "routing", label: "Routing", detail: "Station map" },
   { id: "loads", label: "Loads", detail: "Dispatch board" },
-  { id: "ai", label: "UnitedLane AI", detail: "Company assistant" }
+  { id: "ai", label: "Assistant", detail: "Workspace support" }
 ];
 const emptyRegister = { full_name: "", email: "", password: "" };
 const emptyLogin = { email: "", password: "" };
@@ -387,8 +387,8 @@ export default function App() {
       <header className="workspace-header workspace-header-commercial">
         <div className="workspace-title workspace-title-commercial">
           <span className="brand-pill">United Lane System</span>
-          <h1>UnitedLane Command Workspace</h1>
-          <p>Commercial route intelligence, official station pricing, dispatch loads, and company AI in one system.</p>
+          <h1>UnitedLane Operations</h1>
+          <p>Route planning, official station data, dispatch visibility, and workspace support in one place.</p>
         </div>
 
         <div className="workspace-actions">
@@ -440,7 +440,7 @@ export default function App() {
 
         <article className="panel filter-panel filter-panel-commercial">
           <div className="panel-head">
-            <h2>Commercial Filters</h2>
+            <h2>Filters</h2>
             <span>{filteredRows.length} visible</span>
           </div>
           <section className="toolbar">
@@ -467,8 +467,8 @@ export default function App() {
             </label>
 
             <div className="system-state system-state-commercial">
-              <span>{gridLoading ? "Loading dispatch data" : "Auto save enabled"}</span>
-              <strong>{gridLoading ? "Syncing..." : "Official route and station analysis ready"}</strong>
+              <span>{gridLoading ? "Loading dispatch data" : "Auto-save enabled"}</span>
+              <strong>{gridLoading ? "Syncing..." : "Route and station data ready"}</strong>
             </div>
           </section>
         </article>
@@ -477,8 +477,8 @@ export default function App() {
       <section className="workspace-nav-panel panel">
         <div className="workspace-nav-head">
           <div>
-            <h2>Workspace Sections</h2>
-            <span>Switch between operations, routing, loads, and UnitedLane AI.</span>
+            <h2>Sections</h2>
+            <span>Move between overview, routing, loads, and assistant tools.</span>
           </div>
         </div>
         <div className="workspace-nav-grid">
@@ -500,12 +500,11 @@ export default function App() {
         <section className="workspace-stack">
           <section className="panel workspace-commercial-callout">
             <div className="panel-head">
-              <h2>Command Center</h2>
+              <h2>Overview</h2>
               <span>UnitedLane</span>
             </div>
             <p>
-              This commercial workspace is tuned for fleet analysis: official Love&apos;s and Pilot pricing, route-facing station matching,
-              load visibility, and a dedicated company AI assistant.
+              Keep route review, official Love&apos;s and Pilot pricing, load tracking, and workspace assistance together in one quiet layout.
             </p>
           </section>
           <TomTomSuite token={token} />

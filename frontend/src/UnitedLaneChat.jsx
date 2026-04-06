@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const quickPrompts = [
-  "Help me analyze diesel prices along my route.",
+  "Review diesel prices along this route.",
   "Summarize today's dispatch priorities.",
-  "Compare Love's and Pilot for truck parking and fuel planning.",
-  "Draft a professional message to a driver about a route change."
+  "Compare Love's and Pilot for parking and fuel planning.",
+  "Draft a message to a driver about a route change."
 ];
 const welcomeMessage = {
   role: "assistant",
   text:
-    "I am UnitedLane, your company AI assistant. I can help with routing, fuel strategy, dispatch, station analysis, business communication, and general questions in a polished UnitedLane style."
+    "UnitedLane Assistant is ready. You can use this space for route questions, dispatch notes, station comparisons, business writing, and day-to-day support."
 };
 
 async function sendChatMessage(message, token, context = "") {
@@ -41,7 +41,7 @@ export default function UnitedLaneChat({ token, user }) {
     if (!user) return "";
     return [
       `Signed in user: ${user.full_name} (${user.email})`,
-      "Workspace: UnitedLane commercial dispatch, official station routing, and AI operations panel"
+      "Workspace: UnitedLane dispatch, official station routing, and assistant panel"
     ].join("\n");
   }, [user]);
 
@@ -84,12 +84,12 @@ export default function UnitedLaneChat({ token, user }) {
     <section className="panel unitedlane-ai-workspace">
       <div className="panel-head unitedlane-ai-head">
         <div>
-          <h2>UnitedLane AI</h2>
-          <span>Company assistant for route planning, dispatch analysis, business messaging, and general support.</span>
+          <h2>Assistant</h2>
+          <span>Route planning, dispatch support, writing help, and general workspace assistance.</span>
         </div>
         <div className="unitedlane-ai-status">
           <span>{sending ? "Thinking" : "Online"}</span>
-          <strong>{sending ? "UnitedLane is preparing a response" : "Commercial AI channel active"}</strong>
+          <strong>{sending ? "Preparing response" : "Workspace assistant available"}</strong>
         </div>
       </div>
 
@@ -105,12 +105,12 @@ export default function UnitedLaneChat({ token, user }) {
         <aside className="unitedlane-ai-sidebar">
           <div className="unitedlane-ai-sidebar-card">
             <span className="brand-pill">UnitedLane</span>
-            <h3>Commercial AI Workspace</h3>
-            <p>Use this tab for route insight, fuel analysis, operations messaging, or broader day-to-day company questions.</p>
+            <h3>Workspace Support</h3>
+            <p>Use this space for route insight, fuel analysis, operations messaging, or broader day-to-day questions.</p>
           </div>
           <div className="unitedlane-ai-sidebar-card subdued">
-            <strong>Suggested use</strong>
-            <p>Ask for route summaries, price comparisons, driver notes, customer-facing drafts, or quick general help while staying in the UnitedLane voice.</p>
+            <strong>Useful prompts</strong>
+            <p>Ask for route summaries, price comparisons, driver notes, customer-facing drafts, or quick general help.</p>
           </div>
         </aside>
 
@@ -122,18 +122,18 @@ export default function UnitedLaneChat({ token, user }) {
                 <p>{message.text}</p>
               </article>
             ))}
-            {sending ? <div className="unitedlane-ai-thinking">UnitedLane is thinking through the best answer.</div> : null}
+            {sending ? <div className="unitedlane-ai-thinking">Working on it...</div> : null}
           </div>
 
           <form className="unitedlane-ai-form" onSubmit={handleSubmit}>
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask UnitedLane anything related to operations, routing, fuel strategy, communication, or general support"
+              placeholder="Ask about routing, station pricing, dispatch, writing, or general workspace support"
               rows={4}
             />
             <div className="unitedlane-ai-formbar">
-              <span>UnitedLane answers in a polished company voice and uses route context when available.</span>
+              <span>Route context is used automatically when available.</span>
               <button className="primary-button primary-button-brand" type="submit" disabled={sending || !input.trim()}>
                 Send
               </button>

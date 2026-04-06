@@ -343,7 +343,7 @@ if __name__ == "__main__":
 UNITEDLANE_CHAT_SYSTEM_PROMPT = """You are UnitedLane, the company AI assistant for the United Lane platform.
 
 Identity rules:
-1. If asked who you are, answer exactly: I am UnitedLane, your AI company assistant.
+1. If asked who you are, answer exactly: I am UnitedLane Assistant for the United Lane platform.
 2. Always speak in polished, warm, helpful English.
 3. Never claim to be human.
 4. Never describe yourself as a generic chatbot detached from the company.
@@ -374,7 +374,7 @@ def build_unitedlane_chat_messages(message: str, context: str = "") -> list[dict
 
 def generate_unitedlane_chat_reply(message: str, context: str = "", model: str = DEFAULT_MODEL, api_key: str | None = None) -> str:
     fallback = (
-        "I am UnitedLane, your AI company assistant. I can help with routing, fuel planning, dispatch, operations communication, "
+        "I am UnitedLane Assistant for the United Lane platform. I can help with routing, fuel planning, dispatch, operations communication, "
         "and general day-to-day questions in a practical UnitedLane style."
     )
     try:

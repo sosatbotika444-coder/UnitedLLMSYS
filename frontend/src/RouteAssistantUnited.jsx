@@ -3,18 +3,6 @@ import RouteMap from "./RouteMap";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
-const brandSignals = [
-  "pilot",
-  "pilot travel center",
-  "flying j",
-  "flying j travel center",
-  "pilot flying j",
-  "love's",
-  "loves",
-  "love's travel stop",
-  "loves travel stop"
-];
-
 const defaultFilters = {
   sort_by: "best",
   search: "",
@@ -114,7 +102,7 @@ function StopCard({ stop, compact = false }) {
           <span className="network-chip">{getNetworkLabel(stop)}</span>
           <strong>{stop.brand || stop.name}</strong>
           <span>{stop.city}{stop.state_code ? `, ${stop.state_code}` : ""}</span>
-          {stop.location_type ? <span>{stop.location_type}{stop.store_number ? ` ? #${stop.store_number}` : ""}</span> : stop.store_number ? <span>Store #{stop.store_number}</span> : null}
+          {stop.location_type ? <span>{stop.location_type}{stop.store_number ? ` - #${stop.store_number}` : ""}</span> : stop.store_number ? <span>Store #{stop.store_number}</span> : null}
         </div>
         <div className="fuel-stop-score">
           <strong>{Math.round(stop.overall_score || 0)}</strong>
@@ -249,16 +237,10 @@ export default function RouteAssistant({ token }) {
 
   return (
     <section className="panel route-panel route-panel-brand-mode">
-      <div className="route-brand-hero">
+      <div className="route-brand-hero route-brand-hero-quiet">
         <div className="route-brand-copy">
-          <span className="brand-signal-pill">UnitedLane Fuel Guidance</span>
-          <h2>Nearby fuel stop guidance with UnitedLane</h2>
-          <p>Enter a starting point and destination, then UnitedLane recommends a nearby branded fuel stop, keeps the map visible, and writes a calm English guidance message so the driver can reach the station more comfortably.</p>
-        </div>
-        <div className="brand-keyword-cloud">
-          {brandSignals.map((signal) => (
-            <span key={signal}>{signal}</span>
-          ))}
+          <h2>Route review</h2>
+          <p>Build a route, inspect official Love&apos;s and Pilot stops, compare diesel pricing on the map, and review the best pull-offs without extra clutter.</p>
         </div>
       </div>
 
@@ -279,15 +261,15 @@ export default function RouteAssistant({ token }) {
           </select>
         </label>
         <label>
-          Network sort
+          Sort stops
           <select value={draftFilters.sort_by} onChange={(event) => setDraftFilters({ ...draftFilters, sort_by: event.target.value, ui_sort: event.target.value })}>
-            <option value="best">Best network match</option>
+            <option value="best">Best match</option>
             <option value="distance">Closest to route</option>
-            <option value="score">Highest route score</option>
+            <option value="score">Highest score</option>
           </select>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
-          {routeLoading ? "UnitedLane is preparing your route..." : "Build Fuel Guidance"}
+          {routeLoading ? "Preparing route..." : "Build Route"}
         </button>
       </div>
 
@@ -299,8 +281,8 @@ export default function RouteAssistant({ token }) {
             <div className={`route-map-stage route-map-stage-brand ${mapFullscreen ? "route-map-stage-fullscreen" : ""}`}>
               <div className="route-map-toolbar">
                 <div className="route-map-toolbar-copy">
-                  <strong>Route Analysis Map</strong>
-                  <span>Hover any station to compare diesel prices faster.</span>
+                  <strong>Map</strong>
+                  <span>Hover a station to compare diesel pricing.</span>
                 </div>
                 <button className="secondary-button route-map-expand-button" type="button" onClick={() => setMapFullscreen((value) => !value)}>
                   {mapFullscreen ? "Exit Full Screen" : "Open Full Screen"}
@@ -314,9 +296,9 @@ export default function RouteAssistant({ token }) {
                 <div className="fuel-board-head unitedlane-head">
                   <div>
                     <h3>{routePlan.assistant_name || "UnitedLane"}</h3>
-                    <span>Polite English route guidance to the recommended fuel stop</span>
+                    <span>Route notes for the selected stop</span>
                   </div>
-                  <span className="source-pill">AI Guidance</span>
+                  
                 </div>
                 {routePlan.selected_stop ? (
                   <div className="unitedlane-stop-summary">
@@ -329,12 +311,12 @@ export default function RouteAssistant({ token }) {
                 <div className="unitedlane-actions">
                   {routePlan.station_map_link ? (
                     <a className="primary-button primary-button-brand unitedlane-map-button" href={routePlan.station_map_link} target="_blank" rel="noreferrer">
-                      Open Route To Fuel Stop
+                      Open stop route
                     </a>
                   ) : null}
                   {routePlan.map_link ? (
                     <a className="fuel-source-link" href={routePlan.map_link} target="_blank" rel="noreferrer">
-                      Open Full Route
+                      Open route
                     </a>
                   ) : null}
                 </div>
@@ -365,7 +347,7 @@ export default function RouteAssistant({ token }) {
                     <h3>Route Tuning</h3>
                     <span>{visibleStops.length} branded stops visible</span>
                   </div>
-                  <span className="source-pill">{routePlan.data_source}</span>
+                  
                 </div>
 
                 <div className="fuel-filter-grid fuel-filter-grid-two-up">
@@ -397,7 +379,7 @@ export default function RouteAssistant({ token }) {
             <section className="fuel-board feature-board feature-board-brand">
               <div className="fuel-board-head">
                 <h3>Best Network Hits</h3>
-                <span>Strongest keyword and route score</span>
+                <span>Best overall matches</span>
               </div>
               <div className="fuel-stop-grid">
                 {bestStops.length ? bestStops.map((stop) => <StopCard key={`best-${stop.id}`} stop={stop} compact />) : <div className="empty-route-card">No brand hits on this route.</div>}
@@ -428,7 +410,7 @@ export default function RouteAssistant({ token }) {
           <div className="fuel-board fuel-board-brand-list">
             <div className="fuel-board-head">
               <h3>All Network Stops</h3>
-              <span>Only strict Pilot Flying J and Love's matches.</span>
+              <span>Official Love's and Pilot locations on this route.</span>
             </div>
             <div className="fuel-stop-grid fuel-stop-grid-expanded">
               {visibleStops.length ? visibleStops.map((stop) => <StopCard key={stop.id} stop={stop} />) : <div className="empty-route-card">No network stops matched this view.</div>}
@@ -436,7 +418,7 @@ export default function RouteAssistant({ token }) {
           </div>
         </div>
       ) : (
-        <div className="empty-route-card empty-route-card-brand">Enter origin and destination and UnitedLane will recommend a branded fuel stop, show the map, and explain the drive in polite English.</div>
+        <div className="empty-route-card empty-route-card-brand">Enter an origin and destination to review official stops, pricing, and route details.</div>
       )}
     </section>
   );
