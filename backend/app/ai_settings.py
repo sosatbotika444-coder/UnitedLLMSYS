@@ -1,18 +1,17 @@
 ﻿from __future__ import annotations
 
-import os
 from textwrap import dedent
 
 from openai import OpenAI
 
+from app.config import get_settings
+
+settings = get_settings()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-oss-120b:free")
-DEFAULT_APP_NAME = os.getenv("OPENROUTER_APP_NAME", "UnitedLLMSYS")
-DEFAULT_APP_URL = os.getenv("OPENROUTER_APP_URL", "http://localhost:8000")
-DEFAULT_OPENROUTER_API_KEY = os.getenv(
-    "OPENROUTER_API_KEY",
-    "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",
-)
+DEFAULT_MODEL = settings.openrouter_model
+DEFAULT_APP_NAME = settings.openrouter_app_name
+DEFAULT_APP_URL = settings.openrouter_app_url
+DEFAULT_OPENROUTER_API_KEY = settings.openrouter_api_key
 UNITEDLANE_IDENTITY = "UnitedLane"
 
 STATION_PRICE_SYSTEM_PROMPT = """You are a US fuel price lookup assistant.
@@ -71,7 +70,7 @@ Response rules:
 
 
 def get_openrouter_client(api_key: str | None = None) -> OpenAI:
-    resolved_key = api_key or DEFAULT_OPENROUTER_API_KEY or os.getenv("OPENAI_API_KEY")
+    resolved_key = api_key or DEFAULT_OPENROUTER_API_KEY
     if not resolved_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
 
@@ -120,8 +119,7 @@ def build_station_price_messages(
     return [
         {"role": "system", "content": STATION_PRICE_SYSTEM_PROMPT},
         {
-            "role": "user",
-            "content": build_station_price_prompt(
+            "role": "user", "content": build_station_price_prompt(
                 fuel_type=fuel_type,
                 latitude=latitude,
                 longitude=longitude,

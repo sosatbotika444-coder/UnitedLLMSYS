@@ -1,4 +1,4 @@
-from functools import lru_cache
+﻿from functools import lru_cache
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60
     cors_origins: str = "https://dpsearch.netlify.app,http://localhost:5173"
-    tomtom_api_key: str = "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl"
+    tomtom_api_key: str = ""
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-oss-120b:free"
+    openrouter_app_name: str = "UnitedLLMSYS"
+    openrouter_app_url: str = "http://localhost:8000"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
