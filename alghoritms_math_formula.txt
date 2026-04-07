@@ -1,0 +1,1 @@
+BestPlan=S⊆Stops,∣S∣≤3argmin​[i∈S∑​(buyi​⋅pricei​)+λ(route_time+i∈S∑​detour_timei​+∣S∣⋅service_time)]

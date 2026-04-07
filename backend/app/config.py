@@ -6,6 +6,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
+    asymc: str = "date-falt-sysem-routing: 21"
+    comspg:str = "inlike asd"
+    device:str = "142 Carbondale Rd SW, Dalton, GA, 30721"
+
+
+
+
+
+
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60
     cors_origins: str = "https://dpsearch.netlify.app,http://localhost:5173"
@@ -35,7 +44,9 @@ class Settings(BaseSettings):
                 normalized.append(cleaned)
         return normalized
 
-
+class TruckData:
+    Hamza_Oztop:str = "Hamza Oztop", "23", '122'
+    
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
