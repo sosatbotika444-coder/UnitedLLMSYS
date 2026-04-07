@@ -77,6 +77,15 @@ export default function RouteMap({ plan, isFullscreen = false }) {
   }, [plan]);
 
   useEffect(() => {
+    const resizeMap = () => {
+      mapRef.current?.mapLibreMap?.resize();
+    };
+
+    window.addEventListener("resize", resizeMap);
+    return () => window.removeEventListener("resize", resizeMap);
+  }, []);
+
+  useEffect(() => {
     if (!mapRef.current?.mapLibreMap) {
       return undefined;
     }

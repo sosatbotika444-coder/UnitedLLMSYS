@@ -11,11 +11,13 @@ from urllib.request import Request, urlopen
 
 import certifi
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_chat_reply, generate_unitedlane_route_guidance
 from app.auth import get_current_user
 from app.config import get_settings
-from app.models import User
+from app.database import get_db
+from app.models import RoutingFuelStop, RoutingRequest, RoutingRoute, User
 from app.official_stations import find_official_stations_along_route
 from app.schemas import (
     ApiCapability,
@@ -719,6 +721,117 @@ def minutes_from_seconds(value: int | None) -> int | None:
     return max(1, math.ceil(value / 60))
 
 
+
+
+def point_payload(point: RoutePoint) -> dict:
+    return {"lat": point.lat, "lon": point.lon}
+
+
+def save_route_audit(
+    db: Session,
+    current_user: User,
+    payload: RouteAssistantRequest,
+    origin: GeocodedPoint,
+    destination: GeocodedPoint,
+    routes: list[RouteOption],
+    top_fuel_stops: list[FuelStop],
+    selected_stop: FuelStop | None,
+    assistant_message: str,
+    price_support: str,
+    map_link: str,
+    station_map_link: str | None,
+    data_source: str,
+) -> RoutingRequest:
+    top_stop_ids = {stop.id for stop in top_fuel_stops}
+    selected_stop_id = selected_stop.id if selected_stop else None
+    request_record = RoutingRequest(
+        user_id=current_user.id,
+        origin_query=payload.origin,
+        destination_query=payload.destination,
+        vehicle_type=payload.vehicle_type,
+        fuel_type=payload.fuel_type,
+        sort_by=payload.sort_by,
+        origin_label=origin.label,
+        origin_lat=origin.lat,
+        origin_lon=origin.lon,
+        destination_label=destination.label,
+        destination_lat=destination.lat,
+        destination_lon=destination.lon,
+        map_link=map_link,
+        station_map_link=station_map_link,
+        data_source=data_source,
+        price_support=price_support,
+        assistant_message=assistant_message,
+        selected_stop_id=selected_stop_id,
+        raw_request=payload.model_dump(),
+        response_summary={
+            "route_count": len(routes),
+            "top_fuel_stop_count": len(top_fuel_stops),
+            "selected_stop_id": selected_stop_id,
+        },
+    )
+    db.add(request_record)
+    db.flush()
+
+    for route in routes:
+        db.add(RoutingRoute(
+            routing_request_id=request_record.id,
+            route_id=route.id,
+            label=route.label,
+            distance_meters=route.distance_meters,
+            travel_time_seconds=route.travel_time_seconds,
+            traffic_delay_seconds=route.traffic_delay_seconds,
+            fuel_stop_count=len(route.fuel_stops),
+            points=[point_payload(point) for point in route.points],
+        ))
+
+        for stop_rank, stop in enumerate(route.fuel_stops, start=1):
+            db.add(RoutingFuelStop(
+                routing_request_id=request_record.id,
+                route_id=route.id,
+                route_label=route.label,
+                stop_rank=stop_rank,
+                stop_id=stop.id,
+                is_top_stop=stop.id in top_stop_ids,
+                is_selected=stop.id == selected_stop_id,
+                name=stop.name or "",
+                brand=stop.brand or "",
+                city=stop.city or "",
+                address=stop.address or "",
+                state_code=stop.state_code,
+                postal_code=stop.postal_code,
+                lat=stop.lat,
+                lon=stop.lon,
+                detour_distance_meters=stop.detour_distance_meters,
+                detour_time_seconds=stop.detour_time_seconds,
+                origin_miles=stop.origin_miles,
+                off_route_miles=stop.off_route_miles,
+                price=stop.price,
+                price_less_tax=stop.price_less_tax,
+                price_source=stop.price_source,
+                price_date=stop.price_date,
+                diesel_price=stop.diesel_price,
+                auto_diesel_price=stop.auto_diesel_price,
+                unleaded_price=stop.unleaded_price,
+                parking_spaces=stop.parking_spaces,
+                phone=stop.phone,
+                fax=stop.fax,
+                store_number=stop.store_number,
+                highway=stop.highway,
+                exit_number=stop.exit_number,
+                amenity_score=stop.amenity_score,
+                overall_score=stop.overall_score,
+                source_url=stop.source_url,
+                fuel_types=stop.fuel_types or [],
+                amenities=stop.amenities or [],
+                location_type=stop.location_type,
+                official_match=stop.official_match,
+            ))
+
+    db.commit()
+    db.refresh(request_record)
+    return request_record
+
 def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, stop: FuelStop | None, fuel_type: str, station_map_link: str | None) -> str:
     if not stop or not station_map_link:
         return (
@@ -748,7 +861,7 @@ def tomtom_capabilities(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/route-assistant", response_model=RouteAssistantResponse)
-def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(get_current_user)):
+def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not settings.tomtom_api_key:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="TOMTOM_API_KEY is missing on the backend")
 
@@ -781,7 +894,29 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = top_fuel_stops[0] if top_fuel_stops else None
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane now parses official Love's and Pilot station pages, matches those official coordinates to your route, and returns diesel or auto-diesel pricing where the network publishes it."
+    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns diesel or auto-diesel pricing where the network publishes it."
+    map_link = build_map_link(origin.label, destination.label)
+    data_source = "TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance"
+    try:
+        save_route_audit(
+            db=db,
+            current_user=current_user,
+            payload=payload,
+            origin=origin,
+            destination=destination,
+            routes=routes,
+            top_fuel_stops=top_fuel_stops,
+            selected_stop=selected_stop,
+            assistant_message=assistant_message,
+            price_support=price_support,
+            map_link=map_link,
+            station_map_link=station_map_link,
+            data_source=data_source,
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Route was calculated, but database logging failed") from exc
+
     return RouteAssistantResponse(
         origin=origin,
         destination=destination,
@@ -791,9 +926,9 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         assistant_name=UNITEDLANE_IDENTITY,
         assistant_message=assistant_message,
         price_support=price_support,
-        map_link=build_map_link(origin.label, destination.label),
+        map_link=map_link,
         station_map_link=station_map_link,
-        data_source="TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance",
+        data_source=data_source,
     )
 
 @router.post("/assistant-chat", response_model=UnitedLaneChatResponse)

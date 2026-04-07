@@ -208,6 +208,11 @@ export default function App() {
     };
   }, [theme]);
 
+  useEffect(() => {
+    const timers = [60, 220].map((delay) => window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeWorkspace]);
+
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       const haystack = `${row.driver} ${row.truck} ${row.pickup_city} ${row.delivery_city}`.toLowerCase();
@@ -537,8 +542,7 @@ export default function App() {
         {message ? <div className="notice success inline-notice">{message}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
-        {activeWorkspace === "command" ? (
-          <section className="workspace-content-stack">
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "command"}>
             <section className="metric-grid">
               <MetricCard label="Total loads" value={metrics.total} detail={`${metrics.activeLoads} active`} tone="green" />
               <MetricCard label="Low fuel" value={metrics.lowFuelCount} detail="Below 40%" tone={metrics.lowFuelCount ? "amber" : "blue"} />
@@ -556,16 +560,12 @@ export default function App() {
               <Suspense fallback={<ModuleLoader label="Loading service catalog..." />}><TomTomSuite token={token} /></Suspense>
             </section>
           </section>
-        ) : null}
 
-        {activeWorkspace === "routing" ? (
-          <section className="workspace-content-stack">
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "routing"}>
             <Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} /></Suspense>
           </section>
-        ) : null}
 
-        {activeWorkspace === "loads" ? (
-          <section className="workspace-content-stack">
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "loads"}>
             <section className="loads-control-card">
               <div>
                 <span className="eyebrow">Loads</span>
@@ -772,16 +772,12 @@ export default function App() {
               </div>
             </section>
           </section>
-        ) : null}
 
-        {activeWorkspace === "ai" ? (
-          <section className="workspace-content-stack">
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "ai"}>
             <Suspense fallback={<ModuleLoader label="Loading AI assistant..." />}><UnitedLaneChat token={token} user={user} /></Suspense>
           </section>
-        ) : null}
 
-        {activeWorkspace === "settings" ? (
-          <section className="workspace-content-stack">
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "settings"}>
             <section className="settings-grid">
               <article className="panel settings-panel-card">
                 <div className="panel-head">
@@ -831,7 +827,6 @@ export default function App() {
               </article>
             </section>
           </section>
-        ) : null}
       </section>
     </main>
   );

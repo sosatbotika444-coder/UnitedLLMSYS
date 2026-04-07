@@ -5469,3 +5469,7 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
     padding: 10px !important;
   }
 }
+
+.workspace-tab-panel[hidden] {
+  display: none !important;
+}
