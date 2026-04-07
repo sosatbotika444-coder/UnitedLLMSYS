@@ -141,6 +141,7 @@ class FuelStrategyStop(BaseModel):
     fuel_before_gallons: float
     fuel_after_gallons: float
     auto_diesel_price: float
+    safety_buffer_miles: float = 0
     reason: str
     next_target_label: str
 
@@ -162,9 +163,11 @@ class FuelStrategy(BaseModel):
     estimated_total_time_seconds: int = 0
     decision_score: float = 0
     stop_count: int = 0
+    max_stop_count: int = 3
     stops: list[FuelStrategyStop] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     map_link: str | None = None
+    safety_buffer_policy: str = ""
 
 
 class RouteAssistantResponse(BaseModel):

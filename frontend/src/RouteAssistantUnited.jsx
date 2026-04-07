@@ -90,7 +90,7 @@ function uniqueRouteStops(routePlan) {
 function clampStopCount(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return 1;
-  return Math.max(1, Math.min(10, parsed));
+  return Math.max(1, Math.min(3, parsed));
 }
 
 function routeOrderValue(stop) {
@@ -543,18 +543,21 @@ export default function RouteAssistant({ token }) {
               <div className="fuel-board-head smart-fuel-head">
                 <div>
                   <h3>Smart fuel plan</h3>
-                  <span>The system uses tank gallons, MPG, Auto Diesel prices, detour time, and route reachability.</span>
+                  <span>The system uses tank gallons, MPG, Auto Diesel prices, detour time, route reachability, and a small safety reserve. Max 3 stops.</span>
                 </div>
                 <strong className="smart-fuel-status">{getStrategyStatusLabel(fuelStrategy.status)}</strong>
               </div>
 
               <div className="smart-fuel-metrics">
+                <span><strong>{fuelStrategy.stop_count}/{fuelStrategy.max_stop_count || 3}</strong> stops</span>
                 <span><strong>{formatCurrency(fuelStrategy.estimated_fuel_cost)}</strong> fuel to buy</span>
                 <span><strong>{formatGallons(fuelStrategy.required_purchase_gallons)}</strong> planned purchase</span>
                 <span><strong>{formatMiles(fuelStrategy.starting_range_miles)}</strong> start range</span>
                 <span><strong>{formatMiles(fuelStrategy.full_tank_range_miles)}</strong> full tank</span>
                 <span><strong>{formatDuration(fuelStrategy.estimated_total_time_seconds)}</strong> total time</span>
               </div>
+
+              {fuelStrategy.safety_buffer_policy ? <p className="smart-fuel-policy">{fuelStrategy.safety_buffer_policy}</p> : null}
 
               {fuelStrategy.warnings?.length ? (
                 <div className="smart-fuel-warnings">
@@ -585,6 +588,7 @@ export default function RouteAssistant({ token }) {
                           <span>Auto Diesel {formatFuelPrice(item.auto_diesel_price)}/gal</span>
                           <span>Before {formatGallons(item.fuel_before_gallons)}</span>
                           <span>After {formatGallons(item.fuel_after_gallons)}</span>
+                          <span>Reserve {formatMiles(item.safety_buffer_miles)}</span>
                           <span>Next {formatMiles(item.miles_to_next)} to {item.next_target_label}</span>
                         </div>
                         <em>{item.reason}</em>
@@ -610,14 +614,14 @@ export default function RouteAssistant({ token }) {
             <div className="fuel-board-head cheapest-route-head">
               <div>
                 <h3>Cheapest auto diesel route</h3>
-                <span>Pick how many fuel stops you need. We choose the lowest auto diesel prices across the whole route.</span>
+                <span>Pick up to 3 fuel stops. We choose the lowest Auto Diesel prices across the route.</span>
               </div>
               <label className="cheap-route-count">
                 Stops
                 <input
                   type="number"
                   min="1"
-                  max="10"
+                  max="3"
                   value={cheapStopCount}
                   onChange={(event) => setCheapStopCount(event.target.value)}
                 />
