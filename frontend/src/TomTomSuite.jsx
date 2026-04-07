@@ -86,28 +86,28 @@ export default function TomTomSuite({ token }) {
     <section className="panel services-panel">
       <div className="panel-head services-head">
         <div>
-          <h2>TomTom Services</h2>
-          <span>Full API suite catalog attached to the operations workspace.</span>
+          <h2>Connected TomTom Intelligence</h2>
+          <span>Live service capabilities styled as operational product cards.</span>
         </div>
       </div>
 
       {error ? <div className="notice error inline-notice">{error}</div> : null}
 
       {loading ? (
-        <div className="empty-route-card">Loading TomTom service catalog...</div>
+        <div className="empty-route-card">Loading connected service catalog...</div>
       ) : (
         <>
           <div className="services-summary-grid">
             <article className="service-summary-card live">
-              <span>Live Now</span>
+              <span>Live now</span>
               <strong>{catalog?.live || 0}</strong>
             </article>
             <article className="service-summary-card ready">
-              <span>Ready Next</span>
+              <span>Ready next</span>
               <strong>{catalog?.ready || 0}</strong>
             </article>
             <article className="service-summary-card locked">
-              <span>Requires Access</span>
+              <span>Access gate</span>
               <strong>{catalog?.requires_access || 0}</strong>
             </article>
             <article className="service-summary-card total">

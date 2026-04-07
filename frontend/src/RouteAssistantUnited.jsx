@@ -1,5 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import RouteMap from "./RouteMap";
+﻿import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+
+const RouteMap = lazy(() => import("./RouteMap"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
@@ -239,7 +240,7 @@ export default function RouteAssistant({ token }) {
     <section className="panel route-panel route-panel-brand-mode">
       <div className="route-brand-hero route-brand-hero-quiet">
         <div className="route-brand-copy">
-          <h2>Route review</h2>
+          <h2>Commercial route intelligence</h2>
           <p>Build a route, inspect official Love&apos;s and Pilot stops, compare diesel pricing on the map, and review the best pull-offs without extra clutter.</p>
         </div>
       </div>
@@ -269,7 +270,7 @@ export default function RouteAssistant({ token }) {
           </select>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
-          {routeLoading ? "Preparing route..." : "Build Route"}
+          {routeLoading ? "Building intelligence..." : "Build Route Intel"}
         </button>
       </div>
 
@@ -288,7 +289,7 @@ export default function RouteAssistant({ token }) {
                   {mapFullscreen ? "Exit Full Screen" : "Open Full Screen"}
                 </button>
               </div>
-              <RouteMap plan={routePlan} isFullscreen={mapFullscreen} />
+              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} /></Suspense>
             </div>
 
             <aside className="route-side-panel">
@@ -296,7 +297,7 @@ export default function RouteAssistant({ token }) {
                 <div className="fuel-board-head unitedlane-head">
                   <div>
                     <h3>{routePlan.assistant_name || "UnitedLane"}</h3>
-                    <span>Route notes for the selected stop</span>
+                    <span>AI notes for the selected station</span>
                   </div>
                   
                 </div>
