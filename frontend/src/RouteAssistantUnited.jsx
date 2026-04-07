@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
@@ -174,6 +174,7 @@ export default function RouteAssistant({ token }) {
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const mapStageRef = useRef(null);
 
   const visibleStops = useMemo(() => {
     if (!routePlan) return [];
@@ -202,15 +203,49 @@ export default function RouteAssistant({ token }) {
       }
     }
 
+    function handleFullscreenChange() {
+      if (!document.fullscreenElement) {
+        setMapFullscreen(false);
+      }
+    }
+
+    const resizeTimers = mapFullscreen
+      ? [40, 180, 420].map((delay) => window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay))
+      : [];
+
     if (mapFullscreen) {
       window.addEventListener("keydown", handleEscape);
+      document.addEventListener("fullscreenchange", handleFullscreenChange);
     }
 
     return () => {
       document.body.classList.remove("map-fullscreen-active");
       window.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      resizeTimers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [mapFullscreen]);
+
+  async function toggleMapFullscreen() {
+    if (!mapFullscreen) {
+      setMapFullscreen(true);
+      try {
+        await mapStageRef.current?.requestFullscreen?.();
+      } catch {
+        // CSS fullscreen still works when the browser blocks native fullscreen.
+      }
+      return;
+    }
+
+    setMapFullscreen(false);
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen?.();
+      } catch {
+        // Ignore browser fullscreen exit errors; CSS state is already reset.
+      }
+    }
+  }
 
   async function buildRoutePlan(nextFilters = activeFilters) {
     if (!token) return;
@@ -238,13 +273,6 @@ export default function RouteAssistant({ token }) {
 
   return (
     <section className="panel route-panel route-panel-brand-mode">
-      <div className="route-brand-hero route-brand-hero-quiet">
-        <div className="route-brand-copy">
-          <h2>Commercial route intelligence</h2>
-          <p>Build a route, inspect official Love&apos;s and Pilot stops, compare diesel pricing on the map, and review the best pull-offs without extra clutter.</p>
-        </div>
-      </div>
-
       <div className="route-builder route-builder-expanded route-builder-brand-mode">
         <label>
           Origin
@@ -279,14 +307,14 @@ export default function RouteAssistant({ token }) {
       {routePlan ? (
         <div className="route-results">
           <div className="route-main-grid route-main-grid-brand">
-            <div className={`route-map-stage route-map-stage-brand ${mapFullscreen ? "route-map-stage-fullscreen" : ""}`}>
+            <div ref={mapStageRef} className={`route-map-stage route-map-stage-brand ${mapFullscreen ? "route-map-stage-fullscreen" : ""}`}>
               <div className="route-map-toolbar">
                 <div className="route-map-toolbar-copy">
                   <strong>Map</strong>
                   <span>Prices remain visible under each station as you zoom in.</span>
                 </div>
-                <button className="secondary-button route-map-expand-button" type="button" onClick={() => setMapFullscreen((value) => !value)}>
-                  {mapFullscreen ? "Exit Full Screen" : "Open Full Screen"}
+                <button className="secondary-button route-map-expand-button" type="button" onClick={toggleMapFullscreen}>
+                  {mapFullscreen ? "Close full screen" : "Full screen"}
                 </button>
               </div>
               <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} /></Suspense>

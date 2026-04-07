@@ -5049,3 +5049,423 @@ body.theme-dark .readiness-ring::after {
   font-weight: 900;
   box-shadow: var(--shadow-soft);
 }
+
+
+/* Simple mode overrides */
+:root {
+  --font-main: Arial, Helvetica, "Segoe UI", sans-serif;
+  --bg: #f6f8fb;
+  --bg-strong: #eef3f8;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-muted: #f3f6fa;
+  --text: #121826;
+  --muted: #667085;
+  --muted-strong: #344054;
+  --line: rgba(18, 24, 38, 0.1);
+  --line-strong: rgba(18, 24, 38, 0.16);
+  --brand: #2563eb;
+  --brand-strong: #1d4ed8;
+  --blue: #2563eb;
+  --shadow: 0 12px 28px rgba(18, 24, 38, 0.08);
+  --shadow-soft: 0 8px 20px rgba(18, 24, 38, 0.06);
+}
+
+body {
+  background: linear-gradient(180deg, var(--bg), var(--bg-strong));
+  color: var(--text);
+}
+
+body.theme-dark {
+  --bg: #0f172a;
+  --bg-strong: #111827;
+  --surface: #182235;
+  --surface-solid: #182235;
+  --surface-muted: #111827;
+  --text: #f8fafc;
+  --muted: #a6b0c3;
+  --muted-strong: #d6deea;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+body.theme-blue {
+  --bg: #eef6ff;
+  --bg-strong: #e3efff;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-muted: #eff6ff;
+  --text: #0f172a;
+  --muted: #5f6f89;
+  --muted-strong: #334155;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 440px);
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: linear-gradient(180deg, var(--bg), var(--bg-strong));
+}
+
+.auth-shell::before,
+.auth-shell::after,
+.auth-showcase,
+.workspace-hero-card,
+.command-grid,
+.load-preview-grid {
+  display: none !important;
+}
+
+.auth-panel,
+.panel,
+.metric-card,
+.loads-control-card,
+.service-card,
+.service-summary-card,
+.route-option-card,
+.fuel-stop-card,
+.fuel-filters-card,
+.feature-board,
+.fuel-board,
+.unitedlane-ai-sidebar-card,
+.unitedlane-ai-chatcard,
+.settings-panel-card {
+  border-radius: 16px !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow-soft) !important;
+  backdrop-filter: none !important;
+}
+
+.auth-panel {
+  padding: 28px;
+}
+
+.auth-panel-head h2,
+.workspace-main-heading h1,
+.loads-control-card h2,
+.route-brand-copy h2,
+.command-card h2,
+.unitedlane-ai-sidebar-card h3 {
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.auth-panel-head h2 {
+  font-size: 32px;
+}
+
+.workspace-app-shell {
+  grid-template-columns: 260px minmax(0, 1fr);
+  background: linear-gradient(180deg, var(--bg), var(--bg-strong));
+}
+
+.workspace-sidebar-shell {
+  padding: 18px;
+  gap: 16px;
+  background: var(--surface) !important;
+  border-right: 1px solid var(--line);
+  backdrop-filter: none;
+}
+
+.workspace-sidebar-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.workspace-sidebar-brand {
+  grid-template-columns: 44px 1fr;
+}
+
+.workspace-sidebar-create {
+  min-height: 48px;
+  border-radius: 12px;
+  justify-content: center;
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.workspace-sidebar-create strong {
+  display: none;
+}
+
+.workspace-sidebar-link {
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.workspace-sidebar-link:hover {
+  transform: none;
+  background: var(--surface-muted);
+}
+
+.workspace-sidebar-link.active {
+  background: var(--surface-muted);
+  box-shadow: none;
+}
+
+.workspace-sidebar-link-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.workspace-main-shell {
+  padding: 24px;
+}
+
+.workspace-main-header {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-main-heading h1 {
+  margin: 8px 0 6px;
+  font-size: clamp(30px, 4vw, 46px);
+}
+
+.workspace-main-heading p {
+  max-width: 720px;
+  font-size: 15px;
+}
+
+.eyebrow,
+.workspace-main-kicker,
+.brand-pill,
+.source-pill,
+.network-chip {
+  padding: 5px 9px;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  letter-spacing: 0.06em;
+}
+
+.primary-button,
+.primary-button-brand,
+.workspace-table-create,
+.header-action-button,
+.map-link {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.secondary-button,
+.delete-button,
+.fuel-source-link {
+  box-shadow: none !important;
+}
+
+.primary-button:hover,
+.secondary-button:hover,
+.delete-button:hover,
+.map-link:hover,
+.workspace-sidebar-create:hover {
+  transform: none;
+}
+
+.metric-grid,
+.metric-grid.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  min-height: 118px;
+  padding: 18px;
+}
+
+.metric-card::after {
+  display: none;
+}
+
+.metric-card strong {
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.03em;
+}
+
+.workspace-tool-surface,
+.workspace-table-panel,
+.unitedlane-ai-workspace,
+.route-panel-brand-mode {
+  padding: 18px !important;
+}
+
+.services-summary-grid,
+.service-card-grid {
+  gap: 12px;
+}
+
+.service-summary-card {
+  min-height: 104px;
+}
+
+.service-summary-card strong {
+  font-size: 30px;
+}
+
+.route-brand-hero {
+  display: none !important;
+}
+
+.route-builder {
+  grid-template-columns: 1fr 1fr 140px 160px auto;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.route-map-stage,
+.route-map-stage-brand {
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: none;
+}
+
+.route-main-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.86fr);
+}
+
+.live-route-map {
+  min-height: 520px;
+  border-radius: 14px;
+}
+
+.map-fullscreen-active {
+  overflow: hidden !important;
+}
+
+body.map-fullscreen-active .route-map-stage-fullscreen {
+  position: fixed !important;
+  inset: 12px !important;
+  z-index: 99999 !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  padding: 14px !important;
+  border-radius: 16px !important;
+  background: var(--surface-solid) !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32) !important;
+}
+
+body.map-fullscreen-active .route-map-stage-fullscreen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(15, 23, 42, 0.7);
+}
+
+body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
+.route-map-stage-fullscreen:fullscreen .live-route-map {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.route-map-stage-fullscreen:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  padding: 14px !important;
+  background: var(--surface-solid) !important;
+}
+
+.loads-control-card {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  padding: 18px;
+}
+
+.loads-control-card h2 {
+  font-size: 28px;
+}
+
+.workspace-inline-tab {
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.workspace-inline-tab.active {
+  background: var(--brand);
+  box-shadow: none;
+}
+
+.workspace-table-panel {
+  padding: 0 !important;
+}
+
+.workspace-table-toolbar {
+  padding: 16px;
+}
+
+.dispatch-sheet thead th {
+  padding: 12px 14px;
+  font-size: 11px;
+}
+
+.dispatch-sheet input,
+.dispatch-sheet textarea,
+.dispatch-sheet select {
+  padding: 10px 12px;
+}
+
+.unitedlane-ai-log {
+  height: 480px;
+  background: var(--surface-muted);
+}
+
+.unitedlane-ai-bubble {
+  border-radius: 14px;
+}
+
+.theme-option-card,
+.settings-summary-list div {
+  border-radius: 14px;
+}
+
+.module-loader {
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+  .workspace-app-shell,
+  .route-main-grid,
+  .route-builder,
+  .loads-control-card,
+  .settings-grid,
+  .unitedlane-ai-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-sidebar-shell {
+    position: relative;
+    height: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .metric-grid,
+  .metric-grid.compact,
+  .services-summary-grid,
+  .service-card-grid,
+  .theme-option-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-main-shell {
+    padding: 16px;
+  }
+
+  body.map-fullscreen-active .route-map-stage-fullscreen {
+    inset: 6px !important;
+    padding: 10px !important;
+  }
+}

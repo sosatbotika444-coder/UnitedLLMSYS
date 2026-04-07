@@ -10,11 +10,11 @@ const TOKEN_KEY = "auth_token";
 const THEME_KEY = "dpsearchfuels_theme";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const workspaceTabs = [
-  { id: "command", label: "Command", detail: "Executive pulse", icon: "01" },
-  { id: "routing", label: "Routing", detail: "Fuel intelligence", icon: "02" },
-  { id: "loads", label: "Loads", detail: "Dispatch board", icon: "03" },
-  { id: "ai", label: "Assistant", detail: "AI copilot", icon: "04" },
-  { id: "settings", label: "Settings", detail: "Workspace style", icon: "05" }
+  { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
+  { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
+  { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
+  { id: "ai", label: "Assistant", detail: "Ask AI", icon: "AI" },
+  { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
 ];
 const themeOptions = [
   { id: "light", label: "Luxe Light", detail: "Bright executive workspace", accent: "Ivory, blue, emerald" },
@@ -23,39 +23,29 @@ const themeOptions = [
 ];
 const workspaceCopy = {
   command: {
-    eyebrow: "Live Operating System",
-    title: "Commercial dispatch command center",
-    subtitle: "A premium cockpit for load visibility, fuel readiness, branded station routing, and daily operations.",
-    bannerTitle: "Official station intelligence is connected",
-    bannerText: "Love's, Pilot Flying J, TomTom routing, editable loads, and the AI assistant remain wired into one polished workspace."
+    eyebrow: "Dashboard",
+    title: "Simple dispatch workspace",
+    subtitle: "See loads, open routing, check services, and use the assistant from one clean screen."
   },
   routing: {
-    eyebrow: "Fuel Route Strategy",
-    title: "Plan lanes with station-level clarity",
-    subtitle: "Build route options, compare official branded fuel stops, and keep price markers visible directly on the map.",
-    bannerTitle: "Map-first routing is ready",
-    bannerText: "Fuel stops, route options, detour timing, official pages, and fullscreen inspection are available inside the routing suite."
+    eyebrow: "Routing",
+    title: "Route and fuel map",
+    subtitle: "Enter origin and destination, build a route, and review fuel stops on the map."
   },
   loads: {
-    eyebrow: "Dispatch Board",
-    title: "Manage every load from a cleaner board",
-    subtitle: "Filter, edit, review, and save load details with a more polished commercial workflow.",
-    bannerTitle: "Inline editing stays active",
-    bannerText: "Driver, truck, stop, status, fuel level, and capacity fields still save directly against the backend."
+    eyebrow: "Loads",
+    title: "Dispatch loads",
+    subtitle: "Create, search, edit, and save load rows."
   },
   ai: {
-    eyebrow: "AI Operations Desk",
-    title: "Ask, summarize, compare, and write faster",
-    subtitle: "Use the workspace assistant for route notes, station comparisons, dispatch messaging, and business writing.",
-    bannerTitle: "Assistant context is connected",
-    bannerText: "The assistant keeps the signed-in user and workspace context available while you work."
+    eyebrow: "Assistant",
+    title: "AI assistant",
+    subtitle: "Ask for route notes, station comparisons, dispatch messages, or writing help."
   },
   settings: {
-    eyebrow: "Workspace Preferences",
-    title: "Tune the product feel for long sessions",
-    subtitle: "Choose a premium theme and keep the interface comfortable for daily dispatch work.",
-    bannerTitle: "Theme settings are saved locally",
-    bannerText: "Your selected look is stored in this browser and applied automatically on future visits."
+    eyebrow: "Settings",
+    title: "Settings",
+    subtitle: "Choose a comfortable theme for this browser."
   }
 };
 const emptyRegister = { full_name: "", email: "", password: "" };
@@ -145,38 +135,6 @@ function MetricCard({ label, value, detail, tone = "neutral" }) {
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
-    </article>
-  );
-}
-
-function LoadPreviewCard({ row }) {
-  const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
-
-  return (
-    <article className="load-preview-card">
-      <div className="load-preview-head">
-        <div>
-          <span className={`status-dot ${getStatusTone(row.status)}`} />
-          <strong>{row.driver || "Unassigned driver"}</strong>
-          <small>{row.truck ? `Truck #${row.truck}` : "Truck not assigned"}</small>
-        </div>
-        <span className={`load-preview-status ${getStatusTone(row.status)}`}>{row.status}</span>
-      </div>
-
-      <div className="load-preview-route">
-        <span>{row.pickup_city || "Pickup TBD"}</span>
-        <span>{row.delivery_city || "Delivery TBD"}</span>
-      </div>
-
-      <div className="load-preview-meter">
-        <span style={{ width: `${Math.max(4, Math.min(100, Number(row.fuel_level) || 0))}%` }} />
-      </div>
-
-      <div className="load-preview-stats">
-        <span><strong>{row.fuel_level}%</strong>Fuel</span>
-        <span><strong>{formatNumber(row.miles_to_empty)}</strong>Miles left</span>
-        <span><strong>{formatNumber(fullLoadMiles)}</strong>Full range</span>
-      </div>
     </article>
   );
 }
@@ -298,7 +256,6 @@ export default function App() {
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
   const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id];
   const loadStatusTabs = ["All", ...statusOptions];
-  const featuredLoads = filteredRows.slice(0, 4);
 
   function updateLocalRow(id, field, value) {
     setRows((currentRows) =>
@@ -412,41 +369,11 @@ export default function App() {
   if (!user) {
     return (
       <main className="auth-shell">
-        <section className="auth-showcase">
-          <div className="auth-showcase-orbit" />
-          <div className="brand-mark">
-            <img src={brandAvatar} alt="dpsearchfuels" />
-            <span>DPsearchfuels OS</span>
-          </div>
-          <div className="auth-showcase-copy">
-            <span className="eyebrow">Commercial logistics frontend</span>
-            <h1>Fuel-smart dispatch, routing, and AI in one premium workspace.</h1>
-            <p>
-              A redesigned command layer for operations teams that need clean load visibility, branded station
-              intelligence, and faster daily decisions.
-            </p>
-          </div>
-          <div className="auth-showcase-grid">
-            <article>
-              <strong>Route AI</strong>
-              <span>Station scoring and fuel context</span>
-            </article>
-            <article>
-              <strong>Load Desk</strong>
-              <span>Editable dispatch operations</span>
-            </article>
-            <article>
-              <strong>TomTom</strong>
-              <span>Map, traffic, search, routing APIs</span>
-            </article>
-          </div>
-        </section>
-
         <section className="auth-panel">
           <div className="auth-panel-head">
-            <span className="brand-pill">Secure Workspace</span>
-            <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
-            <p>{mode === "login" ? "Sign in to open the operations console." : "Start with a clean commercial workspace."}</p>
+            <span className="brand-pill">DPsearchfuels</span>
+            <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+            <p>{mode === "login" ? "Enter your email and password to continue." : "Create an account to use the workspace."}</p>
           </div>
 
           {message ? <div className="notice success">{message}</div> : null}
@@ -490,7 +417,7 @@ export default function App() {
                 />
               </label>
               <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                {loading ? "Signing in..." : "Open Command Center"}
+                {loading ? "Signing in..." : "Continue"}
               </button>
             </form>
           ) : (
@@ -507,7 +434,7 @@ export default function App() {
                   type="text"
                   value={registerForm.full_name}
                   onChange={(event) => setRegisterForm({ ...registerForm, full_name: event.target.value })}
-                  placeholder="Operations manager"
+                  placeholder="Full name"
                   required
                 />
               </label>
@@ -533,7 +460,7 @@ export default function App() {
                 />
               </label>
               <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Commercial Workspace"}
+                {loading ? "Creating..." : "Create Account"}
               </button>
             </form>
           )}
@@ -610,65 +537,20 @@ export default function App() {
         {message ? <div className="notice success inline-notice">{message}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
-        <section className={`workspace-hero-card workspace-hero-${activeWorkspace}`}>
-          <div className="workspace-hero-copy">
-            <span className="eyebrow">{activeWorkspaceMeta.detail}</span>
-            <h2>{activeWorkspaceCopy.bannerTitle}</h2>
-            <p>{activeWorkspaceCopy.bannerText}</p>
-          </div>
-          <div className="workspace-hero-metrics">
-            <span><strong>{metrics.activeLoads}</strong>active loads</span>
-            <span><strong>{metrics.avgFuel}%</strong>avg fuel</span>
-            <span><strong>{metrics.readiness}%</strong>readiness</span>
-          </div>
-        </section>
-
         {activeWorkspace === "command" ? (
           <section className="workspace-content-stack">
             <section className="metric-grid">
-              <MetricCard label="Total Loads" value={metrics.total} detail={`${metrics.activeLoads} still moving`} tone="green" />
-              <MetricCard label="Low Fuel" value={metrics.lowFuelCount} detail="Loads below 40%" tone={metrics.lowFuelCount ? "amber" : "blue"} />
-              <MetricCard label="Needs Review" value={metrics.reviewLoads} detail={`${metrics.delayedLoads} delayed loads`} tone="violet" />
-              <MetricCard label="Miles To Empty" value={formatNumber(metrics.totalMilesToEmpty)} detail="Combined active range" tone="dark" />
-            </section>
-
-            <section className="command-grid">
-              <article className="command-card command-card-main">
-                <div>
-                  <span className="eyebrow">Executive pulse</span>
-                  <h2>{metrics.readiness}% fleet readiness</h2>
-                  <p>
-                    The redesigned overview gives dispatch a clean first screen: risk, range, branded fuel access, and
-                    service status without spreadsheet clutter.
-                  </p>
-                </div>
-                <div className="readiness-ring" style={{ "--score": `${metrics.readiness}%` }}>
-                  <strong>{metrics.readiness}</strong>
-                  <span>Score</span>
-                </div>
-              </article>
-
-              <article className="command-card command-card-stack">
-                <div className="command-mini-row">
-                  <span>Completed</span>
-                  <strong>{metrics.doneLoads}</strong>
-                </div>
-                <div className="command-mini-row">
-                  <span>Delayed</span>
-                  <strong>{metrics.delayedLoads}</strong>
-                </div>
-                <div className="command-mini-row">
-                  <span>Average fuel</span>
-                  <strong>{metrics.avgFuel}%</strong>
-                </div>
-              </article>
+              <MetricCard label="Total loads" value={metrics.total} detail={`${metrics.activeLoads} active`} tone="green" />
+              <MetricCard label="Low fuel" value={metrics.lowFuelCount} detail="Below 40%" tone={metrics.lowFuelCount ? "amber" : "blue"} />
+              <MetricCard label="Needs review" value={metrics.reviewLoads} detail={`${metrics.delayedLoads} delayed`} tone="violet" />
+              <MetricCard label="Miles left" value={formatNumber(metrics.totalMilesToEmpty)} detail="All loads" tone="dark" />
             </section>
 
             <section className="panel workspace-tool-surface">
               <div className="panel-head">
                 <div>
-                  <h2>Connected Service Catalog</h2>
-                  <span>Operational APIs presented as premium capability cards.</span>
+                  <h2>Services</h2>
+                  <span>TomTom tools available in this workspace.</span>
                 </div>
               </div>
               <Suspense fallback={<ModuleLoader label="Loading service catalog..." />}><TomTomSuite token={token} /></Suspense>
@@ -678,11 +560,6 @@ export default function App() {
 
         {activeWorkspace === "routing" ? (
           <section className="workspace-content-stack">
-            <section className="metric-grid compact">
-              <MetricCard label="Open Loads" value={metrics.activeLoads} detail="Ready for route context" tone="green" />
-              <MetricCard label="Low Fuel Watch" value={metrics.lowFuelCount} detail="Prioritize station planning" tone="amber" />
-              <MetricCard label="Average Fuel" value={`${metrics.avgFuel}%`} detail="Across visible fleet" tone="blue" />
-            </section>
             <Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} /></Suspense>
           </section>
         ) : null}
@@ -691,9 +568,9 @@ export default function App() {
           <section className="workspace-content-stack">
             <section className="loads-control-card">
               <div>
-                <span className="eyebrow">Dispatch visibility</span>
-                <h2>{filteredRows.length} loads in this view</h2>
-                <p>Search and status tabs reshape the board instantly while inline edits continue saving to the backend.</p>
+                <span className="eyebrow">Loads</span>
+                <h2>{filteredRows.length} rows shown</h2>
+                <p>Search, filter by status, edit cells, and changes save to the backend.</p>
               </div>
               <div className="loads-control-actions">
                 <label className="workspace-table-search">
@@ -728,19 +605,11 @@ export default function App() {
               })}
             </div>
 
-            <section className="load-preview-grid">
-              {featuredLoads.length ? (
-                featuredLoads.map((row) => <LoadPreviewCard key={row.id} row={row} />)
-              ) : (
-                <div className="empty-route-card">No loads match this view yet. Create a load or clear the filters.</div>
-              )}
-            </section>
-
             <section className="panel workspace-table-panel">
               <div className="workspace-table-toolbar">
                 <div>
                   <h2>Dispatch Sheet</h2>
-                  <span>{gridLoading ? "Syncing with backend..." : savingId ? `Saving row #${savingId}` : "Editable commercial load board"}</span>
+                  <span>{gridLoading ? "Syncing with backend..." : savingId ? `Saving row #${savingId}` : "Editable load board"}</span>
                 </div>
                 <div className="workspace-table-toolbar-actions">
                   <div className="workspace-main-usercard subdued compact">
@@ -907,11 +776,6 @@ export default function App() {
 
         {activeWorkspace === "ai" ? (
           <section className="workspace-content-stack">
-            <section className="metric-grid compact">
-              <MetricCard label="Open Loads" value={metrics.activeLoads} detail="Available for planning" tone="green" />
-              <MetricCard label="Fuel Watch" value={metrics.lowFuelCount} detail="Ask for prioritization" tone="amber" />
-              <MetricCard label="Readiness" value={`${metrics.readiness}%`} detail="Operational health score" tone="violet" />
-            </section>
             <Suspense fallback={<ModuleLoader label="Loading AI assistant..." />}><UnitedLaneChat token={token} user={user} /></Suspense>
           </section>
         ) : null}
@@ -921,8 +785,8 @@ export default function App() {
             <section className="settings-grid">
               <article className="panel settings-panel-card">
                 <div className="panel-head">
-                  <h2>Theme Studio</h2>
-                  <span>Select the product skin for this browser.</span>
+                  <h2>Theme</h2>
+                  <span>Choose the look for this browser.</span>
                 </div>
                 <div className="theme-option-grid">
                   {themeOptions.map((option) => (
@@ -944,7 +808,7 @@ export default function App() {
               <article className="panel settings-panel-card">
                 <div className="panel-head">
                   <h2>Workspace State</h2>
-                  <span>Commercial UI readiness</span>
+                  <span>Current workspace</span>
                 </div>
                 <div className="settings-summary-list">
                   <div>
@@ -961,7 +825,7 @@ export default function App() {
                   </div>
                   <div>
                     <span>Frontend status</span>
-                    <strong>Commercial redesign applied</strong>
+                    <strong>Simple mode applied</strong>
                   </div>
                 </div>
               </article>

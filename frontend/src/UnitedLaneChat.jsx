@@ -10,7 +10,7 @@ const quickPrompts = [
 const welcomeMessage = {
   role: "assistant",
   text:
-    "UnitedLane AI Operations Assistant is ready. You can use this space for route questions, dispatch notes, station comparisons, business writing, and day-to-day support."
+    "Assistant is ready. Ask about routes, loads, stations, messages, or writing help."
 };
 
 async function sendChatMessage(message, token, context = "") {
@@ -84,8 +84,8 @@ export default function UnitedLaneChat({ token, user }) {
     <section className="panel unitedlane-ai-workspace">
       <div className="panel-head unitedlane-ai-head">
         <div>
-          <h2>AI Operations Assistant</h2>
-          <span>Route planning, dispatch writing, station comparisons, and business support in one premium chat surface.</span>
+          <h2>Assistant</h2>
+          <span>Ask about routes, dispatch notes, station comparisons, and writing help.</span>
         </div>
         <div className="unitedlane-ai-status">
           <span>{sending ? "Thinking" : "Online"}</span>
@@ -105,11 +105,11 @@ export default function UnitedLaneChat({ token, user }) {
         <aside className="unitedlane-ai-sidebar">
           <div className="unitedlane-ai-sidebar-card">
             <span className="brand-pill">UnitedLane</span>
-            <h3>Operations Copilot</h3>
-            <p>Use this space for route insight, fuel analysis, driver messaging, customer drafts, and daily operations support.</p>
+            <h3>How to use it</h3>
+            <p>Type a question or use one of the quick prompts above.</p>
           </div>
           <div className="unitedlane-ai-sidebar-card subdued">
-            <strong>Fast-start prompts</strong>
+            <strong>Quick prompts</strong>
             <p>Ask for route summaries, price comparisons, driver notes, customer-facing drafts, or quick general help.</p>
           </div>
         </aside>
@@ -133,7 +133,7 @@ export default function UnitedLaneChat({ token, user }) {
               rows={4}
             />
             <div className="unitedlane-ai-formbar">
-              <span>Workspace context is attached automatically when available.</span>
+              <span>Workspace context is used when available.</span>
               <button className="primary-button primary-button-brand" type="submit" disabled={sending || !input.trim()}>
                 Send
               </button>
