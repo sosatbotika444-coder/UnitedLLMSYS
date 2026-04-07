@@ -29,6 +29,55 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
+function getDieselPrice(stop) {
+  if (stop.diesel_price !== null && stop.diesel_price !== undefined) return Number(stop.diesel_price);
+  if (stop.price !== null && stop.price !== undefined) return Number(stop.price);
+  if (stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined) return Number(stop.auto_diesel_price);
+  return null;
+}
+
+function uniqueRouteStops(routePlan) {
+  if (!routePlan) return [];
+  const byId = new Map();
+  const stops = [
+    ...(routePlan.top_fuel_stops || []),
+    ...(routePlan.routes || []).flatMap((route) => route.fuel_stops || [])
+  ];
+
+  stops.forEach((stop) => {
+    const key = stop.id || `${stop.lat},${stop.lon}`;
+    const existing = byId.get(key);
+    if (!existing || (getDieselPrice(stop) ?? Number.POSITIVE_INFINITY) < (getDieselPrice(existing) ?? Number.POSITIVE_INFINITY)) {
+      byId.set(key, stop);
+    }
+  });
+
+  return [...byId.values()];
+}
+
+function clampStopCount(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.min(10, parsed));
+}
+
+function routeOrderValue(stop) {
+  if (stop.origin_miles !== null && stop.origin_miles !== undefined) return Number(stop.origin_miles);
+  return Number(stop.detour_distance_meters ?? Number.POSITIVE_INFINITY);
+}
+
+function buildStopsRouteLink(routePlan, stops) {
+  if (!routePlan || !stops.length) return "";
+  const params = new URLSearchParams({
+    api: "1",
+    origin: routePlan.origin.label || `${routePlan.origin.lat},${routePlan.origin.lon}`,
+    destination: routePlan.destination.label || `${routePlan.destination.lat},${routePlan.destination.lon}`,
+    travelmode: "driving"
+  });
+  params.set("waypoints", stops.map((stop) => `${stop.lat},${stop.lon}`).join("|"));
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
     "Content-Type": "application/json",
@@ -173,6 +222,7 @@ export default function RouteAssistant({ token }) {
   const [routeError, setRouteError] = useState("");
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
+  const [cheapStopCount, setCheapStopCount] = useState("3");
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const mapStageRef = useRef(null);
 
@@ -193,6 +243,28 @@ export default function RouteAssistant({ token }) {
   const bestStops = useMemo(() => sortStops(visibleStops, "best").slice(0, 4), [visibleStops]);
   const closestStops = useMemo(() => sortStops(visibleStops, "closest").slice(0, 4), [visibleStops]);
   const brandPowerStops = useMemo(() => sortStops(visibleStops, "brand").slice(0, 4), [visibleStops]);
+  const cheapestDieselStops = useMemo(() => {
+    const count = clampStopCount(cheapStopCount);
+    return uniqueRouteStops(routePlan)
+      .map((stop) => ({ ...stop, dieselPlanPrice: getDieselPrice(stop) }))
+      .filter((stop) => stop.dieselPlanPrice !== null && Number.isFinite(stop.dieselPlanPrice))
+      .sort((left, right) => {
+        if (left.dieselPlanPrice !== right.dieselPlanPrice) return left.dieselPlanPrice - right.dieselPlanPrice;
+        const leftOffRoute = left.off_route_miles ?? Number.POSITIVE_INFINITY;
+        const rightOffRoute = right.off_route_miles ?? Number.POSITIVE_INFINITY;
+        if (leftOffRoute !== rightOffRoute) return leftOffRoute - rightOffRoute;
+        return routeOrderValue(left) - routeOrderValue(right);
+      })
+      .slice(0, count);
+  }, [cheapStopCount, routePlan]);
+  const cheapestStopsRouteOrder = useMemo(
+    () => [...cheapestDieselStops].sort((left, right) => routeOrderValue(left) - routeOrderValue(right)),
+    [cheapestDieselStops]
+  );
+  const cheapestStopsRouteLink = useMemo(
+    () => buildStopsRouteLink(routePlan, cheapestStopsRouteOrder),
+    [cheapestStopsRouteOrder, routePlan]
+  );
 
   useEffect(() => {
     document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
@@ -298,7 +370,7 @@ export default function RouteAssistant({ token }) {
           </select>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
-          {routeLoading ? "Building intelligence..." : "Build Route Intel"}
+          {routeLoading ? "Building route..." : "Build route"}
         </button>
       </div>
 
@@ -403,6 +475,63 @@ export default function RouteAssistant({ token }) {
               </div>
             </aside>
           </div>
+
+          <section className="fuel-board cheapest-route-card">
+            <div className="fuel-board-head cheapest-route-head">
+              <div>
+                <h3>Cheapest diesel route</h3>
+                <span>Pick how many fuel stops you need. We choose the lowest diesel prices across the whole route.</span>
+              </div>
+              <label className="cheap-route-count">
+                Stops
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={cheapStopCount}
+                  onChange={(event) => setCheapStopCount(event.target.value)}
+                />
+              </label>
+            </div>
+
+            {cheapestDieselStops.length ? (
+              <>
+                <div className="cheap-route-summary">
+                  <strong>{cheapestDieselStops.length} cheapest diesel stops selected</strong>
+                  <span>Selected stops are ordered from A to B for the route link.</span>
+                  {cheapestStopsRouteLink ? (
+                    <a className="primary-button primary-button-brand" href={cheapestStopsRouteLink} target="_blank" rel="noreferrer">
+                      Open route with stops
+                    </a>
+                  ) : null}
+                </div>
+
+                <div className="cheap-route-path">
+                  <span className="cheap-route-point">A. {routePlan.origin.label}</span>
+                  {cheapestStopsRouteOrder.map((stop, index) => (
+                    <span key={`cheap-path-${stop.id}`} className="cheap-route-point">
+                      {index + 1}. {stop.brand || stop.name} - ${stop.dieselPlanPrice.toFixed(3)}/gal
+                    </span>
+                  ))}
+                  <span className="cheap-route-point">B. {routePlan.destination.label}</span>
+                </div>
+
+                <div className="cheap-route-stop-grid">
+                  {cheapestDieselStops.map((stop, index) => (
+                    <article key={`cheap-${stop.id}`} className="cheap-route-stop-card">
+                      <span>Price rank #{index + 1}</span>
+                      <strong>${stop.dieselPlanPrice.toFixed(3)}/gal</strong>
+                      <p>{stop.brand || stop.name}</p>
+                      <small>{stop.address}</small>
+                      <em>{formatMiles(stop.off_route_miles)} off route</em>
+                    </article>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="empty-route-card">No published diesel prices found on this route yet.</div>
+            )}
+          </section>
 
           <div className="fuel-showcase-grid fuel-showcase-grid-brand">
             <section className="fuel-board feature-board feature-board-brand">
