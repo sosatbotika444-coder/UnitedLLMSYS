@@ -38,7 +38,6 @@ function buildStopPopup(stop) {
     stop.address,
     stop.phone ? `Phone: ${stop.phone}` : null,
     stop.official_match ? "Official Love's/Pilot station page matched" : null,
-    stop.diesel_price !== null && stop.diesel_price !== undefined ? `Diesel: ${formatMoney(stop.diesel_price)}` : null,
     stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: ${formatMoney(stop.auto_diesel_price)}` : null,
     stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: ${formatMoney(stop.unleaded_price)}` : null,
     stop.price_date ? `As of: ${stop.price_date}` : null,
@@ -53,9 +52,9 @@ function buildStopPopup(stop) {
 }
 
 function buildPriceLabel(stop) {
-  const diesel = stop.diesel_price !== null && stop.diesel_price !== undefined ? `$${Number(stop.diesel_price).toFixed(3)}` : "-";
   const autoDiesel = stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `$${Number(stop.auto_diesel_price).toFixed(3)}` : "-";
-  return `D ${diesel}\nAD ${autoDiesel}`;
+  return `Auto Diesel
+${autoDiesel}`;
 }
 
 export default function RouteMap({ plan, isFullscreen = false }) {
@@ -205,7 +204,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
           id: stop.id,
           isBest: plan.top_fuel_stops.some((item) => item.id === stop.id),
           isIndependent: stop.brand === "Independent",
-          price: stop.price ?? null,
+          price: stop.auto_diesel_price ?? null,
           score: stop.overall_score ?? 0,
           priceLabel: buildPriceLabel(stop),
           stop: JSON.stringify(stop)

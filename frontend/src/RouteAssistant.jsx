@@ -40,6 +40,14 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
+function getAutoDieselPrice(stop) {
+  if (stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined) {
+    const price = Number(stop.auto_diesel_price);
+    return Number.isFinite(price) ? price : null;
+  }
+  return null;
+}
+
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
     "Content-Type": "application/json",
@@ -107,6 +115,7 @@ function getNetworkLabel(stop) {
 
 function StopCard({ stop, compact = false }) {
   const tone = getNetworkTone(stop);
+  const autoDieselPrice = getAutoDieselPrice(stop);
   return (
     <article className={`fuel-stop-card fuel-stop-card-brand ${tone} ${compact ? "fuel-stop-card-compact" : ""}`}>
       <div className="fuel-stop-top">
@@ -125,7 +134,7 @@ function StopCard({ stop, compact = false }) {
 
       <div className="fuel-price-row fuel-price-row-brand">
         <div>
-          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Price not published"}</strong>
+          <strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
           <span>{stop.price_source || "TomTom + official network pages"}</span>
         </div>
         {stop.source_url ? (
@@ -154,7 +163,7 @@ export default function RouteAssistant({ token }) {
   const [routeForm, setRouteForm] = useState({
     origin: "Chicago, IL",
     destination: "Dallas, TX",
-    fuel_type: "Diesel",
+    fuel_type: "Auto Diesel",
     vehicle_type: "Truck"
   });
   const [routePlan, setRoutePlan] = useState(null);
@@ -211,7 +220,7 @@ export default function RouteAssistant({ token }) {
         <div className="route-brand-copy">
           <span className="brand-signal-pill">Brand-Only Network Scan</span>
           <h2>Strict Love's and Pilot Flying J route finder</h2>
-          <p>We search with TomTom only, keep only strict Love&apos;s and Pilot/Flying J matches, show official price when published, and otherwise mark the stop as no-price with exact coordinates.</p>
+          <p>We search with TomTom only, keep only strict Love&apos;s and Pilot/Flying J matches, show official auto diesel price when published, and otherwise mark the stop as no-price with exact coordinates.</p>
         </div>
         <div className="brand-keyword-cloud">
           {brandSignals.map((signal) => (

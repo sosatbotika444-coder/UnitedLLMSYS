@@ -29,10 +29,11 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
-function getDieselPrice(stop) {
-  if (stop.diesel_price !== null && stop.diesel_price !== undefined) return Number(stop.diesel_price);
-  if (stop.price !== null && stop.price !== undefined) return Number(stop.price);
-  if (stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined) return Number(stop.auto_diesel_price);
+function getAutoDieselPrice(stop) {
+  if (stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined) {
+    const price = Number(stop.auto_diesel_price);
+    return Number.isFinite(price) ? price : null;
+  }
   return null;
 }
 
@@ -47,7 +48,7 @@ function uniqueRouteStops(routePlan) {
   stops.forEach((stop) => {
     const key = stop.id || `${stop.lat},${stop.lon}`;
     const existing = byId.get(key);
-    if (!existing || (getDieselPrice(stop) ?? Number.POSITIVE_INFINITY) < (getDieselPrice(existing) ?? Number.POSITIVE_INFINITY)) {
+    if (!existing || (getAutoDieselPrice(stop) ?? Number.POSITIVE_INFINITY) < (getAutoDieselPrice(existing) ?? Number.POSITIVE_INFINITY)) {
       byId.set(key, stop);
     }
   });
@@ -145,6 +146,7 @@ function getNetworkLabel(stop) {
 
 function StopCard({ stop, compact = false }) {
   const tone = getNetworkTone(stop);
+  const autoDieselPrice = getAutoDieselPrice(stop);
   return (
     <article className={`fuel-stop-card fuel-stop-card-brand ${tone} ${compact ? "fuel-stop-card-compact" : ""}`}>
       <div className="fuel-stop-top">
@@ -164,7 +166,7 @@ function StopCard({ stop, compact = false }) {
 
       <div className="fuel-price-row fuel-price-row-brand">
         <div>
-          <strong>{stop.price !== null && stop.price !== undefined ? `$${stop.price.toFixed(3)}/gal` : "Diesel price not published"}</strong>
+          <strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
           <span>{stop.price_source || "Official Love's/Pilot network page"}</span>
         </div>
         {stop.source_url ? (
@@ -175,10 +177,10 @@ function StopCard({ stop, compact = false }) {
       </div>
 
       <div className="fuel-stop-stat-grid">
-        <span><strong>Diesel</strong>{stop.diesel_price !== null && stop.diesel_price !== undefined ? `$${stop.diesel_price.toFixed(3)}` : "-"}</span>
-        <span><strong>Auto Diesel</strong>{stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `$${stop.auto_diesel_price.toFixed(3)}` : "-"}</span>
+        <span><strong>Auto Diesel</strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}` : "-"}</span>
         <span><strong>Unleaded</strong>{stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `$${stop.unleaded_price.toFixed(3)}` : "-"}</span>
         <span><strong>Phone</strong>{stop.phone || "-"}</span>
+        <span><strong>Store</strong>{stop.store_number || "-"}</span>
       </div>
 
       <div className="fuel-stop-coords">
@@ -214,7 +216,7 @@ export default function RouteAssistant({ token }) {
   const [routeForm, setRouteForm] = useState({
     origin: "Chicago, IL",
     destination: "Dallas, TX",
-    fuel_type: "Diesel",
+    fuel_type: "Auto Diesel",
     vehicle_type: "Truck"
   });
   const [routePlan, setRoutePlan] = useState(null);
@@ -243,13 +245,13 @@ export default function RouteAssistant({ token }) {
   const bestStops = useMemo(() => sortStops(visibleStops, "best").slice(0, 4), [visibleStops]);
   const closestStops = useMemo(() => sortStops(visibleStops, "closest").slice(0, 4), [visibleStops]);
   const brandPowerStops = useMemo(() => sortStops(visibleStops, "brand").slice(0, 4), [visibleStops]);
-  const cheapestDieselStops = useMemo(() => {
+  const cheapestAutoDieselStops = useMemo(() => {
     const count = clampStopCount(cheapStopCount);
     return uniqueRouteStops(routePlan)
-      .map((stop) => ({ ...stop, dieselPlanPrice: getDieselPrice(stop) }))
-      .filter((stop) => stop.dieselPlanPrice !== null && Number.isFinite(stop.dieselPlanPrice))
+      .map((stop) => ({ ...stop, autoDieselPlanPrice: getAutoDieselPrice(stop) }))
+      .filter((stop) => stop.autoDieselPlanPrice !== null && Number.isFinite(stop.autoDieselPlanPrice))
       .sort((left, right) => {
-        if (left.dieselPlanPrice !== right.dieselPlanPrice) return left.dieselPlanPrice - right.dieselPlanPrice;
+        if (left.autoDieselPlanPrice !== right.autoDieselPlanPrice) return left.autoDieselPlanPrice - right.autoDieselPlanPrice;
         const leftOffRoute = left.off_route_miles ?? Number.POSITIVE_INFINITY;
         const rightOffRoute = right.off_route_miles ?? Number.POSITIVE_INFINITY;
         if (leftOffRoute !== rightOffRoute) return leftOffRoute - rightOffRoute;
@@ -258,8 +260,8 @@ export default function RouteAssistant({ token }) {
       .slice(0, count);
   }, [cheapStopCount, routePlan]);
   const cheapestStopsRouteOrder = useMemo(
-    () => [...cheapestDieselStops].sort((left, right) => routeOrderValue(left) - routeOrderValue(right)),
-    [cheapestDieselStops]
+    () => [...cheapestAutoDieselStops].sort((left, right) => routeOrderValue(left) - routeOrderValue(right)),
+    [cheapestAutoDieselStops]
   );
   const cheapestStopsRouteLink = useMemo(
     () => buildStopsRouteLink(routePlan, cheapestStopsRouteOrder),
@@ -405,7 +407,7 @@ export default function RouteAssistant({ token }) {
                   <div className="unitedlane-stop-summary">
                     <strong>{routePlan.selected_stop.brand || routePlan.selected_stop.name}</strong>
                     <span>{routePlan.selected_stop.address}</span>
-                    <span>{routePlan.selected_stop.price !== null && routePlan.selected_stop.price !== undefined ? `$${routePlan.selected_stop.price.toFixed(3)}/gal` : "Price not published"}</span>
+                    <span>{getAutoDieselPrice(routePlan.selected_stop) !== null ? `$${getAutoDieselPrice(routePlan.selected_stop).toFixed(3)}/gal auto diesel` : "Auto diesel price not published"}</span>
                   </div>
                 ) : null}
                 <p className="unitedlane-message">{routePlan.assistant_message}</p>
@@ -479,8 +481,8 @@ export default function RouteAssistant({ token }) {
           <section className="fuel-board cheapest-route-card">
             <div className="fuel-board-head cheapest-route-head">
               <div>
-                <h3>Cheapest diesel route</h3>
-                <span>Pick how many fuel stops you need. We choose the lowest diesel prices across the whole route.</span>
+                <h3>Cheapest auto diesel route</h3>
+                <span>Pick how many fuel stops you need. We choose the lowest auto diesel prices across the whole route.</span>
               </div>
               <label className="cheap-route-count">
                 Stops
@@ -494,10 +496,10 @@ export default function RouteAssistant({ token }) {
               </label>
             </div>
 
-            {cheapestDieselStops.length ? (
+            {cheapestAutoDieselStops.length ? (
               <>
                 <div className="cheap-route-summary">
-                  <strong>{cheapestDieselStops.length} cheapest diesel stops selected</strong>
+                  <strong>{cheapestAutoDieselStops.length} cheapest auto diesel stops selected</strong>
                   <span>Selected stops are ordered from A to B for the route link.</span>
                   {cheapestStopsRouteLink ? (
                     <a className="primary-button primary-button-brand" href={cheapestStopsRouteLink} target="_blank" rel="noreferrer">
@@ -510,17 +512,17 @@ export default function RouteAssistant({ token }) {
                   <span className="cheap-route-point">A. {routePlan.origin.label}</span>
                   {cheapestStopsRouteOrder.map((stop, index) => (
                     <span key={`cheap-path-${stop.id}`} className="cheap-route-point">
-                      {index + 1}. {stop.brand || stop.name} - ${stop.dieselPlanPrice.toFixed(3)}/gal
+                      {index + 1}. {stop.brand || stop.name} - ${stop.autoDieselPlanPrice.toFixed(3)}/gal
                     </span>
                   ))}
                   <span className="cheap-route-point">B. {routePlan.destination.label}</span>
                 </div>
 
                 <div className="cheap-route-stop-grid">
-                  {cheapestDieselStops.map((stop, index) => (
+                  {cheapestAutoDieselStops.map((stop, index) => (
                     <article key={`cheap-${stop.id}`} className="cheap-route-stop-card">
                       <span>Price rank #{index + 1}</span>
-                      <strong>${stop.dieselPlanPrice.toFixed(3)}/gal</strong>
+                      <strong>${stop.autoDieselPlanPrice.toFixed(3)}/gal</strong>
                       <p>{stop.brand || stop.name}</p>
                       <small>{stop.address}</small>
                       <em>{formatMiles(stop.off_route_miles)} off route</em>
@@ -529,7 +531,7 @@ export default function RouteAssistant({ token }) {
                 </div>
               </>
             ) : (
-              <div className="empty-route-card">No published diesel prices found on this route yet.</div>
+              <div className="empty-route-card">No published auto diesel prices found on this route yet.</div>
             )}
           </section>
 

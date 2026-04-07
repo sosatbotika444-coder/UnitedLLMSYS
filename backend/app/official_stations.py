@@ -88,13 +88,11 @@ def fuel_label_key(value: str) -> str:
 
 def choose_fuel_price(price_map: dict[str, float | None], fuel_type: str) -> float | None:
     normalized = normalize_text(fuel_type)
-    if "auto" in normalized and "diesel" in normalized:
-        return price_map.get("auto_diesel") or price_map.get("diesel")
-    if "diesel" in normalized:
-        return price_map.get("diesel") or price_map.get("auto_diesel")
     if "unleaded" in normalized or "gas" in normalized:
         return price_map.get("unleaded")
-    return price_map.get("diesel") or price_map.get("auto_diesel") or price_map.get("unleaded")
+    if "diesel" in normalized:
+        return price_map.get("auto_diesel")
+    return price_map.get("auto_diesel") or price_map.get("unleaded")
 
 
 

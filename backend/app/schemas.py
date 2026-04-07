@@ -60,7 +60,7 @@ class RouteAssistantRequest(BaseModel):
     origin: str = Field(min_length=2, max_length=255)
     destination: str = Field(min_length=2, max_length=255)
     vehicle_type: str = Field(default="Truck", max_length=32)
-    fuel_type: str = Field(default="Diesel", max_length=32)
+    fuel_type: str = Field(default="Auto Diesel", max_length=32)
     allow_no_fuel: bool = False
     allow_missing_cost: bool = True
     allow_unattended: bool = False

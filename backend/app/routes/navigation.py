@@ -470,12 +470,13 @@ def enrich_loves_stop(stop: FuelStop) -> FuelStop:
         stop.price_source = stop.price_source or "Love's route candidate (official page match unavailable)"
         return stop
     stop = apply_official_summary(stop, match, "Love's", "Love's official site")
-    if match.get('diesel_price') is not None:
-        stop.price = match.get('diesel_price')
+    if match.get('auto_diesel_price') is not None:
+        stop.auto_diesel_price = match.get('auto_diesel_price')
+        stop.price = match.get('auto_diesel_price')
         stop.price_date = match.get('diesel_time')
         stop.overall_score = round((stop.overall_score or 0) + 10, 1)
     else:
-        stop.price_source = "Love's official site (diesel price unavailable)"
+        stop.price_source = "Love's official site (auto diesel price unavailable)"
     return stop
 
 
@@ -486,7 +487,7 @@ def enrich_pilot_stop(stop: FuelStop) -> FuelStop:
         stop.brand = 'Pilot Flying J'
         stop.price_source = stop.price_source or 'Pilot Flying J route candidate (official page match unavailable)'
         return stop
-    return apply_official_summary(stop, match, 'Pilot Flying J', 'Pilot Flying J official site (diesel price not published)')
+    return apply_official_summary(stop, match, 'Pilot Flying J', 'Pilot Flying J official site (auto diesel price not published)')
 
 
 
@@ -894,7 +895,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = top_fuel_stops[0] if top_fuel_stops else None
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns diesel or auto-diesel pricing where the network publishes it."
+    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns auto diesel pricing where the network publishes it."
     map_link = build_map_link(origin.label, destination.label)
     data_source = "TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance"
     try:
