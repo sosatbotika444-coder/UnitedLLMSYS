@@ -2,7 +2,10 @@
 
 from textwrap import dedent
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ModuleNotFoundError:
+    OpenAI = None
 
 from app.config import get_settings
 
@@ -69,10 +72,12 @@ Response rules:
 """
 
 
-def get_openrouter_client(api_key: str | None = None) -> OpenAI:
+def get_openrouter_client(api_key: str | None = None):
     resolved_key = api_key or DEFAULT_OPENROUTER_API_KEY
     if not resolved_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
+    if OpenAI is None:
+        raise RuntimeError("openai package is not installed")
 
     return OpenAI(
         base_url=OPENROUTER_BASE_URL,
