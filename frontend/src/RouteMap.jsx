@@ -37,6 +37,7 @@ function buildStopPopup(stop) {
     subtitle,
     stop.address,
     stop.phone ? `Phone: ${stop.phone}` : null,
+    stop.strategy_stop ? "Smart fuel plan stop" : null,
     stop.official_match ? "Official Love's/Pilot station page matched" : null,
     stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: ${formatMoney(stop.auto_diesel_price)}` : null,
     stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: ${formatMoney(stop.unleaded_price)}` : null,
@@ -74,6 +75,8 @@ export default function RouteMap({ plan, isFullscreen = false }) {
     });
     return [...byId.values()];
   }, [plan]);
+
+  const strategyStopIds = useMemo(() => new Set((plan.fuel_strategy?.stops || []).map((item) => item.stop?.id).filter(Boolean)), [plan]);
 
   useEffect(() => {
     const resizeMap = () => {
@@ -203,11 +206,12 @@ export default function RouteMap({ plan, isFullscreen = false }) {
         properties: {
           id: stop.id,
           isBest: plan.top_fuel_stops.some((item) => item.id === stop.id),
+          isStrategyStop: strategyStopIds.has(stop.id),
           isIndependent: stop.brand === "Independent",
           price: stop.auto_diesel_price ?? null,
           score: stop.overall_score ?? 0,
           priceLabel: buildPriceLabel(stop),
-          stop: JSON.stringify(stop)
+          stop: JSON.stringify({ ...stop, strategy_stop: strategyStopIds.has(stop.id) })
         }
       }));
 
@@ -310,6 +314,8 @@ export default function RouteMap({ plan, isFullscreen = false }) {
         paint: {
           "circle-color": [
             "case",
+            ["boolean", ["get", "isStrategyStop"], false],
+            "#f59e0b",
             ["boolean", ["get", "isBest"], false],
             "#1d4ed8",
             ["boolean", ["get", "isIndependent"], false],
@@ -318,6 +324,8 @@ export default function RouteMap({ plan, isFullscreen = false }) {
           ],
           "circle-radius": [
             "case",
+            ["boolean", ["get", "isStrategyStop"], false],
+            10,
             ["boolean", ["get", "isBest"], false],
             8,
             6
@@ -422,7 +430,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
       }
       mapRef.current = null;
     };
-  }, [allStops, plan]);
+  }, [allStops, plan, strategyStopIds]);
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;

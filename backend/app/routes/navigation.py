@@ -22,6 +22,8 @@ from app.official_stations import find_official_stations_along_route
 from app.schemas import (
     ApiCapability,
     FuelStop,
+    FuelStrategy,
+    FuelStrategyStop,
     GeocodedPoint,
     RouteAssistantRequest,
     RouteAssistantResponse,
@@ -56,6 +58,13 @@ LOVES_SITEMAP_URL = "https://www.loves.com/sitemap-locations.xml"
 PILOT_SITEMAP_URL = "https://locations.pilotflyingj.com/sitemap.xml"
 MAX_LOVES_CITY_CANDIDATES = 6
 MAX_PILOT_CITY_CANDIDATES = 8
+DEFAULT_CURRENT_FUEL_GALLONS = 100.0
+DEFAULT_TANK_CAPACITY_GALLONS = 200.0
+DEFAULT_TRUCK_MPG = 6.0
+FUEL_TIME_VALUE_PER_HOUR = 75.0
+FUEL_DETOUR_PRICE_SPREAD_GALLONS = 50.0
+FUEL_STOP_SERVICE_SECONDS = 10 * 60
+FUEL_EPSILON = 0.001
 SORT_CODE_MAP = {
     "cheapest": "price",
     "lowest_retail": "price",
@@ -722,6 +731,314 @@ def minutes_from_seconds(value: int | None) -> int | None:
     return max(1, math.ceil(value / 60))
 
 
+def meters_to_miles(value: int | float | None) -> float:
+    return float(value or 0) * 0.000621371
+
+
+def parse_float_input(value) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def parse_positive_input(value) -> float | None:
+    parsed = parse_float_input(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
+def parse_non_negative_input(value) -> float | None:
+    parsed = parse_float_input(value)
+    return parsed if parsed is not None and parsed >= 0 else None
+
+
+def resolve_fuel_inputs(payload: RouteAssistantRequest) -> tuple[float, float, float, list[str]]:
+    warnings: list[str] = []
+    tank_capacity = parse_positive_input(payload.tank_capacity_gallons) or DEFAULT_TANK_CAPACITY_GALLONS
+    full_range_miles = parse_positive_input(payload.full_range)
+    mpg = parse_positive_input(payload.mpg)
+    if mpg is None and full_range_miles is not None and tank_capacity > 0:
+        mpg = full_range_miles / tank_capacity
+    if mpg is None:
+        mpg = DEFAULT_TRUCK_MPG
+
+    current_fuel = parse_non_negative_input(payload.current_fuel_gallons)
+    start_range_miles = parse_non_negative_input(payload.start_range)
+    if current_fuel is None and start_range_miles is not None and mpg > 0:
+        current_fuel = start_range_miles / mpg
+    if current_fuel is None:
+        current_fuel = min(tank_capacity, DEFAULT_CURRENT_FUEL_GALLONS)
+
+    if current_fuel > tank_capacity:
+        warnings.append("Current fuel was higher than tank capacity, so the plan clamps it to a full tank.")
+        current_fuel = tank_capacity
+
+    return current_fuel, tank_capacity, mpg, warnings
+
+
+def stop_auto_diesel_price(stop: FuelStop) -> float | None:
+    value = parse_float_input(stop.auto_diesel_price)
+    return value if value is not None and value >= 0 else None
+
+
+def stop_route_miles(stop: FuelStop) -> float | None:
+    value = parse_float_input(stop.origin_miles)
+    return value if value is not None and value >= 0 else None
+
+
+def stop_choice_key(stop: FuelStop, position: float, mpg: float = DEFAULT_TRUCK_MPG) -> tuple[float, float, int, float]:
+    price = stop_auto_diesel_price(stop) or float("inf")
+    detour_seconds = stop.detour_time_seconds or 0
+    off_route_gallons = (parse_float_input(stop.off_route_miles) or 0.0) / max(mpg, 1)
+    detour_cost = (detour_seconds / 3600) * FUEL_TIME_VALUE_PER_HOUR + (off_route_gallons * price)
+    adjusted_price = price + (detour_cost / FUEL_DETOUR_PRICE_SPREAD_GALLONS)
+    return (adjusted_price, price, detour_seconds, position)
+
+
+def stop_leg_miles(current_route_miles: float, stop: FuelStop) -> float:
+    route_delta = max(0.0, (stop_route_miles(stop) or 0.0) - current_route_miles)
+    return route_delta + max(0.0, parse_float_input(stop.off_route_miles) or 0.0)
+
+
+def build_strategy_map_link(origin: GeocodedPoint, destination: GeocodedPoint, stops: list[FuelStop]) -> str:
+    params = {
+        "api": "1",
+        "origin": origin.label or f"{origin.lat},{origin.lon}",
+        "destination": destination.label or f"{destination.lat},{destination.lon}",
+        "travelmode": "driving",
+    }
+    if stops:
+        params["waypoints"] = "|".join(f"{stop.lat},{stop.lon}" for stop in stops)
+    return f"https://www.google.com/maps/dir/?{urlencode(params)}"
+
+
+def priced_route_stops(route: RouteOption, route_miles: float) -> list[FuelStop]:
+    by_id: dict[str, FuelStop] = {}
+    for stop in route.fuel_stops:
+        price = stop_auto_diesel_price(stop)
+        position = stop_route_miles(stop)
+        if price is None or position is None:
+            continue
+        if position < 0 or position > route_miles + 5:
+            continue
+        key = stop.id or f"{stop.lat},{stop.lon}"
+        current = by_id.get(key)
+        if current is None:
+            by_id[key] = stop
+            continue
+        current_price = stop_auto_diesel_price(current) or float("inf")
+        if (price, stop.off_route_miles or float("inf"), position) < (current_price, current.off_route_miles or float("inf"), stop_route_miles(current) or float("inf")):
+            by_id[key] = stop
+    return sorted(by_id.values(), key=lambda item: (stop_route_miles(item) or 0, stop_auto_diesel_price(item) or float("inf"), item.off_route_miles or 0))
+
+
+def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest, origin: GeocodedPoint, destination: GeocodedPoint) -> FuelStrategy:
+    current_fuel, tank_capacity, mpg, warnings = resolve_fuel_inputs(payload)
+    route_miles = meters_to_miles(route.distance_meters)
+    full_range_miles = tank_capacity * mpg
+    starting_range_miles = current_fuel * mpg
+    base = {
+        "route_id": route.id,
+        "route_label": route.label,
+        "total_route_miles": round(route_miles, 1),
+        "current_fuel_gallons": round(current_fuel, 1),
+        "tank_capacity_gallons": round(tank_capacity, 1),
+        "mpg": round(mpg, 2),
+        "starting_range_miles": round(starting_range_miles, 1),
+        "full_tank_range_miles": round(full_range_miles, 1),
+        "estimated_total_time_seconds": route.travel_time_seconds,
+        "map_link": build_strategy_map_link(origin, destination, []),
+    }
+
+    if route_miles <= 0:
+        return FuelStrategy(status="unreachable", warnings=warnings + ["Route distance is missing."], **base)
+
+    if starting_range_miles >= route_miles - FUEL_EPSILON:
+        decision_score = (route.travel_time_seconds / 3600) * FUEL_TIME_VALUE_PER_HOUR
+        return FuelStrategy(status="direct", decision_score=round(decision_score, 2), warnings=warnings + ["Current fuel is enough to reach destination without buying fuel."], **base)
+
+    stops = priced_route_stops(route, route_miles)
+    positions = [stop_route_miles(stop) or 0.0 for stop in stops]
+    if not stops:
+        return FuelStrategy(status="unreachable", warnings=warnings + ["No published Auto Diesel stops were found on this route."], **base)
+
+    complete_memo: dict[int, bool] = {}
+
+    def can_complete_from(index: int) -> bool:
+        if index in complete_memo:
+            return complete_memo[index]
+        position = positions[index]
+        if route_miles - position <= full_range_miles + FUEL_EPSILON:
+            complete_memo[index] = True
+            return True
+        for next_index in range(index + 1, len(stops)):
+            if stop_leg_miles(position, stops[next_index]) <= full_range_miles + FUEL_EPSILON and can_complete_from(next_index):
+                complete_memo[index] = True
+                return True
+        complete_memo[index] = False
+        return False
+
+    reachable_initial = [
+        index for index, stop in enumerate(stops)
+        if stop_leg_miles(0.0, stop) <= starting_range_miles + FUEL_EPSILON and can_complete_from(index)
+    ]
+    if not reachable_initial:
+        return FuelStrategy(
+            status="unreachable",
+            warnings=warnings + [
+                f"No Auto Diesel stop can be reached with the current {round(starting_range_miles, 1)} mile fuel range."
+            ],
+            **base,
+        )
+
+    current_index = min(
+        reachable_initial,
+        key=lambda index: stop_choice_key(stops[index], positions[index], mpg),
+    )
+    current_stop = stops[current_index]
+    fuel_gallons = max(0.0, current_fuel - (stop_leg_miles(0.0, current_stop) / mpg))
+    current_position = positions[current_index]
+    planned_stops: list[FuelStrategyStop] = []
+    total_cost = 0.0
+    total_gallons = 0.0
+    total_detour_seconds = 0
+
+    for _ in range(len(stops) + 3):
+        if route_miles - current_position <= (fuel_gallons * mpg) + FUEL_EPSILON:
+            break
+
+        current_price = stop_auto_diesel_price(current_stop)
+        if current_price is None:
+            return FuelStrategy(status="unreachable", warnings=warnings + ["Selected stop is missing Auto Diesel price."], **base)
+
+        destination_miles = max(0.0, route_miles - current_position)
+        ahead = [
+            index for index in range(current_index + 1, len(stops))
+            if stop_leg_miles(current_position, stops[index]) <= full_range_miles + FUEL_EPSILON and can_complete_from(index)
+        ]
+        cheaper_ahead = [
+            index for index in ahead
+            if (stop_auto_diesel_price(stops[index]) or float("inf")) < current_price - FUEL_EPSILON
+        ]
+
+        target_index: int | None = None
+        target_stop: FuelStop | None = None
+        target_label = destination.label
+        target_miles = destination_miles
+        buy_to_capacity = False
+        reason = "Buy enough Auto Diesel to reach destination."
+
+        if destination_miles <= full_range_miles + FUEL_EPSILON:
+            if cheaper_ahead:
+                target_index = min(cheaper_ahead, key=lambda index: positions[index])
+                target_stop = stops[target_index]
+                target_label = target_stop.brand or target_stop.name
+                target_miles = stop_leg_miles(current_position, target_stop)
+                reason = "Buy only enough to reach a cheaper Auto Diesel stop ahead."
+        else:
+            if cheaper_ahead:
+                target_index = min(cheaper_ahead, key=lambda index: positions[index])
+                target_stop = stops[target_index]
+                target_label = target_stop.brand or target_stop.name
+                target_miles = stop_leg_miles(current_position, target_stop)
+                reason = "Buy only enough to reach a cheaper Auto Diesel stop ahead."
+            elif ahead:
+                target_index = min(
+                    ahead,
+                    key=lambda index: stop_choice_key(stops[index], positions[index], mpg),
+                )
+                target_stop = stops[target_index]
+                target_label = target_stop.brand or target_stop.name
+                target_miles = stop_leg_miles(current_position, target_stop)
+                buy_to_capacity = True
+                reason = "Fill the tank because no cheaper reachable Auto Diesel stop comes before the next required stop."
+            else:
+                return FuelStrategy(
+                    status="unreachable",
+                    warnings=warnings + [
+                        f"After {current_stop.brand or current_stop.name}, no next Auto Diesel stop is reachable with a full tank."
+                    ],
+                    **base,
+                )
+
+        required_gallons = tank_capacity if buy_to_capacity else min(tank_capacity, target_miles / mpg)
+        gallons_to_buy = min(tank_capacity - fuel_gallons, max(0.0, required_gallons - fuel_gallons))
+        if fuel_gallons + gallons_to_buy + FUEL_EPSILON < target_miles / mpg:
+            return FuelStrategy(
+                status="unreachable",
+                warnings=warnings + [
+                    f"Tank capacity is not enough to drive from {current_stop.brand or current_stop.name} to {target_label}."
+                ],
+                **base,
+            )
+
+        fuel_before = fuel_gallons
+        fuel_after = fuel_gallons + gallons_to_buy
+        if gallons_to_buy > 0.05:
+            estimated_cost = gallons_to_buy * current_price
+            planned_stops.append(FuelStrategyStop(
+                sequence=len(planned_stops) + 1,
+                stop=current_stop,
+                route_miles=round(current_position, 1),
+                miles_to_next=round(target_miles, 1),
+                gallons_to_buy=round(gallons_to_buy, 1),
+                estimated_cost=round(estimated_cost, 2),
+                fuel_before_gallons=round(fuel_before, 1),
+                fuel_after_gallons=round(fuel_after, 1),
+                auto_diesel_price=round(current_price, 3),
+                reason=reason,
+                next_target_label=target_label,
+            ))
+            total_cost += estimated_cost
+            total_gallons += gallons_to_buy
+            total_detour_seconds += current_stop.detour_time_seconds or 0
+
+        fuel_gallons = max(0.0, fuel_after - (target_miles / mpg))
+        if target_stop is None or target_index is None:
+            current_position = route_miles
+            break
+        current_stop = target_stop
+        current_index = target_index
+        current_position = positions[current_index]
+    else:
+        return FuelStrategy(status="unreachable", warnings=warnings + ["Fuel strategy exceeded the stop planning limit."], **base)
+
+    if route_miles - current_position > (fuel_gallons * mpg) + FUEL_EPSILON:
+        return FuelStrategy(status="unreachable", warnings=warnings + ["Could not complete the route with available Auto Diesel stops."], **base)
+
+    service_seconds = len(planned_stops) * FUEL_STOP_SERVICE_SECONDS
+    estimated_total_time = route.travel_time_seconds + total_detour_seconds + service_seconds
+    decision_score = total_cost + ((estimated_total_time / 3600) * FUEL_TIME_VALUE_PER_HOUR)
+    map_link = build_strategy_map_link(origin, destination, [item.stop for item in planned_stops])
+    strategy_base = {**base, "map_link": map_link, "estimated_total_time_seconds": estimated_total_time}
+    status_value = "planned" if planned_stops else "direct"
+    return FuelStrategy(
+        status=status_value,
+        required_purchase_gallons=round(total_gallons, 1),
+        estimated_fuel_cost=round(total_cost, 2),
+        estimated_detour_time_seconds=total_detour_seconds,
+        estimated_service_time_seconds=service_seconds,
+        decision_score=round(decision_score, 2),
+        stop_count=len(planned_stops),
+        stops=planned_stops,
+        warnings=warnings,
+        **strategy_base,
+    )
+
+
+def choose_best_fuel_strategy(payload: RouteAssistantRequest, origin: GeocodedPoint, destination: GeocodedPoint, routes: list[RouteOption]) -> FuelStrategy | None:
+    if not routes:
+        return None
+    strategies = [build_route_fuel_strategy(route, payload, origin, destination) for route in routes]
+    feasible = [strategy for strategy in strategies if strategy.status in {"planned", "direct"}]
+    if feasible:
+        return min(feasible, key=lambda item: (item.decision_score, item.estimated_fuel_cost, item.estimated_total_time_seconds, item.total_route_miles))
+    return min(strategies, key=lambda item: (item.total_route_miles, item.route_label or ""))
+
+
 
 
 def point_payload(point: RoutePoint) -> dict:
@@ -737,6 +1054,7 @@ def save_route_audit(
     routes: list[RouteOption],
     top_fuel_stops: list[FuelStop],
     selected_stop: FuelStop | None,
+    fuel_strategy: FuelStrategy | None,
     assistant_message: str,
     price_support: str,
     map_link: str,
@@ -769,6 +1087,7 @@ def save_route_audit(
             "route_count": len(routes),
             "top_fuel_stop_count": len(top_fuel_stops),
             "selected_stop_id": selected_stop_id,
+            "fuel_strategy": fuel_strategy.model_dump() if fuel_strategy else None,
         },
     )
     db.add(request_record)
@@ -892,7 +1211,8 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         ))
 
     top_fuel_stops = sort_stops(list(combined_stops.values()), payload.sort_by)[:24]
-    selected_stop = top_fuel_stops[0] if top_fuel_stops else None
+    fuel_strategy = choose_best_fuel_strategy(payload, origin, destination, routes)
+    selected_stop = fuel_strategy.stops[0].stop if fuel_strategy and fuel_strategy.stops else (top_fuel_stops[0] if top_fuel_stops else None)
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
     price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns auto diesel pricing where the network publishes it."
@@ -908,6 +1228,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
             routes=routes,
             top_fuel_stops=top_fuel_stops,
             selected_stop=selected_stop,
+            fuel_strategy=fuel_strategy,
             assistant_message=assistant_message,
             price_support=price_support,
             map_link=map_link,
@@ -924,6 +1245,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         routes=routes,
         top_fuel_stops=top_fuel_stops,
         selected_stop=selected_stop,
+        fuel_strategy=fuel_strategy,
         assistant_name=UNITEDLANE_IDENTITY,
         assistant_message=assistant_message,
         price_support=price_support,

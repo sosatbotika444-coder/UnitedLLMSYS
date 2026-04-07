@@ -61,6 +61,9 @@ class RouteAssistantRequest(BaseModel):
     destination: str = Field(min_length=2, max_length=255)
     vehicle_type: str = Field(default="Truck", max_length=32)
     fuel_type: str = Field(default="Auto Diesel", max_length=32)
+    current_fuel_gallons: float | None = Field(default=None, ge=0)
+    tank_capacity_gallons: float | None = Field(default=None, gt=0)
+    mpg: float | None = Field(default=None, gt=0)
     allow_no_fuel: bool = False
     allow_missing_cost: bool = True
     allow_unattended: bool = False
@@ -128,12 +131,49 @@ class RouteOption(BaseModel):
     fuel_stops: list[FuelStop]
 
 
+class FuelStrategyStop(BaseModel):
+    sequence: int
+    stop: FuelStop
+    route_miles: float
+    miles_to_next: float
+    gallons_to_buy: float
+    estimated_cost: float
+    fuel_before_gallons: float
+    fuel_after_gallons: float
+    auto_diesel_price: float
+    reason: str
+    next_target_label: str
+
+
+class FuelStrategy(BaseModel):
+    status: str
+    route_id: str | None = None
+    route_label: str | None = None
+    total_route_miles: float = 0
+    current_fuel_gallons: float = 0
+    tank_capacity_gallons: float = 0
+    mpg: float = 0
+    starting_range_miles: float = 0
+    full_tank_range_miles: float = 0
+    required_purchase_gallons: float = 0
+    estimated_fuel_cost: float = 0
+    estimated_detour_time_seconds: int = 0
+    estimated_service_time_seconds: int = 0
+    estimated_total_time_seconds: int = 0
+    decision_score: float = 0
+    stop_count: int = 0
+    stops: list[FuelStrategyStop] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    map_link: str | None = None
+
+
 class RouteAssistantResponse(BaseModel):
     origin: GeocodedPoint
     destination: GeocodedPoint
     routes: list[RouteOption]
     top_fuel_stops: list[FuelStop]
     selected_stop: FuelStop | None = None
+    fuel_strategy: FuelStrategy | None = None
     assistant_name: str = "UnitedLane"
     assistant_message: str = ""
     price_support: str

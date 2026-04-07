@@ -37,6 +37,37 @@ function getAutoDieselPrice(stop) {
   return null;
 }
 
+function toOptionalNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCurrency(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "$0.00";
+  return `$${parsed.toFixed(2)}`;
+}
+
+function formatFuelPrice(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "$0.000";
+  return `$${parsed.toFixed(3)}`;
+}
+
+function formatGallons(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "0.0 gal";
+  return `${parsed.toFixed(1)} gal`;
+}
+
+function getStrategyStatusLabel(status) {
+  if (status === "planned") return "Smart route ready";
+  if (status === "direct") return "No fuel stop needed";
+  if (status === "unreachable") return "Needs more fuel range";
+  return "Fuel plan";
+}
+
 function uniqueRouteStops(routePlan) {
   if (!routePlan) return [];
   const byId = new Map();
@@ -217,7 +248,10 @@ export default function RouteAssistant({ token }) {
     origin: "Chicago, IL",
     destination: "Dallas, TX",
     fuel_type: "Auto Diesel",
-    vehicle_type: "Truck"
+    vehicle_type: "Truck",
+    current_fuel_gallons: "100",
+    tank_capacity_gallons: "200",
+    mpg: "6.0"
   });
   const [routePlan, setRoutePlan] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -227,6 +261,13 @@ export default function RouteAssistant({ token }) {
   const [cheapStopCount, setCheapStopCount] = useState("3");
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const mapStageRef = useRef(null);
+  const fuelStrategy = routePlan?.fuel_strategy || null;
+  const fullTankRangePreview = useMemo(() => {
+    const capacity = Number(routeForm.tank_capacity_gallons);
+    const mpg = Number(routeForm.mpg);
+    if (!Number.isFinite(capacity) || !Number.isFinite(mpg) || capacity <= 0 || mpg <= 0) return "-";
+    return `${(capacity * mpg).toFixed(0)} mi`;
+  }, [routeForm.mpg, routeForm.tank_capacity_gallons]);
 
   const visibleStops = useMemo(() => {
     if (!routePlan) return [];
@@ -328,6 +369,9 @@ export default function RouteAssistant({ token }) {
     try {
       const payload = {
         ...routeForm,
+        current_fuel_gallons: toOptionalNumber(routeForm.current_fuel_gallons),
+        tank_capacity_gallons: toOptionalNumber(routeForm.tank_capacity_gallons),
+        mpg: toOptionalNumber(routeForm.mpg),
         sort_by: nextFilters.sort_by,
         start_range: "",
         full_range: "",
@@ -363,6 +407,22 @@ export default function RouteAssistant({ token }) {
             <option value="Car">Car</option>
           </select>
         </label>
+        <label>
+          Fuel now, gal
+          <input type="number" min="0" step="1" value={routeForm.current_fuel_gallons} onChange={(event) => setRouteForm({ ...routeForm, current_fuel_gallons: event.target.value })} placeholder="100" />
+        </label>
+        <label>
+          Tank capacity, gal
+          <input type="number" min="1" step="1" value={routeForm.tank_capacity_gallons} onChange={(event) => setRouteForm({ ...routeForm, tank_capacity_gallons: event.target.value })} placeholder="200" />
+        </label>
+        <label>
+          MPG
+          <input type="number" min="1" step="0.1" value={routeForm.mpg} onChange={(event) => setRouteForm({ ...routeForm, mpg: event.target.value })} placeholder="6.0" />
+        </label>
+        <div className="fuel-range-preview">
+          <strong>{fullTankRangePreview}</strong>
+          <span>full tank range</span>
+        </div>
         <label>
           Sort stops
           <select value={draftFilters.sort_by} onChange={(event) => setDraftFilters({ ...draftFilters, sort_by: event.target.value, ui_sort: event.target.value })}>
@@ -477,6 +537,74 @@ export default function RouteAssistant({ token }) {
               </div>
             </aside>
           </div>
+
+          {fuelStrategy ? (
+            <section className={`fuel-board smart-fuel-card smart-fuel-${fuelStrategy.status}`}>
+              <div className="fuel-board-head smart-fuel-head">
+                <div>
+                  <h3>Smart fuel plan</h3>
+                  <span>The system uses tank gallons, MPG, Auto Diesel prices, detour time, and route reachability.</span>
+                </div>
+                <strong className="smart-fuel-status">{getStrategyStatusLabel(fuelStrategy.status)}</strong>
+              </div>
+
+              <div className="smart-fuel-metrics">
+                <span><strong>{formatCurrency(fuelStrategy.estimated_fuel_cost)}</strong> fuel to buy</span>
+                <span><strong>{formatGallons(fuelStrategy.required_purchase_gallons)}</strong> planned purchase</span>
+                <span><strong>{formatMiles(fuelStrategy.starting_range_miles)}</strong> start range</span>
+                <span><strong>{formatMiles(fuelStrategy.full_tank_range_miles)}</strong> full tank</span>
+                <span><strong>{formatDuration(fuelStrategy.estimated_total_time_seconds)}</strong> total time</span>
+              </div>
+
+              {fuelStrategy.warnings?.length ? (
+                <div className="smart-fuel-warnings">
+                  {fuelStrategy.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                </div>
+              ) : null}
+
+              {fuelStrategy.stops?.length ? (
+                <>
+                  <div className="smart-fuel-path">
+                    <span className="cheap-route-point">A. {routePlan.origin.label}</span>
+                    {fuelStrategy.stops.map((item) => (
+                      <span key={`smart-path-${item.sequence}-${item.stop.id}`} className="cheap-route-point">
+                        {item.sequence}. Buy {formatGallons(item.gallons_to_buy)} at {item.stop.brand || item.stop.name} - {formatCurrency(item.estimated_cost)}
+                      </span>
+                    ))}
+                    <span className="cheap-route-point">B. {routePlan.destination.label}</span>
+                  </div>
+
+                  <div className="smart-fuel-stop-grid">
+                    {fuelStrategy.stops.map((item) => (
+                      <article key={`smart-stop-${item.sequence}-${item.stop.id}`} className="smart-fuel-stop-card">
+                        <span>Stop #{item.sequence} at mile {item.route_miles}</span>
+                        <strong>{formatGallons(item.gallons_to_buy)} / {formatCurrency(item.estimated_cost)}</strong>
+                        <p>{item.stop.brand || item.stop.name}</p>
+                        <small>{item.stop.address}</small>
+                        <div className="smart-fuel-card-stats">
+                          <span>Auto Diesel {formatFuelPrice(item.auto_diesel_price)}/gal</span>
+                          <span>Before {formatGallons(item.fuel_before_gallons)}</span>
+                          <span>After {formatGallons(item.fuel_after_gallons)}</span>
+                          <span>Next {formatMiles(item.miles_to_next)} to {item.next_target_label}</span>
+                        </div>
+                        <em>{item.reason}</em>
+                      </article>
+                    ))}
+                  </div>
+
+                  {fuelStrategy.map_link ? (
+                    <a className="primary-button primary-button-brand smart-fuel-map-link" href={fuelStrategy.map_link} target="_blank" rel="noreferrer">
+                      Open smart route with stops
+                    </a>
+                  ) : null}
+                </>
+              ) : (
+                <div className="empty-route-card">
+                  {fuelStrategy.status === "direct" ? "Current fuel is enough to reach the destination without buying Auto Diesel." : "The system could not build a safe Auto Diesel stop plan with the current tank inputs."}
+                </div>
+              )}
+            </section>
+          ) : null}
 
           <section className="fuel-board cheapest-route-card">
             <div className="fuel-board-head cheapest-route-head">
