@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 import certifi
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_chat_reply, generate_unitedlane_route_guidance
@@ -26,6 +26,8 @@ from app.schemas import (
     FuelStrategy,
     FuelStrategyStop,
     GeocodedPoint,
+    LocationSuggestion,
+    LocationSuggestionResponse,
     RouteAssistantRequest,
     RouteAssistantResponse,
     RouteOption,
@@ -525,6 +527,62 @@ def enrich_stops_with_official_sites(stops: list[FuelStop]) -> list[FuelStop]:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(enrich_stop_with_official_site, stops))
     return [stop for stop in results if stop is not None]
+
+def build_location_secondary_text(address: dict) -> str:
+    parts: list[str] = []
+    for value in [
+        address.get("municipality"),
+        address.get("countrySubdivision") or address.get("countrySubdivisionName"),
+        address.get("country"),
+    ]:
+        if value and value not in parts:
+            parts.append(value)
+    return ", ".join(parts)
+
+
+def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSuggestion]:
+    trimmed_query = (query or "").strip()
+    if len(trimmed_query) < 2 or not settings.tomtom_api_key:
+        return []
+
+    encoded_query = quote(trimmed_query)
+    params = urlencode({
+        "key": settings.tomtom_api_key,
+        "limit": max(1, min(limit, 8)),
+        "typeahead": "true",
+        "language": "en-US",
+        "countrySet": "US,CA",
+    })
+    data = http_json(f"https://api.tomtom.com/search/2/search/{encoded_query}.json?{params}")
+    seen: set[str] = set()
+    suggestions: list[LocationSuggestion] = []
+
+    for item in data.get("results", []):
+        position = item.get("position") or {}
+        lat = position.get("lat")
+        lon = position.get("lon")
+        if lat is None or lon is None:
+            continue
+
+        address = item.get("address") or {}
+        label = address.get("freeformAddress") or item.get("poi", {}).get("name") or trimmed_query
+        secondary_text = build_location_secondary_text(address)
+        suggestion_type = item.get("entityType") or item.get("type")
+        dedupe_key = f"{label.strip().lower()}|{round(float(lat), 5)}|{round(float(lon), 5)}"
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        suggestions.append(LocationSuggestion(
+            id=str(item.get("id") or dedupe_key),
+            label=label,
+            secondary_text=secondary_text,
+            lat=float(lat),
+            lon=float(lon),
+            type=str(suggestion_type) if suggestion_type else None,
+        ))
+
+    return suggestions
+
 
 def geocode_address(query: str) -> GeocodedPoint:
     encoded_query = quote(query)
@@ -1243,6 +1301,15 @@ def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, 
         detour_time_minutes=minutes_from_seconds(stop.detour_time_seconds),
         map_link=station_map_link,
     )
+
+
+@router.get("/location-suggestions", response_model=LocationSuggestionResponse)
+def location_suggestions(
+    q: str = Query(min_length=2, max_length=255),
+    limit: int = Query(default=6, ge=1, le=8),
+    current_user: User = Depends(get_current_user),
+):
+    return LocationSuggestionResponse(query=q, suggestions=search_location_suggestions(q, limit=limit))
 
 
 @router.get("/tomtom-capabilities", response_model=TomTomCapabilityCatalog)

@@ -13,6 +13,7 @@ const defaultFilters = {
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_CURRENT_FUEL_GALLONS = 100;
 const DEFAULT_TRUCK_MPG = 6.0;
+const LOCATION_SUGGESTION_LIMIT = 6;
 
 function formatDistance(meters) {
   if (!meters) return "0 mi";
@@ -154,6 +155,13 @@ function fuelOptionText(vehicle) {
     return "Fuel sensor only";
   }
   return "Fuel unknown";
+}
+
+function locationSuggestionMeta(suggestion) {
+  if (!suggestion) return "";
+  if (suggestion.secondary_text) return suggestion.secondary_text;
+  if (suggestion.type) return suggestion.type;
+  return "TomTom location";
 }
 
 function vehicleMatchesSearch(vehicle, term) {
@@ -423,6 +431,11 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   const [cheapStopCount, setCheapStopCount] = useState("3");
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const mapStageRef = useRef(null);
+  const blurTimerRef = useRef(null);
+  const locationSuggestionCacheRef = useRef(new Map());
+  const [locationFieldFocus, setLocationFieldFocus] = useState("");
+  const [locationSuggestions, setLocationSuggestions] = useState({ origin: [], destination: [] });
+  const [locationSuggestionLoading, setLocationSuggestionLoading] = useState({ origin: false, destination: false });
   const fuelStrategy = routePlan?.fuel_strategy || null;
   const fullTankRangePreview = useMemo(() => {
     const capacity = Number(routeForm.tank_capacity_gallons);
@@ -430,6 +443,146 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     if (!Number.isFinite(capacity) || !Number.isFinite(mpg) || capacity <= 0 || mpg <= 0) return "-";
     return `${(capacity * mpg).toFixed(0)} mi`;
   }, [routeForm.mpg, routeForm.tank_capacity_gallons]);
+  const originSuggestionPanelOpen = locationFieldFocus === "origin" && routeForm.origin.trim().length >= 2;
+  const destinationSuggestionPanelOpen = locationFieldFocus === "destination" && routeForm.destination.trim().length >= 2;
+  const activeLocationQuery = useMemo(() => {
+    if (locationFieldFocus === "origin") return routeForm.origin.trim();
+    if (locationFieldFocus === "destination") return routeForm.destination.trim();
+    return "";
+  }, [locationFieldFocus, routeForm.destination, routeForm.origin]);
+
+  function setSuggestionsForField(field, suggestions) {
+    setLocationSuggestions((current) => ({ ...current, [field]: suggestions }));
+  }
+
+  function setSuggestionLoading(field, isLoading) {
+    setLocationSuggestionLoading((current) => ({ ...current, [field]: isLoading }));
+  }
+
+  function focusLocationField(field) {
+    if (blurTimerRef.current) {
+      window.clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    setLocationFieldFocus(field);
+  }
+
+  function hideLocationField(field) {
+    setLocationFieldFocus((current) => (current === field ? "" : current));
+    setSuggestionLoading(field, false);
+  }
+
+  function handleLocationInputChange(field, value) {
+    setRouteForm((current) => ({ ...current, [field]: value }));
+    focusLocationField(field);
+    if (value.trim().length < 2) {
+      setSuggestionsForField(field, []);
+      setSuggestionLoading(field, false);
+    }
+  }
+
+  function handleLocationBlur(field) {
+    if (blurTimerRef.current) {
+      window.clearTimeout(blurTimerRef.current);
+    }
+    blurTimerRef.current = window.setTimeout(() => {
+      hideLocationField(field);
+      blurTimerRef.current = null;
+    }, 120);
+  }
+
+  function selectLocationSuggestion(field, suggestion) {
+    setRouteForm((current) => ({ ...current, [field]: suggestion.label }));
+    setSuggestionsForField(field, []);
+    setSuggestionLoading(field, false);
+    setLocationFieldFocus("");
+  }
+
+  function renderLocationSuggestions(field) {
+    const suggestions = locationSuggestions[field] || [];
+    const isLoading = Boolean(locationSuggestionLoading[field]);
+    const isOpen = field === "origin" ? originSuggestionPanelOpen : destinationSuggestionPanelOpen;
+    if (!isOpen) return null;
+
+    return (
+      <div className="route-location-suggestions">
+        {isLoading ? <div className="route-location-suggestions-empty">Searching real locations...</div> : null}
+        {!isLoading && suggestions.length ? suggestions.map((suggestion) => (
+          <button
+            key={`${field}-${suggestion.id}-${suggestion.lat}-${suggestion.lon}`}
+            type="button"
+            className="route-location-suggestion"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              selectLocationSuggestion(field, suggestion);
+            }}
+          >
+            <strong>{suggestion.label}</strong>
+            <span>{locationSuggestionMeta(suggestion)}</span>
+          </button>
+        )) : null}
+        {!isLoading && !suggestions.length ? <div className="route-location-suggestions-empty">No matching locations found.</div> : null}
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    return () => {
+      if (blurTimerRef.current) {
+        window.clearTimeout(blurTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !active || !locationFieldFocus) {
+      return undefined;
+    }
+
+    const field = locationFieldFocus;
+    const query = activeLocationQuery;
+    if (query.length < 2) {
+      setSuggestionsForField(field, []);
+      setSuggestionLoading(field, false);
+      return undefined;
+    }
+
+    const cacheKey = `${field}:${query.toLowerCase()}`;
+    const cachedSuggestions = locationSuggestionCacheRef.current.get(cacheKey);
+    if (cachedSuggestions) {
+      setSuggestionsForField(field, cachedSuggestions);
+      setSuggestionLoading(field, false);
+      return undefined;
+    }
+
+    let ignore = false;
+    setSuggestionsForField(field, []);
+    setSuggestionLoading(field, true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: query, limit: String(LOCATION_SUGGESTION_LIMIT) });
+        const data = await apiRequest(`/navigation/location-suggestions?${params.toString()}`, {}, token);
+        const nextSuggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+        locationSuggestionCacheRef.current.set(cacheKey, nextSuggestions);
+        if (!ignore) {
+          setSuggestionsForField(field, nextSuggestions);
+        }
+      } catch {
+        if (!ignore) {
+          setSuggestionsForField(field, []);
+        }
+      } finally {
+        if (!ignore) {
+          setSuggestionLoading(field, false);
+        }
+      }
+    }, 260);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, activeLocationQuery, locationFieldFocus, token]);
 
   useEffect(() => {
     if (!token || !active || fleetSnapshot) {
@@ -638,6 +791,9 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   function useLiveTruckLocationForOrigin() {
     if (!selectedVehicleLocation) return;
     setRouteForm((current) => ({ ...current, origin: selectedVehicleLocation }));
+    setSuggestionsForField("origin", []);
+    setSuggestionLoading("origin", false);
+    setLocationFieldFocus("");
   }
 
   async function buildRoutePlan(nextFilters = activeFilters) {
@@ -722,13 +878,35 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
             )}
           </select>
         </label>
-        <label>
+        <label className="route-location-field">
           Origin (A)
-          <input type="text" value={routeForm.origin} onChange={(event) => setRouteForm({ ...routeForm, origin: event.target.value })} placeholder="Chicago, IL" />
+          <div className="route-location-input-wrap">
+            <input
+              type="text"
+              value={routeForm.origin}
+              onChange={(event) => handleLocationInputChange("origin", event.target.value)}
+              onFocus={() => focusLocationField("origin")}
+              onBlur={() => handleLocationBlur("origin")}
+              placeholder="Chicago, IL"
+              autoComplete="off"
+            />
+            {renderLocationSuggestions("origin")}
+          </div>
         </label>
-        <label>
+        <label className="route-location-field">
           Destination (B)
-          <input type="text" value={routeForm.destination} onChange={(event) => setRouteForm({ ...routeForm, destination: event.target.value })} placeholder="Dallas, TX" />
+          <div className="route-location-input-wrap">
+            <input
+              type="text"
+              value={routeForm.destination}
+              onChange={(event) => handleLocationInputChange("destination", event.target.value)}
+              onFocus={() => focusLocationField("destination")}
+              onBlur={() => handleLocationBlur("destination")}
+              placeholder="Dallas, TX"
+              autoComplete="off"
+            />
+            {renderLocationSuggestions("destination")}
+          </div>
         </label>
         <label>
           Sort stops

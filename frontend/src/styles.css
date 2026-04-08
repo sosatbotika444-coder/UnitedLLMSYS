@@ -6214,6 +6214,89 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
   font-size: 12px;
 }
 
+.route-location-field {
+  position: relative;
+}
+
+.route-location-input-wrap {
+  position: relative;
+}
+
+.route-location-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+.route-location-suggestion {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.96);
+  color: #0f172a;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.route-location-suggestion:hover,
+.route-location-suggestion:focus-visible {
+  border-color: rgba(37, 99, 235, 0.36);
+  background: rgba(239, 246, 255, 0.98);
+  transform: translateY(-1px);
+}
+
+.route-location-suggestion strong {
+  font-size: 14px;
+}
+
+.route-location-suggestion span,
+.route-location-suggestions-empty {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.route-location-suggestions-empty {
+  padding: 12px 14px;
+}
+
+body.theme-dark .route-location-suggestions {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: rgba(71, 85, 105, 0.66);
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+}
+
+body.theme-dark .route-location-suggestion {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(71, 85, 105, 0.55);
+  color: #e2e8f0;
+}
+
+body.theme-dark .route-location-suggestion:hover,
+body.theme-dark .route-location-suggestion:focus-visible {
+  background: rgba(30, 64, 175, 0.26);
+  border-color: rgba(96, 165, 250, 0.44);
+}
+
+body.theme-dark .route-location-suggestion span,
+body.theme-dark .route-location-suggestions-empty {
+  color: #94a3b8;
+}
+
 .route-vehicle-summary {
   margin-bottom: 14px;
   padding: 16px;

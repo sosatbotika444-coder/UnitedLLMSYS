@@ -85,6 +85,20 @@ class GeocodedPoint(BaseModel):
     lon: float
 
 
+class LocationSuggestion(BaseModel):
+    id: str
+    label: str
+    secondary_text: str = ""
+    lat: float
+    lon: float
+    type: str | None = None
+
+
+class LocationSuggestionResponse(BaseModel):
+    query: str
+    suggestions: list[LocationSuggestion] = Field(default_factory=list)
+
+
 class FuelStop(BaseModel):
     id: str
     name: str
