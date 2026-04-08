@@ -25,6 +25,12 @@ DATABASE_URL=postgresql://postgres:password@host:5432/railway
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 CORS_ORIGINS=http://localhost:5173,https://your-netlify-site.netlify.app
+DATABASE_POOL_SIZE=20
+DATABASE_MAX_OVERFLOW=40
+DATABASE_POOL_TIMEOUT_SECONDS=30
+DATABASE_POOL_RECYCLE_SECONDS=1800
+SQLITE_BUSY_TIMEOUT_MS=15000
+GZIP_MINIMUM_SIZE=1024
 TOMTOM_API_KEY=your-tomtom-api-key
 MOTIVE_API_KEY=your-motive-api-key
 MOTIVE_ACCESS_TOKEN=your-motive-oauth-access-token
@@ -61,6 +67,12 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload
+```
+
+For real multi-user testing use multiple workers instead of `--reload`:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 Backend health check:
@@ -108,6 +120,12 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 CORS_ORIGINS=https://your-netlify-site.netlify.app
+WEB_CONCURRENCY=4
+DATABASE_POOL_SIZE=20
+DATABASE_MAX_OVERFLOW=40
+DATABASE_POOL_TIMEOUT_SECONDS=30
+DATABASE_POOL_RECYCLE_SECONDS=1800
+GZIP_MINIMUM_SIZE=1024
 TOMTOM_API_KEY=your-tomtom-api-key
 ```
 
@@ -120,6 +138,9 @@ Notes:
 - Tables are created automatically on backend startup.
 - If you use a custom Netlify domain, add it to `CORS_ORIGINS` too.
 - Railway service-to-service startup ordering works best when the backend references Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+- For around 100 simultaneous users, use `PostgreSQL` in Railway, not local SQLite.
+- The backend now supports worker-based startup through `WEB_CONCURRENCY`; a practical starting point is `4`.
+- Large JSON responses are gzip-compressed automatically and DB pooling is configurable through the env vars above.
 
 ## Netlify frontend deploy
 

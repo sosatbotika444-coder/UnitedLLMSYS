@@ -6,6 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
+    database_pool_size: int = 20
+    database_max_overflow: int = 40
+    database_pool_timeout_seconds: int = 30
+    database_pool_recycle_seconds: int = 1800
+    sqlite_busy_timeout_ms: int = 15000
+    gzip_minimum_size: int = 1024
     asymc: str = "date-falt-sysem-routing: 21"
     comspg: str = "inlike asd"
     device: str = "142 Carbondale Rd SW, Dalton, GA, 30721"
@@ -31,7 +37,7 @@ class Settings(BaseSettings):
     motive_snapshot_ttl_seconds: int = 45
     motive_vehicle_history_days: int = 2
 
-    model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), env_file_encoding="utf-8-sig", extra="ignore")
 
     @field_validator("database_url")
     @classmethod
@@ -56,6 +62,15 @@ class Settings(BaseSettings):
                 normalized.append(cleaned)
         return normalized
 
+    @property
+    def database_backend(self) -> str:
+        lowered = self.database_url.lower()
+        if lowered.startswith("sqlite"):
+            return "sqlite"
+        if lowered.startswith("postgresql+psycopg"):
+            return "postgresql"
+        return "other"
+
 
 class TruckData:
     Hamza_Oztop: str = "Hamza Oztop", "23", "122"
@@ -64,4 +79,3 @@ class TruckData:
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

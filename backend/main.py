@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
@@ -24,6 +25,11 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="United Lane System API", lifespan=lifespan)
 
 app.add_middleware(
+    GZipMiddleware,
+    minimum_size=max(512, settings.gzip_minimum_size),
+)
+
+app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
@@ -44,7 +50,9 @@ def root():
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
-
-
-
+    return {
+        "status": "ok",
+        "database_backend": settings.database_backend,
+        "compression": "gzip",
+        "motive_configured": bool(settings.motive_api_key or settings.motive_access_token),
+    }

@@ -33,10 +33,11 @@ TOKEN_STATE: dict[str, object] = {
     "refresh_token": "",
     "expires_at": None,
 }
-SNAPSHOT_LOCK = threading.Lock()
-SNAPSHOT_CACHE: dict[str, object] = {"snapshot": None, "expires_at": 0.0}
-DETAIL_LOCK = threading.Lock()
+SNAPSHOT_LOCK = threading.Condition()
+SNAPSHOT_CACHE: dict[str, object] = {"snapshot": None, "expires_at": 0.0, "building": False}
+DETAIL_LOCK = threading.Condition()
 DETAIL_CACHE: dict[int, dict[str, object]] = {}
+DETAIL_BUILDING: set[int] = set()
 
 
 def iso_now() -> str:
@@ -248,17 +249,35 @@ class MotiveClient:
             )
 
         ttl_seconds = max(10, int(self.settings.motive_snapshot_ttl_seconds or 45))
-        now = time.time()
         with SNAPSHOT_LOCK:
+            now = time.time()
             cached = SNAPSHOT_CACHE.get("snapshot")
             expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
             if not force_refresh and cached and now < expires_at:
                 return cached
 
-        snapshot = self._build_snapshot()
+            while SNAPSHOT_CACHE.get("building"):
+                SNAPSHOT_LOCK.wait(timeout=5)
+                cached = SNAPSHOT_CACHE.get("snapshot")
+                expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
+                if cached and time.time() < expires_at:
+                    return cached
+
+            SNAPSHOT_CACHE["building"] = True
+
+        try:
+            snapshot = self._build_snapshot()
+        except Exception:
+            with SNAPSHOT_LOCK:
+                SNAPSHOT_CACHE["building"] = False
+                SNAPSHOT_LOCK.notify_all()
+            raise
+
         with SNAPSHOT_LOCK:
             SNAPSHOT_CACHE["snapshot"] = snapshot
-            SNAPSHOT_CACHE["expires_at"] = now + ttl_seconds
+            SNAPSHOT_CACHE["expires_at"] = time.time() + ttl_seconds
+            SNAPSHOT_CACHE["building"] = False
+            SNAPSHOT_LOCK.notify_all()
         return snapshot
 
     def fetch_vehicle_detail(self, vehicle_id: int, force_refresh: bool = False) -> dict:
@@ -269,15 +288,32 @@ class MotiveClient:
             )
 
         ttl_seconds = max(10, int(self.settings.motive_snapshot_ttl_seconds or 45))
-        now = time.time()
         with DETAIL_LOCK:
+            now = time.time()
             cached = DETAIL_CACHE.get(vehicle_id)
             if cached and not force_refresh and now < float(cached.get("expires_at") or 0.0):
                 return cached.get("detail")
 
-        detail = self._build_vehicle_detail(vehicle_id, force_refresh=force_refresh)
+            while vehicle_id in DETAIL_BUILDING:
+                DETAIL_LOCK.wait(timeout=5)
+                cached = DETAIL_CACHE.get(vehicle_id)
+                if cached and time.time() < float(cached.get("expires_at") or 0.0):
+                    return cached.get("detail")
+
+            DETAIL_BUILDING.add(vehicle_id)
+
+        try:
+            detail = self._build_vehicle_detail(vehicle_id, force_refresh=force_refresh)
+        except Exception:
+            with DETAIL_LOCK:
+                DETAIL_BUILDING.discard(vehicle_id)
+                DETAIL_LOCK.notify_all()
+            raise
+
         with DETAIL_LOCK:
-            DETAIL_CACHE[vehicle_id] = {"detail": detail, "expires_at": now + ttl_seconds}
+            DETAIL_CACHE[vehicle_id] = {"detail": detail, "expires_at": time.time() + ttl_seconds}
+            DETAIL_BUILDING.discard(vehicle_id)
+            DETAIL_LOCK.notify_all()
         return detail
     def _build_snapshot(self) -> dict:
         warnings: list[str] = []
