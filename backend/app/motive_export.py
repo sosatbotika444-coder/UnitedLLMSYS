@@ -39,7 +39,8 @@ def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
     windows = snapshot.get("windows") or {}
 
     driver_name_to_vehicles = _build_driver_name_map(vehicles)
-    roster_by_name = { _normalize_name(driver.get("full_name")): driver for driver in drivers if _normalize_name(driver.get("full_name")) }
+    roster_by_name = {_normalize_name(driver.get("full_name")): driver for driver in drivers if _normalize_name(driver.get("full_name"))}
+    fleet_status_rows = sorted(vehicles, key=lambda row: (_fleet_status_rank(row, roster_by_name), str(row.get("number") or "")))
 
     _write_overview_sheet(
         overview,
@@ -49,6 +50,14 @@ def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
         datasets=datasets,
         warnings=warnings,
         windows=windows,
+    )
+
+    _write_table_sheet(
+        workbook,
+        title="Fleet Status",
+        columns=_fleet_status_columns(roster_by_name),
+        rows=fleet_status_rows,
+        empty_message="No fleet status rows were available for export.",
     )
 
     _write_table_sheet(
@@ -235,6 +244,44 @@ def _write_table_sheet(workbook: Workbook, *, title: str, columns: list[ColumnSp
         sheet.cell(row=2, column=1).alignment = WRAP_ALIGNMENT
 
     _apply_sheet_formatting(sheet)
+
+
+def _fleet_status_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec]:
+    def roster(vehicle: dict) -> dict:
+        return roster_by_name.get(_normalize_name(_tracked_driver_name(vehicle)), {})
+
+    return [
+        ("Truck #", lambda row: row.get("number")),
+        ("Working Now", lambda row: _working_now_label(row, roster(row))),
+        ("Movement", lambda row: _movement_label(row)),
+        ("Tracked Driver", lambda row: _tracked_driver_name(row)),
+        ("Driver Source", lambda row: _tracked_driver_source(row)),
+        ("Driver Status", lambda row: roster(row).get("status")),
+        ("Duty Status", lambda row: roster(row).get("duty_status")),
+        ("Vehicle Status", lambda row: row.get("status")),
+        ("Availability", lambda row: row.get("availability_status")),
+        ("Fuel %", lambda row: (row.get("location") or {}).get("fuel_level_percent")),
+        ("Fuel Gallons (200 Tank)", lambda row: _estimated_fuel_gallons((row.get("location") or {}).get("fuel_level_percent"))),
+        ("Fuel State", lambda row: _fuel_state_label((row.get("location") or {}).get("fuel_level_percent"), (row.get("location") or {}).get("fuel_sensor_reading"))),
+        ("Fuel Sensor", lambda row: (row.get("location") or {}).get("fuel_sensor_reading")),
+        ("Speed MPH", lambda row: (row.get("location") or {}).get("speed_mph")),
+        ("Last Update", lambda row: (row.get("location") or {}).get("located_at")),
+        ("Age Minutes", lambda row: (row.get("location") or {}).get("age_minutes")),
+        ("Active Faults", lambda row: (row.get("fault_summary") or {}).get("active_count")),
+        ("Utilization %", lambda row: (row.get("utilization_summary") or {}).get("utilization_percentage")),
+        ("Driving Miles 7D", lambda row: (row.get("driving_summary") or {}).get("distance_miles")),
+        ("Safety Events 7D", lambda row: (row.get("performance_summary") or {}).get("count")),
+        ("IFTA Miles 30D", lambda row: (row.get("ifta_summary") or {}).get("distance_miles")),
+        ("City", lambda row: (row.get("location") or {}).get("city")),
+        ("State", lambda row: (row.get("location") or {}).get("state")),
+        ("Live Address", lambda row: (row.get("location") or {}).get("address")),
+        ("VIN", lambda row: row.get("vin")),
+        ("Make", lambda row: row.get("make")),
+        ("Model", lambda row: row.get("model")),
+        ("Year", lambda row: row.get("year")),
+        ("Plate", lambda row: row.get("license_plate_number")),
+        ("Plate State", lambda row: row.get("license_plate_state")),
+    ]
 
 
 def _driver_tracking_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec]:
@@ -503,6 +550,67 @@ def _driver_score_columns() -> list[ColumnSpec]:
         ("Hard Corners", lambda row: row.get("num_hard_corners")),
         ("Total Kilometers", lambda row: row.get("total_kilometers")),
     ]
+
+
+def _fleet_status_rank(vehicle: dict, roster_by_name: dict[str, dict]) -> int:
+    roster = roster_by_name.get(_normalize_name(_tracked_driver_name(vehicle)), {})
+    label = _working_now_label(vehicle, roster)
+    ranks = {
+        "Moving now": 0,
+        "On duty": 1,
+        "Active assigned": 2,
+        "Parked": 3,
+        "Stale": 4,
+        "Unassigned": 5,
+    }
+    return ranks.get(label, 9)
+
+
+def _movement_label(vehicle: dict) -> str:
+    if vehicle.get("is_stale"):
+        return "Stale"
+    if vehicle.get("is_moving"):
+        return "Moving"
+    if vehicle.get("location"):
+        return "Stopped"
+    return "No GPS"
+
+
+def _working_now_label(vehicle: dict, roster: dict) -> str:
+    driver_name = _tracked_driver_name(vehicle)
+    duty_status = str(roster.get("duty_status") or "").strip().lower()
+    driver_status = str(roster.get("status") or "").strip().lower()
+
+    if vehicle.get("is_moving"):
+        return "Moving now"
+    if duty_status and duty_status not in {"off_duty", "sleeper_berth", "inactive"}:
+        return "On duty"
+    if driver_name != "Unassigned" and driver_status == "active" and not vehicle.get("is_stale"):
+        return "Active assigned"
+    if vehicle.get("is_stale"):
+        return "Stale"
+    if driver_name == "Unassigned":
+        return "Unassigned"
+    return "Parked"
+
+
+def _fuel_state_label(percent: object, sensor: object) -> str:
+    if percent not in (None, ""):
+        try:
+            numeric = float(percent)
+        except (TypeError, ValueError):
+            numeric = None
+        if numeric is not None:
+            if numeric <= 10:
+                return "Critical fuel"
+            if numeric <= 25:
+                return "Low fuel"
+            if numeric <= 50:
+                return "Mid fuel"
+            return "Healthy fuel"
+    if sensor not in (None, ""):
+        return "Sensor only"
+    return "Fuel unknown"
 
 
 def _tracked_driver_name(vehicle: dict) -> str:
