@@ -38,7 +38,7 @@ const workspaceCopy = {
   routing: {
     eyebrow: "Routing",
     title: "Route and fuel map",
-    subtitle: "Enter origin and destination, build a route, and review fuel stops on the map."
+    subtitle: "Pick a truck or driver, enter A and B, and let the system fill live fuel and route planning inputs automatically."
   },
   loads: {
     eyebrow: "Loads",
@@ -576,7 +576,7 @@ export default function App() {
           </section>
 
         <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "routing"}>
-            <Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} /></Suspense>
+            <Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} active={activeWorkspace === "routing"} loadRows={rows} /></Suspense>
           </section>
 
         <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "loads"}>
