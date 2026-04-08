@@ -368,7 +368,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   }, [routeForm.mpg, routeForm.tank_capacity_gallons]);
 
   useEffect(() => {
-    if (!token || !active) {
+    if (!token || !active || fleetSnapshot) {
       return undefined;
     }
 
@@ -397,7 +397,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     return () => {
       ignore = true;
     };
-  }, [active, token]);
+  }, [active, fleetSnapshot, token]);
 
   const fleetVehicles = useMemo(() => {
     const vehicles = [...(fleetSnapshot?.vehicles || [])];
@@ -716,7 +716,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                   {mapFullscreen ? "Close full screen" : "Full screen"}
                 </button>
               </div>
-              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} /></Suspense>
+              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} /></Suspense>
             </div>
 
             <aside className="route-side-panel">

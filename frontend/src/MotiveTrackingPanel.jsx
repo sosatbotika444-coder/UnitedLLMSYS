@@ -105,9 +105,21 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  useEffect(() => {
+    setIntegration(null);
+    setSnapshot(null);
+    setDetail(null);
+    setLoading(Boolean(token));
+    setRefreshing(false);
+    setDetailLoading(false);
+    setError("");
+    setDetailError("");
+    setSelectedVehicleId(null);
+  }, [token]);
+
   const loadSnapshot = useCallback(
     async (forceRefresh = false) => {
-      if (!token || !active) return;
+      if (!token) return;
       if (forceRefresh) {
         setRefreshing(true);
       } else {
@@ -117,6 +129,12 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       try {
         const data = await apiRequest(`/motive/fleet${forceRefresh ? "?refresh=true" : ""}`, {}, token);
         setSnapshot(data);
+        setDetail((current) => {
+          if (!current?.vehicle?.id) {
+            return current;
+          }
+          return data.vehicles.some((vehicle) => String(vehicle.id) === String(current.vehicle.id)) ? current : null;
+        });
         setSelectedVehicleId((current) => {
           if (current && data.vehicles.some((vehicle) => vehicle.id === current)) {
             return current;
@@ -130,11 +148,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         setRefreshing(false);
       }
     },
-    [active, token]
+    [token]
   );
 
   useEffect(() => {
-    if (!token || !active) {
+    if (!token || !active || integration !== null) {
       return undefined;
     }
 
@@ -145,7 +163,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         if (ignore) return;
         setIntegration(status);
         if (status.configured) {
-          await loadSnapshot(false);
+          if (!snapshot) {
+            await loadSnapshot(false);
+          } else {
+            setLoading(false);
+          }
         } else {
           setSnapshot(null);
           setLoading(false);
@@ -162,7 +184,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => {
       ignore = true;
     };
-  }, [active, loadSnapshot, token]);
+  }, [active, integration, loadSnapshot, snapshot, token]);
 
   useEffect(() => {
     if (!token || !integration?.configured || !autoRefresh || !active) {
@@ -205,7 +227,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   }, [selectedVehicle, selectedVehicleId]);
 
   useEffect(() => {
-    if (!token || !active || !selectedVehicleId || !integration?.configured) {
+    if (!token || !selectedVehicleId || !integration?.configured) {
+      return undefined;
+    }
+
+    if (detail?.vehicle?.id && String(detail.vehicle.id) === String(selectedVehicleId)) {
       return undefined;
     }
 
@@ -233,7 +259,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => {
       ignore = true;
     };
-  }, [active, integration?.configured, selectedVehicleId, token]);
+  }, [detail?.vehicle?.id, integration?.configured, selectedVehicleId, token]);
 
   if (!token) {
     return <section className="panel motive-panel"><div className="empty-route-card">Sign in to view Motive fleet tracking.</div></section>;
@@ -297,7 +323,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 </div>
                 <small>{snapshot.auth_mode === "x-api-key" ? "x-api-key" : "oauth"}</small>
               </div>
-              <MotiveFleetMap vehicles={filteredVehicles} selectedVehicleId={currentVehicle?.id ?? null} onSelect={setSelectedVehicleId} />
+              <MotiveFleetMap active={active} vehicles={filteredVehicles} selectedVehicleId={currentVehicle?.id ?? null} onSelect={setSelectedVehicleId} />
             </section>
 
             <aside className="motive-detail-panel">

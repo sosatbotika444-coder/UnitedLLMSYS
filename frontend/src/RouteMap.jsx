@@ -58,7 +58,7 @@ function buildPriceLabel(stop) {
 ${autoDiesel}`;
 }
 
-export default function RouteMap({ plan, isFullscreen = false }) {
+export default function RouteMap({ plan, isFullscreen = false, active = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -88,7 +88,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current?.mapLibreMap) {
+    if (!active || !mapRef.current?.mapLibreMap) {
       return undefined;
     }
 
@@ -103,14 +103,14 @@ export default function RouteMap({ plan, isFullscreen = false }) {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  }, [isFullscreen, plan]);
+  }, [active, isFullscreen, plan]);
 
   useEffect(() => {
     if (!containerRef.current || !TOMTOM_KEY) {
       return undefined;
     }
 
-    let active = true;
+    let isMounted = true;
     let mapInstance = null;
 
     const bindMapHandlers = (mapLibreMap) => {
@@ -179,7 +179,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
     };
 
     const renderMap = () => {
-      if (!active || !mapInstance) {
+      if (!isMounted || !mapInstance) {
         return;
       }
 
@@ -417,7 +417,7 @@ export default function RouteMap({ plan, isFullscreen = false }) {
     initializeMap();
 
     return () => {
-      active = false;
+      isMounted = false;
       handlersBoundRef.current = false;
       if (popupRef.current) {
         popupRef.current.remove();

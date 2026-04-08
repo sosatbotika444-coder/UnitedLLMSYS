@@ -42,7 +42,7 @@ function createMarkerElement(vehicle, isSelected) {
   return button;
 }
 
-export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect }) {
+export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, active = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -57,6 +57,21 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect }
       ),
     [vehicles]
   );
+
+  useEffect(() => {
+    if (!active || !mapRef.current?.mapLibreMap) {
+      return undefined;
+    }
+
+    const resizeMap = () => mapRef.current?.mapLibreMap?.resize();
+    const frame = window.requestAnimationFrame(resizeMap);
+    const timeout = window.setTimeout(resizeMap, 180);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!containerRef.current || !TOMTOM_KEY) {
