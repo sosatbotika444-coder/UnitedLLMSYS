@@ -6205,6 +6205,15 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.route-builder-search {
+  grid-column: span 2;
+}
+
+.route-builder-search small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .route-vehicle-summary {
   margin-bottom: 14px;
   padding: 16px;

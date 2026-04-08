@@ -66,6 +66,14 @@ def as_float(value: object) -> float | None:
         return None
 
 
+def first_float(*values: object) -> float | None:
+    for value in values:
+        parsed = as_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def as_bool(value: object) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -744,9 +752,28 @@ class MotiveClient:
             "engine_hours": as_float(location.get("engine_hours")),
             "true_engine_hours": as_float(location.get("true_engine_hours")),
             "battery_voltage": as_float(location.get("battery_voltage")),
-            "fuel_sensor_reading": as_float(location.get("fuel")),
-            "fuel_level_percent": as_float(location.get("fuel_primary_remaining_percentage")),
-            "fuel_secondary_percent": as_float(location.get("fuel_secondary_remaining_percentage")),
+            "fuel_sensor_reading": first_float(
+                location.get("fuel"),
+                location.get("fuel_sensor_reading"),
+                vehicle_context.get("fuel"),
+                vehicle_context.get("fuel_sensor_reading"),
+            ),
+            "fuel_level_percent": first_float(
+                location.get("fuel_primary_remaining_percentage"),
+                location.get("fuel_level_percent"),
+                location.get("fuel_remaining_percentage"),
+                location.get("fuel_percentage"),
+                vehicle_context.get("fuel_primary_remaining_percentage"),
+                vehicle_context.get("fuel_level_percent"),
+                vehicle_context.get("fuel_remaining_percentage"),
+                vehicle_context.get("fuel_percentage"),
+            ),
+            "fuel_secondary_percent": first_float(
+                location.get("fuel_secondary_remaining_percentage"),
+                location.get("fuel_secondary_percent"),
+                vehicle_context.get("fuel_secondary_remaining_percentage"),
+                vehicle_context.get("fuel_secondary_percent"),
+            ),
             "range_remaining": as_float(location.get("veh_range")),
             "hvb_state_of_charge": as_float(location.get("hvb_state_of_charge")),
             "hvb_charge_status": first_text(location.get("hvb_charge_status")),

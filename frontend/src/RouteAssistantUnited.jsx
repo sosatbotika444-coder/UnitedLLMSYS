@@ -124,6 +124,62 @@ function formatPercent(value) {
   return `${parsed.toFixed(1)}%`;
 }
 
+function clampPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function resolveFuelPercent(vehicle) {
+  const location = vehicle?.location || {};
+  return clampPercent(
+    location.fuel_level_percent
+    ?? location.fuel_primary_remaining_percentage
+    ?? location.fuel_remaining_percentage
+    ?? location.fuel_percentage
+    ?? null
+  );
+}
+
+function hasFuelSensor(vehicle) {
+  return Number.isFinite(Number(vehicle?.location?.fuel_sensor_reading));
+}
+
+function fuelOptionText(vehicle) {
+  const fuelPercent = resolveFuelPercent(vehicle);
+  if (fuelPercent !== null) {
+    return `${formatPercent(fuelPercent)} fuel`;
+  }
+  if (hasFuelSensor(vehicle)) {
+    return "Fuel sensor only";
+  }
+  return "Fuel unknown";
+}
+
+function vehicleMatchesSearch(vehicle, term) {
+  if (!term) return true;
+  const haystack = [
+    vehicleLabel(vehicle),
+    vehicleDriverName(vehicle),
+    vehicle?.vin,
+    vehicle?.license_plate_number,
+    vehicle?.make,
+    vehicle?.model,
+    vehicleLocationLabel(vehicle),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(term);
+}
+
+function includeSelectedVehicle(vehicles, selectedVehicle) {
+  if (!selectedVehicle?.id) return vehicles;
+  return vehicles.some((vehicle) => String(vehicle.id) === String(selectedVehicle.id))
+    ? vehicles
+    : [selectedVehicle, ...vehicles];
+}
+
 function vehicleDriver(vehicle) {
   return vehicle?.driver || vehicle?.permanent_driver || null;
 }
@@ -147,19 +203,14 @@ function truckOptionLabel(vehicle) {
   if (driverName && driverName !== "Unassigned") {
     parts.push(driverName);
   }
-  const fuelText = formatPercent(vehicle?.location?.fuel_level_percent);
-  if (fuelText !== "Unknown") {
-    parts.push(`${fuelText} fuel`);
-  }
+  parts.push(fuelOptionText(vehicle));
   return parts.join(" - ");
 }
 
 function driverOptionLabel(vehicle) {
   const driverName = vehicleDriverName(vehicle);
-  if (driverName === "Unassigned") {
-    return `Unassigned - ${vehicleLabel(vehicle)}`;
-  }
-  return `${driverName} - ${vehicleLabel(vehicle)}`;
+  const parts = [driverName === "Unassigned" ? "Unassigned" : driverName, vehicleLabel(vehicle), fuelOptionText(vehicle)];
+  return parts.join(" - ");
 }
 
 function findMatchingLoadRow(vehicle, loadRows) {
@@ -184,19 +235,31 @@ function findMatchingLoadRow(vehicle, loadRows) {
 
 function deriveTruckPreset(vehicle, loadRows) {
   const matchedLoad = findMatchingLoadRow(vehicle, loadRows);
-  const fuelPercentValue = Number(vehicle?.location?.fuel_level_percent);
-  const fuelPercent = Number.isFinite(fuelPercentValue) ? Math.max(0, Math.min(100, fuelPercentValue)) : null;
-  const currentFuelGallons = fuelPercent !== null
-    ? (DEFAULT_TANK_CAPACITY_GALLONS * fuelPercent) / 100
+  const fuelPercent = resolveFuelPercent(vehicle);
+  const matchedLoadFuelPercent = clampPercent(matchedLoad?.fuel_level);
+  const hasSensorOnlyFuel = fuelPercent === null && hasFuelSensor(vehicle);
+  const effectiveFuelPercent = fuelPercent ?? matchedLoadFuelPercent;
+  const currentFuelGallons = effectiveFuelPercent !== null
+    ? (DEFAULT_TANK_CAPACITY_GALLONS * effectiveFuelPercent) / 100
     : DEFAULT_CURRENT_FUEL_GALLONS;
   const matchedMpg = Number(matchedLoad?.mpg);
   const mpg = Number.isFinite(matchedMpg) && matchedMpg > 0 ? matchedMpg : DEFAULT_TRUCK_MPG;
+
+  let fuelSource = `Fallback ${DEFAULT_CURRENT_FUEL_GALLONS} gal preset`;
+  if (fuelPercent !== null) {
+    fuelSource = `${formatPercent(fuelPercent)} from Motive`;
+  } else if (matchedLoadFuelPercent !== null) {
+    fuelSource = `${formatPercent(matchedLoadFuelPercent)} from Loads board (Motive fuel % unavailable)`;
+  } else if (hasSensorOnlyFuel) {
+    fuelSource = `Motive sent fuel sensor only, so Routing kept the safe ${DEFAULT_CURRENT_FUEL_GALLONS} gal fallback`;
+  }
 
   return {
     currentFuelGallons,
     tankCapacityGallons: DEFAULT_TANK_CAPACITY_GALLONS,
     fuelPercent,
-    fuelSource: fuelPercent !== null ? `${formatPercent(fuelPercent)} from Motive` : `Fallback ${DEFAULT_CURRENT_FUEL_GALLONS} gal preset`,
+    hasSensorOnlyFuel,
+    fuelSource,
     mpg,
     mpgSource: Number.isFinite(matchedMpg) && matchedMpg > 0 ? "MPG matched from Loads board" : `Default truck MPG ${DEFAULT_TRUCK_MPG.toFixed(1)}`,
     matchedLoad,
@@ -354,6 +417,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetError, setFleetError] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
   const [cheapStopCount, setCheapStopCount] = useState("3");
@@ -425,16 +489,30 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     return fleetVehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId)) || fleetVehicles[0] || null;
   }, [fleetVehicles, selectedVehicleId]);
 
+  const normalizedVehicleSearch = useMemo(() => normalizeText(vehicleSearch), [vehicleSearch]);
+  const filteredFleetVehicles = useMemo(() => {
+    if (!normalizedVehicleSearch) return fleetVehicles;
+    return fleetVehicles.filter((vehicle) => vehicleMatchesSearch(vehicle, normalizedVehicleSearch));
+  }, [fleetVehicles, normalizedVehicleSearch]);
+  const visibleTruckVehicles = useMemo(
+    () => includeSelectedVehicle(filteredFleetVehicles, selectedVehicle),
+    [filteredFleetVehicles, selectedVehicle]
+  );
+  const visibleDriverVehicles = useMemo(
+    () => includeSelectedVehicle(filteredFleetVehicles.filter((vehicle) => vehicleDriver(vehicle)), selectedVehicle && vehicleDriver(selectedVehicle) ? selectedVehicle : null),
+    [filteredFleetVehicles, selectedVehicle]
+  );
+
   const selectedVehiclePreset = useMemo(() => deriveTruckPreset(selectedVehicle, loadRows), [loadRows, selectedVehicle]);
   const selectedVehicleDriver = useMemo(() => vehicleDriver(selectedVehicle), [selectedVehicle]);
   const selectedVehicleLocation = useMemo(() => vehicleLocationLabel(selectedVehicle), [selectedVehicle]);
   const driverVehicleOptions = useMemo(
-    () => fleetVehicles.filter((vehicle) => vehicleDriver(vehicle)).map((vehicle) => ({
+    () => visibleDriverVehicles.map((vehicle) => ({
       id: String(vehicle.id),
       label: driverOptionLabel(vehicle),
-      meta: vehicleDriver(vehicle)?.email || vehicleDriver(vehicle)?.phone || vehicleLocationLabel(vehicle) || "No driver contact"
+      meta: vehicleDriver(vehicle)?.email || vehicleDriver(vehicle)?.phone || vehicleLocationLabel(vehicle) || fuelOptionText(vehicle)
     })),
-    [fleetVehicles]
+    [visibleDriverVehicles]
   );
 
   useEffect(() => {
@@ -603,11 +681,21 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
       </div>
 
       <div className="route-builder route-builder-expanded route-builder-brand-mode route-builder-smart">
+        <label className="route-builder-search">
+          Search truck or driver
+          <input
+            type="text"
+            value={vehicleSearch}
+            onChange={(event) => setVehicleSearch(event.target.value)}
+            placeholder="Truck, driver, VIN, plate, city"
+          />
+          <small>{filteredFleetVehicles.length} match{filteredFleetVehicles.length === 1 ? "" : "es"}</small>
+        </label>
         <label>
           Truck
-          <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={fleetLoading || !fleetVehicles.length}>
-            {fleetVehicles.length ? (
-              fleetVehicles.map((vehicle) => (
+          <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={fleetLoading || !visibleTruckVehicles.length}>
+            {visibleTruckVehicles.length ? (
+              visibleTruckVehicles.map((vehicle) => (
                 <option key={`truck-${vehicle.id}`} value={vehicle.id}>
                   {truckOptionLabel(vehicle)}
                 </option>
@@ -630,7 +718,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                 ))}
               </>
             ) : (
-              <option value="">No assigned drivers yet</option>
+              <option value="">No assigned drivers match search</option>
             )}
           </select>
         </label>
@@ -696,7 +784,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
 
         <div className="route-vehicle-summary-foot">
           <span>{selectedVehicleLocation ? `Live location: ${selectedVehicleLocation}` : "Live truck location is not available for this unit."}</span>
-          <span>{selectedVehiclePreset.matchedLoad ? "Matched to your Loads board" : "Routing is using Motive live telemetry only"}</span>
+          <span>{selectedVehiclePreset.hasSensorOnlyFuel ? "Motive sent a fuel sensor reading for this truck, but not a usable fuel percentage." : selectedVehiclePreset.matchedLoad ? "Matched to your Loads board" : "Routing is using Motive live telemetry only"}</span>
         </div>
       </div>
 
