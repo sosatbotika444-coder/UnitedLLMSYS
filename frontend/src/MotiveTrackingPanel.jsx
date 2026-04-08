@@ -27,6 +27,39 @@ async function apiRequest(path, options = {}, token = "") {
   return data;
 }
 
+function fileNameFromDisposition(headerValue) {
+  if (!headerValue) return "motive_tracking_export.xlsx";
+  const utf8Match = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+  const basicMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] || "motive_tracking_export.xlsx";
+}
+
+async function downloadFile(path, token = "") {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Download failed");
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileNameFromDisposition(response.headers.get("Content-Disposition"));
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
+}
+
 function metricValue(value) {
   return new Intl.NumberFormat("en-US").format(Number(value) || 0);
 }
@@ -98,6 +131,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [detailError, setDetailError] = useState("");
   const [search, setSearch] = useState("");
@@ -150,6 +184,20 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     },
     [token]
   );
+
+
+  const exportSnapshot = useCallback(async () => {
+    if (!token || !integration?.configured) return;
+    setExporting(true);
+    setError("");
+    try {
+      await downloadFile("/motive/export", token);
+    } catch (downloadError) {
+      setError(downloadError.message);
+    } finally {
+      setExporting(false);
+    }
+  }, [integration?.configured, token]);
 
   useEffect(() => {
     if (!token || !active || integration !== null) {
@@ -282,6 +330,9 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         <div className="motive-panel-actions">
           <button type="button" className="secondary-button" onClick={() => setAutoRefresh((current) => !current)}>
             {autoRefresh ? "Auto refresh on" : "Auto refresh off"}
+          </button>
+          <button type="button" className="secondary-button" onClick={exportSnapshot} disabled={!integration?.configured || loading || exporting}>
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
           <button type="button" className="primary-button" onClick={() => loadSnapshot(true)} disabled={!integration?.configured || refreshing}>
             {refreshing ? "Refreshing..." : "Refresh now"}
