@@ -26,6 +26,13 @@ SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 CORS_ORIGINS=http://localhost:5173,https://your-netlify-site.netlify.app
 TOMTOM_API_KEY=your-tomtom-api-key
+MOTIVE_API_KEY=your-motive-api-key
+MOTIVE_ACCESS_TOKEN=your-motive-oauth-access-token
+MOTIVE_REFRESH_TOKEN=optional-refresh-token
+MOTIVE_CLIENT_ID=optional-oauth-client-id
+MOTIVE_CLIENT_SECRET=optional-oauth-client-secret
+MOTIVE_REDIRECT_URI=optional-oauth-redirect-uri
+MOTIVE_USER_ID=optional-fleet-admin-user-id
 ```
 
 ### Frontend
@@ -35,6 +42,13 @@ Create `frontend/.env` from `frontend/.env.example`.
 ```env
 VITE_API_URL=http://localhost:8000/api
 VITE_TOMTOM_API_KEY=your-tomtom-api-key
+MOTIVE_API_KEY=your-motive-api-key
+MOTIVE_ACCESS_TOKEN=your-motive-oauth-access-token
+MOTIVE_REFRESH_TOKEN=optional-refresh-token
+MOTIVE_CLIENT_ID=optional-oauth-client-id
+MOTIVE_CLIENT_SECRET=optional-oauth-client-secret
+MOTIVE_REDIRECT_URI=optional-oauth-redirect-uri
+MOTIVE_USER_ID=optional-fleet-admin-user-id
 ```
 
 ## Local run
@@ -134,6 +148,8 @@ VITE_TOMTOM_API_KEY=your-tomtom-api-key
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `GET /api/health`
+- `GET /api/motive/status`
+- `GET /api/motive/fleet`
 
 ## Deployment checklist
 

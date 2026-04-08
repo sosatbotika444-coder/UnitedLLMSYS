@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
@@ -208,3 +208,85 @@ class UnitedLaneChatRequest(BaseModel):
 class UnitedLaneChatResponse(BaseModel):
     assistant_name: str = "UnitedLane"
     message: str
+
+class MotiveIntegrationStatus(BaseModel):
+    configured: bool
+    api_base_url: str
+    oauth_base_url: str
+    has_refresh_credentials: bool
+    metric_units: bool
+    time_zone: str
+    fleet_user_id: int | None = None
+
+
+class MotiveCompanySummary(BaseModel):
+    id: int | None = None
+    name: str
+    dot_number: str | None = None
+    time_zone: str | None = None
+    address: str | None = None
+
+
+class MotiveUserSummary(BaseModel):
+    id: int | None = None
+    full_name: str
+    email: str | None = None
+    phone: str | None = None
+    role: str | None = None
+    status: str | None = None
+    duty_status: str | None = None
+    time_zone: str | None = None
+
+
+class MotiveVehicleLocation(BaseModel):
+    lat: float | None = None
+    lon: float | None = None
+    city: str | None = None
+    state: str | None = None
+    address: str | None = None
+    located_at: str | None = None
+    age_minutes: float | None = None
+    speed_kph: float | None = None
+    speed_mph: float | None = None
+    bearing: float | None = None
+    engine_state: str | None = None
+
+
+class MotiveVehicleSummary(BaseModel):
+    id: int | None = None
+    number: str
+    status: str | None = None
+    make: str | None = None
+    model: str | None = None
+    year: str | None = None
+    vin: str | None = None
+    fuel_type: str | None = None
+    driver: MotiveUserSummary | None = None
+    location: MotiveVehicleLocation | None = None
+    is_moving: bool = False
+    is_stale: bool = True
+    location_source: str = "unavailable"
+    vehicle_state: str | None = None
+
+
+class MotiveFleetMetrics(BaseModel):
+    total_vehicles: int = 0
+    located_vehicles: int = 0
+    moving_vehicles: int = 0
+    stopped_vehicles: int = 0
+    online_vehicles: int = 0
+    stale_vehicles: int = 0
+    vehicles_with_driver: int = 0
+    active_drivers: int = 0
+
+
+class MotiveFleetSnapshot(BaseModel):
+    configured: bool
+    fetched_at: str
+    location_source: str
+    company: MotiveCompanySummary | None = None
+    metrics: MotiveFleetMetrics
+    drivers: list[MotiveUserSummary] = Field(default_factory=list)
+    vehicles: list[MotiveVehicleSummary] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+

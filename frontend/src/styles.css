@@ -5743,3 +5743,425 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
     grid-template-columns: 1fr;
   }
 }
+
+.motive-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.motive-panel-head {
+  align-items: center;
+}
+
+.motive-panel-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.motive-setup-card {
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0.02));
+  border: 1px dashed rgba(100, 116, 139, 0.4);
+}
+
+.motive-setup-card strong,
+.motive-detail-list strong,
+.motive-vehicle-row strong,
+.motive-subhead h3 {
+  display: block;
+}
+
+.motive-setup-card p,
+.motive-detail-list small,
+.motive-vehicle-row small,
+.motive-subhead span {
+  color: #64748b;
+}
+
+.motive-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.motive-summary-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.88);
+  display: grid;
+  gap: 6px;
+}
+
+.motive-summary-card span,
+.motive-summary-card small {
+  color: #64748b;
+}
+
+.motive-summary-card strong {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.motive-summary-card.total {
+  background: linear-gradient(135deg, rgba(29, 78, 216, 0.12), rgba(255, 255, 255, 0.95));
+}
+
+.motive-summary-card.moving {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0.95));
+}
+
+.motive-summary-card.live {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(255, 255, 255, 0.95));
+}
+
+.motive-summary-card.drivers {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.12), rgba(255, 255, 255, 0.95));
+}
+
+.motive-warning-list {
+  display: grid;
+  gap: 8px;
+}
+
+.motive-warning-item {
+  margin-bottom: 0;
+}
+
+.motive-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.95fr);
+  gap: 16px;
+}
+
+.motive-map-panel,
+.motive-detail-panel,
+.motive-list-panel {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 20px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.motive-subhead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.motive-subhead h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.motive-subhead small {
+  color: #64748b;
+}
+
+.motive-fleet-map {
+  min-height: 420px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.motive-detail-list {
+  display: grid;
+  gap: 12px;
+}
+
+.motive-detail-list > div {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(241, 245, 249, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.motive-detail-list span {
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.motive-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.motive-status-pill.moving {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.motive-status-pill.stopped {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.motive-status-pill.stale {
+  background: rgba(248, 113, 113, 0.14);
+  color: #b91c1c;
+}
+
+.motive-list-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.motive-list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.motive-search-box {
+  min-width: 260px;
+}
+
+.motive-filter-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.motive-vehicle-list {
+  display: grid;
+  gap: 8px;
+}
+
+.motive-vehicle-list-head,
+.motive-vehicle-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.1fr 0.9fr 0.8fr 1.3fr 0.8fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.motive-vehicle-list-head {
+  padding: 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.motive-vehicle-row {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px;
+  text-align: left;
+}
+
+.motive-vehicle-row.selected {
+  border-color: rgba(29, 78, 216, 0.36);
+  box-shadow: 0 12px 28px rgba(29, 78, 216, 0.12);
+}
+
+.motive-map-marker {
+  min-width: 42px;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 10px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+}
+
+.motive-map-marker-moving {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.motive-map-marker-stopped {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+}
+
+.motive-map-marker-stale {
+  background: linear-gradient(135deg, #dc2626, #f87171);
+}
+
+.motive-map-marker.selected {
+  transform: scale(1.08);
+}
+
+@media (max-width: 1180px) {
+  .motive-summary-grid,
+  .motive-layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .motive-vehicle-list-head {
+    display: none;
+  }
+
+  .motive-vehicle-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.motive-command-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.motive-command-head {
+  align-items: center;
+}
+
+.motive-command-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.motive-command-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.92);
+  display: grid;
+  gap: 6px;
+}
+
+.motive-command-card span,
+.motive-command-card small {
+  color: #64748b;
+}
+
+.motive-command-card strong {
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+
+.motive-command-watchlists,
+.motive-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.motive-watch-card,
+.motive-preview-block,
+.motive-history-panel {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 14px;
+}
+
+.motive-watch-card h3,
+.motive-preview-block h3,
+.motive-history-panel h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.motive-watch-card > div,
+.motive-preview-list > div,
+.motive-history-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.motive-watch-card > div:first-of-type,
+.motive-preview-list > div:first-of-type,
+.motive-history-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.motive-watch-card small,
+.motive-preview-list small,
+.motive-history-row small,
+.motive-history-row span {
+  color: #64748b;
+}
+
+.motive-summary-grid-wide {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.motive-detail-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.motive-detail-card {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  display: grid;
+  gap: 4px;
+}
+
+.motive-detail-card span,
+.motive-detail-card small {
+  color: #64748b;
+}
+
+.motive-subhead.compact {
+  margin-bottom: 10px;
+}
+
+.motive-history-list {
+  display: grid;
+  gap: 0;
+}
+
+.motive-list-panel .compact,
+.motive-watch-card .compact,
+.motive-preview-block .compact,
+.motive-history-panel .compact {
+  min-height: auto;
+}
+
+.motive-vehicle-list-head-wide,
+.motive-vehicle-row-wide {
+  grid-template-columns: 1.3fr 0.8fr 0.7fr 0.8fr 0.9fr 0.8fr;
+}
+
+@media (max-width: 1180px) {
+  .motive-command-metrics,
+  .motive-command-watchlists,
+  .motive-preview-grid,
+  .motive-summary-grid-wide {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .motive-command-metrics,
+  .motive-command-watchlists,
+  .motive-preview-grid,
+  .motive-detail-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .motive-vehicle-row-wide {
+    grid-template-columns: 1fr;
+  }
+}

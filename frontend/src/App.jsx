@@ -3,6 +3,8 @@ import brandAvatar from "../../templates/DPsearchfuel logo with digital globe.pn
 
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
+const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
+const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const UnitedLaneChat = lazy(() => import("./UnitedLaneChat"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
@@ -11,6 +13,7 @@ const THEME_KEY = "dpsearchfuels_theme";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
+  { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
   { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
   { id: "ai", label: "Assistant", detail: "Ask AI", icon: "AI" },
@@ -26,6 +29,11 @@ const workspaceCopy = {
     eyebrow: "Dashboard",
     title: "Simple dispatch workspace",
     subtitle: "See loads, open routing, check services, and use the assistant from one clean screen."
+  },
+  tracking: {
+    eyebrow: "Tracking",
+    title: "Motive live fleet",
+    subtitle: "Watch trucks on the map, inspect vehicle status, and review driver/location updates in one place."
   },
   routing: {
     eyebrow: "Routing",
@@ -550,6 +558,8 @@ export default function App() {
               <MetricCard label="Miles left" value={formatNumber(metrics.totalMilesToEmpty)} detail="All loads" tone="dark" />
             </section>
 
+            <Suspense fallback={<ModuleLoader label="Loading Motive operations cards..." />}><MotiveDashboardCards token={token} active={activeWorkspace === "command"} /></Suspense>
+
             <section className="panel workspace-tool-surface">
               <div className="panel-head">
                 <div>
@@ -559,6 +569,10 @@ export default function App() {
               </div>
               <Suspense fallback={<ModuleLoader label="Loading service catalog..." />}><TomTomSuite token={token} /></Suspense>
             </section>
+          </section>
+
+        <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "tracking"}>
+            <Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active={activeWorkspace === "tracking"} /></Suspense>
           </section>
 
         <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "routing"}>
@@ -831,3 +845,4 @@ export default function App() {
     </main>
   );
 }
+

@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.database import Base, engine
 from app.routes.auth import router as auth_router
 from app.routes.loads import router as loads_router
+from app.routes.motive import router as motive_router
 from app.routes.navigation import router as navigation_router
 
 
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api")
 app.include_router(loads_router, prefix="/api")
 app.include_router(navigation_router, prefix="/api")
+app.include_router(motive_router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)
@@ -43,5 +45,6 @@ def root():
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
 
 
