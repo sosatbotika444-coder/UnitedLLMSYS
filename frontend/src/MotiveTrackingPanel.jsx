@@ -89,6 +89,21 @@ function formatCoordinates(location) {
   return `${Number(location.lat).toFixed(4)}, ${Number(location.lon).toFixed(4)}`;
 }
 
+function hasCoordinates(vehicle) {
+  return (
+    vehicle?.location &&
+    vehicle.location.lat !== null &&
+    vehicle.location.lat !== undefined &&
+    vehicle.location.lon !== null &&
+    vehicle.location.lon !== undefined
+  );
+}
+
+function vehicleLocationTitle(vehicle) {
+  if (!vehicle?.location) return "Location unavailable";
+  return vehicle.location.address || [vehicle.location.city, vehicle.location.state].filter(Boolean).join(", ") || "Location unavailable";
+}
+
 function vehicleTone(vehicle) {
   if (vehicle.is_stale) return "stale";
   if (vehicle.is_moving) return "moving";
@@ -138,6 +153,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [filter, setFilter] = useState("All");
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [mapView, setMapView] = useState("fleet");
 
   useEffect(() => {
     setIntegration(null);
@@ -149,6 +165,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     setError("");
     setDetailError("");
     setSelectedVehicleId(null);
+    setMapView("fleet");
   }, [token]);
 
   const loadSnapshot = useCallback(
@@ -274,6 +291,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     }
   }, [selectedVehicle, selectedVehicleId]);
 
+  const handleVehicleSelect = useCallback((vehicleId) => {
+    setSelectedVehicleId(vehicleId);
+    setMapView("street");
+  }, []);
+
   useEffect(() => {
     if (!token || !selectedVehicleId || !integration?.configured) {
       return undefined;
@@ -315,6 +337,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
   const historyPoints = detail?.history?.points || [];
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
+  const canFocusStreet = hasCoordinates(currentVehicle);
+  const selectedLocationLabel = vehicleLocationTitle(currentVehicle);
 
   return (
     <section className="panel motive-panel">
@@ -370,11 +394,38 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               <div className="motive-subhead">
                 <div>
                   <h3>Fleet map</h3>
-                  <span>{snapshot.metrics.located_vehicles} vehicles with coordinates. Updated {formatTimestamp(snapshot.fetched_at)}.</span>
+                  <span>
+                    {snapshot.metrics.located_vehicles} vehicles with coordinates. Updated {formatTimestamp(snapshot.fetched_at)}.
+                    {mapView === "street" ? " Street focus keeps the selected truck at road level so street names stay readable." : " Select a truck to jump into street focus."}
+                  </span>
                 </div>
                 <small>{snapshot.auth_mode === "x-api-key" ? "x-api-key" : "oauth"}</small>
               </div>
-              <MotiveFleetMap active={active} vehicles={filteredVehicles} selectedVehicleId={currentVehicle?.id ?? null} onSelect={setSelectedVehicleId} />
+              <div className="workspace-inline-tabs motive-map-tabs">
+                <button type="button" className={`workspace-inline-tab ${mapView === "fleet" ? "active" : ""}`.trim()} onClick={() => setMapView("fleet")}>
+                  Fleet overview
+                </button>
+                <button
+                  type="button"
+                  className={`workspace-inline-tab ${mapView === "street" ? "active" : ""}`.trim()}
+                  onClick={() => setMapView("street")}
+                  disabled={!canFocusStreet}
+                >
+                  Street focus
+                </button>
+              </div>
+              <div className="motive-map-location-card">
+                <strong>{currentVehicle?.number || "No truck selected"}</strong>
+                <span>{selectedLocationLabel}</span>
+                <small>{canFocusStreet ? formatCoordinates(currentVehicle.location) : "Select a vehicle with live GPS coordinates to zoom in to street level."}</small>
+              </div>
+              <MotiveFleetMap
+                active={active}
+                vehicles={filteredVehicles}
+                selectedVehicleId={currentVehicle?.id ?? null}
+                onSelect={handleVehicleSelect}
+                viewMode={mapView}
+              />
             </section>
 
             <aside className="motive-detail-panel">
@@ -469,7 +520,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               </div>
               {filteredVehicles.length ? (
                 filteredVehicles.map((vehicle) => (
-                  <button key={`${vehicle.id}-${vehicle.number}`} type="button" className={`motive-vehicle-row motive-vehicle-row-wide ${currentVehicle?.id === vehicle.id ? "selected" : ""}`} onClick={() => setSelectedVehicleId(vehicle.id)}>
+                  <button key={`${vehicle.id}-${vehicle.number}`} type="button" className={`motive-vehicle-row motive-vehicle-row-wide ${currentVehicle?.id === vehicle.id ? "selected" : ""}`} onClick={() => handleVehicleSelect(vehicle.id)}>
                     <span><strong>{vehicle.number}</strong><small>{vehicle.vin || [vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</small></span>
                     <span><strong>{vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(vehicle.location.fuel_level_percent)}%` : "-"}</strong><small>{vehicle.fuel_type || "Fuel n/a"}</small></span>
                     <span><strong>{metricValue(vehicle.fault_summary?.active_count)}</strong><small>{metricValue(vehicle.fault_summary?.count)} total</small></span>
@@ -488,3 +539,4 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     </section>
   );
 }
+

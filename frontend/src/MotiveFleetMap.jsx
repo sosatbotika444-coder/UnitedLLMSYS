@@ -4,6 +4,8 @@ import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
+const STREET_FOCUS_ZOOM = 15;
+const STREET_FOCUS_PITCH = 42;
 
 function markerTone(vehicle) {
   if (vehicle.is_stale) return "stale";
@@ -33,6 +35,16 @@ function markerPopup(vehicle) {
     .join("<br/>");
 }
 
+function hasCoordinates(vehicle) {
+  return (
+    vehicle?.location &&
+    vehicle.location.lat !== null &&
+    vehicle.location.lat !== undefined &&
+    vehicle.location.lon !== null &&
+    vehicle.location.lon !== undefined
+  );
+}
+
 function createMarkerElement(vehicle, isSelected) {
   const button = document.createElement("button");
   button.type = "button";
@@ -42,7 +54,7 @@ function createMarkerElement(vehicle, isSelected) {
   return button;
 }
 
-export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, active = true }) {
+export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, active = true, viewMode = "fleet" }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -50,11 +62,7 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
   const [mapError, setMapError] = useState("");
 
   const plottedVehicles = useMemo(
-    () =>
-      vehicles.filter(
-        (vehicle) =>
-          vehicle.location && vehicle.location.lat !== null && vehicle.location.lat !== undefined && vehicle.location.lon !== null && vehicle.location.lon !== undefined
-      ),
+    () => vehicles.filter((vehicle) => hasCoordinates(vehicle)),
     [vehicles]
   );
 
@@ -81,6 +89,8 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
     try {
       TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
       mapRef.current = new TomTomMap({
+        style: "drivingLight",
+        language: "en-US",
         mapLibre: {
           container: containerRef.current,
           center: [-96, 39],
@@ -116,6 +126,21 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
       return;
     }
 
+    const selectedVehicle = plottedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null;
+
+    const showVehiclePopup = (vehicle) => {
+      if (!hasCoordinates(vehicle)) {
+        return;
+      }
+      if (popupRef.current) {
+        popupRef.current.remove();
+      }
+      popupRef.current = new maplibregl.Popup({ offset: 16 })
+        .setLngLat([vehicle.location.lon, vehicle.location.lat])
+        .setHTML(markerPopup(vehicle))
+        .addTo(mapLibreMap);
+    };
+
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     if (popupRef.current) {
@@ -133,13 +158,7 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
       const element = createMarkerElement(vehicle, isSelected);
       element.addEventListener("click", () => {
         onSelect?.(vehicle.id);
-        if (popupRef.current) {
-          popupRef.current.remove();
-        }
-        popupRef.current = new maplibregl.Popup({ offset: 16 })
-          .setLngLat([vehicle.location.lon, vehicle.location.lat])
-          .setHTML(markerPopup(vehicle))
-          .addTo(mapLibreMap);
+        showVehiclePopup(vehicle);
       });
 
       const marker = new maplibregl.Marker({ element })
@@ -149,10 +168,22 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
       bounds.extend([vehicle.location.lon, vehicle.location.lat]);
     });
 
-    if (!bounds.isEmpty()) {
-      mapLibreMap.fitBounds(bounds, { padding: 50, maxZoom: 10, duration: 500 });
+    if (viewMode === "street" && selectedVehicle) {
+      showVehiclePopup(selectedVehicle);
+      mapLibreMap.easeTo({
+        center: [selectedVehicle.location.lon, selectedVehicle.location.lat],
+        zoom: STREET_FOCUS_ZOOM,
+        pitch: STREET_FOCUS_PITCH,
+        bearing: selectedVehicle.location?.bearing ?? 0,
+        duration: 700,
+      });
+      return;
     }
-  }, [plottedVehicles, selectedVehicleId, onSelect]);
+
+    if (!bounds.isEmpty()) {
+      mapLibreMap.fitBounds(bounds, { padding: 50, maxZoom: 10, duration: 500, bearing: 0, pitch: 0 });
+    }
+  }, [onSelect, plottedVehicles, selectedVehicleId, viewMode]);
 
   if (mapError) {
     return <div className="empty-route-card">Fleet map failed: {mapError}</div>;
@@ -164,4 +195,3 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
 
   return <div ref={containerRef} className="motive-fleet-map" />;
 }
-

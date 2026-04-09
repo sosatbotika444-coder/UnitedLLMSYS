@@ -421,6 +421,8 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
 
         mapInstance = new TomTomMap({
+          style: "drivingLight",
+          language: "en-US",
           mapLibre: {
             container: containerRef.current,
             center: [plan.origin.lon, plan.origin.lat],
@@ -464,3 +466,4 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
 
   return <div ref={containerRef} className="live-route-map" />;
 }
+
