@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     tomtom_api_key: str = ""
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-oss-120b:free"
+    openrouter_chat_model: str = "openrouter/free"
     openrouter_app_name: str = "UnitedLLMSYS"
     openrouter_app_url: str = "http://localhost:8000"
     motive_api_base_url: str = "https://api.gomotive.com"

@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import re
 from textwrap import dedent
 
 try:
@@ -12,10 +13,13 @@ from app.config import get_settings
 settings = get_settings()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = settings.openrouter_model
+DEFAULT_CHAT_MODEL = settings.openrouter_chat_model
 DEFAULT_APP_NAME = settings.openrouter_app_name
 DEFAULT_APP_URL = settings.openrouter_app_url
 DEFAULT_OPENROUTER_API_KEY = settings.openrouter_api_key
 UNITEDLANE_IDENTITY = "UnitedLane"
+CHAT_IMAGE_DATA_URL_PATTERN = re.compile(r"^data:(image/(?:png|jpeg|webp|gif));base64,[A-Za-z0-9+/=\s]+$")
+CHAT_IMAGE_MAX_DATA_URL_LENGTH = 8_000_000
 
 STATION_PRICE_SYSTEM_PROMPT = """You are a US fuel price lookup assistant.
 
@@ -355,9 +359,10 @@ Identity rules:
 
 Capability rules:
 1. You can help with routing, fuel planning, dispatch, trucking operations, load coordination, station analysis, driver communication, customer-facing writing, business productivity, and general day-to-day questions.
-2. When the user asks about routes, stations, pricing, dispatch, or trucking, prioritize practical transportation guidance first.
-3. When the user asks broader questions, answer helpfully in a professional UnitedLane tone instead of refusing.
-4. If a request is high-risk or specialized, give cautious general guidance and suggest consulting the appropriate licensed professional when needed.
+2. You can analyze attached images such as route screenshots, station photos, dispatch screenshots, bills, dashboards, and documents when an image is provided.
+3. When the user asks about routes, stations, pricing, dispatch, or trucking, prioritize practical transportation guidance first.
+4. When the user asks broader questions, answer helpfully in a professional UnitedLane tone instead of refusing.
+5. If a request is high-risk or specialized, give cautious general guidance and suggest consulting the appropriate licensed professional when needed.
 
 Style rules:
 1. Keep answers clear, useful, and commercially polished.
@@ -367,32 +372,94 @@ Style rules:
 """
 
 
-def build_unitedlane_chat_messages(message: str, context: str = "") -> list[dict[str, str]]:
+def normalize_chat_image_data_url(image_data_url: str = "") -> str:
+    normalized = (image_data_url or "").strip()
+    if not normalized:
+        return ""
+    if len(normalized) > CHAT_IMAGE_MAX_DATA_URL_LENGTH:
+        raise ValueError("Attached image is too large. Please upload a smaller PNG, JPEG, WEBP, or GIF image.")
+    if not CHAT_IMAGE_DATA_URL_PATTERN.match(normalized):
+        raise ValueError("Attached image must be a PNG, JPEG, WEBP, or GIF file encoded as a data URL.")
+    return normalized
+
+
+def build_unitedlane_chat_user_text(message: str, context: str = "", image_name: str = "") -> str:
     user_message = message.strip()
+    if not user_message:
+        user_message = "Please analyze the attached image in a practical UnitedLane style."
+
+    parts: list[str] = []
     if context.strip():
-        user_message = f"Context from the United Lane website:\n{context.strip()}\n\nUser question:\n{user_message}"
+        parts.append(f"Context from the United Lane website:\n{context.strip()}")
+    if image_name.strip():
+        parts.append(f"Attached image filename: {image_name.strip()}")
+    parts.append(f"User question:\n{user_message}")
+    return "\n\n".join(parts) if len(parts) > 1 else user_message
+
+
+def build_unitedlane_chat_messages(message: str, context: str = "", image_data_url: str = "", image_name: str = "") -> list[dict[str, object]]:
+    user_text = build_unitedlane_chat_user_text(message=message, context=context, image_name=image_name)
+    normalized_image_data_url = normalize_chat_image_data_url(image_data_url)
+
+    if normalized_image_data_url:
+        user_content = [
+            {"type": "text", "text": user_text},
+            {"type": "image_url", "image_url": {"url": normalized_image_data_url}},
+        ]
+    else:
+        user_content = user_text
+
     return [
         {"role": "system", "content": UNITEDLANE_CHAT_SYSTEM_PROMPT},
-        {"role": "user", "content": user_message},
+        {"role": "user", "content": user_content},
     ]
 
 
-def generate_unitedlane_chat_reply(message: str, context: str = "", model: str = DEFAULT_MODEL, api_key: str | None = None) -> str:
+def coerce_openrouter_message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text_value = item.get("text")
+                if isinstance(text_value, str) and text_value.strip():
+                    parts.append(text_value.strip())
+        return "\n\n".join(parts).strip()
+    return ""
+
+
+def generate_unitedlane_chat_reply(
+    message: str,
+    context: str = "",
+    image_data_url: str = "",
+    image_name: str = "",
+    model: str = DEFAULT_CHAT_MODEL,
+    api_key: str | None = None,
+) -> str:
     fallback = (
         "I am UnitedLane Assistant for the United Lane platform. I can help with routing, fuel planning, dispatch, operations communication, "
         "and general day-to-day questions in a practical UnitedLane style."
     )
+    normalized_image_data_url = normalize_chat_image_data_url(image_data_url)
     try:
         client = get_openrouter_client(api_key=api_key)
         response = client.chat.completions.create(
             model=model,
-            messages=build_unitedlane_chat_messages(message=message, context=context),
+            messages=build_unitedlane_chat_messages(
+                message=message,
+                context=context,
+                image_data_url=normalized_image_data_url,
+                image_name=image_name,
+            ),
             extra_headers={
                 "HTTP-Referer": DEFAULT_APP_URL,
                 "X-Title": DEFAULT_APP_NAME,
             },
         )
-        content = response.choices[0].message.content or ""
+        content = coerce_openrouter_message_text(response.choices[0].message.content)
         return content.strip() or fallback
+    except ValueError:
+        raise
     except Exception:
         return fallback

@@ -222,6 +222,8 @@ class TomTomCapabilityCatalog(BaseModel):
 class UnitedLaneChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     context: str = Field(default="", max_length=4000)
+    image_name: str = Field(default="", max_length=255)
+    image_data_url: str = Field(default="", max_length=8_000_000)
 
 
 class UnitedLaneChatResponse(BaseModel):

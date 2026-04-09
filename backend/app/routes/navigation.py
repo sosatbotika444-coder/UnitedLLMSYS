@@ -1500,5 +1500,13 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
 
 @router.post("/assistant-chat", response_model=UnitedLaneChatResponse)
 def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(get_current_user)):
-    reply = generate_unitedlane_chat_reply(message=payload.message, context=payload.context)
+    try:
+        reply = generate_unitedlane_chat_reply(
+            message=payload.message,
+            context=payload.context,
+            image_data_url=payload.image_data_url,
+            image_name=payload.image_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return UnitedLaneChatResponse(assistant_name=UNITEDLANE_IDENTITY, message=reply)
