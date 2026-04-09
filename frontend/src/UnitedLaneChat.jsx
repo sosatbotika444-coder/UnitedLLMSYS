@@ -161,7 +161,7 @@ export default function UnitedLaneChat({ token, user }) {
         </div>
         <div className="unitedlane-ai-status">
           <span>{sending ? "Thinking" : "Online"}</span>
-          <strong>{sending ? "Preparing multimodal response" : "OpenRouter free multimodal assistant available"}</strong>
+          <strong>{sending ? "Preparing assistant response" : "OpenRouter multimodal assistant available"}</strong>
         </div>
       </div>
 

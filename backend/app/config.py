@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     tomtom_api_key: str = ""
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-oss-120b:free"
-    openrouter_chat_model: str = "openrouter/free"
-    openrouter_chat_image_models: str = "nvidia/nemotron-nano-12b-v2-vl:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,google/gemma-3-27b-it:free,google/gemma-3-12b-it:free,openrouter/free"
+    openrouter_chat_model: str = "openai/gpt-4.1-mini"
+    openrouter_chat_max_output_tokens: int = 300
     openrouter_app_name: str = "UnitedLLMSYS"
     openrouter_app_url: str = "http://localhost:8000"
     motive_api_base_url: str = "https://api.gomotive.com"
