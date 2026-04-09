@@ -284,6 +284,7 @@ export default function App() {
 
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
   const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id];
+  const activeSiteNav = sitePanel || (!user || activeWorkspace === "command" ? "home" : "");
   const loadStatusTabs = ["All", ...statusOptions];
 
   function updateLocalRow(id, field, value) {
@@ -420,6 +421,7 @@ export default function App() {
           onHome={handleHomeNavigation}
           onAbout={() => openSitePanel("about")}
           onPrivacy={() => openSitePanel("privacy")}
+          activeItem={activeSiteNav}
         />
 
         <main className="auth-shell site-auth-shell">
@@ -532,6 +534,7 @@ export default function App() {
         onHome={handleHomeNavigation}
         onAbout={() => openSitePanel("about")}
         onPrivacy={() => openSitePanel("privacy")}
+        activeItem={activeSiteNav}
       />
 
       <main className="workspace-app-shell site-workspace-shell">
