@@ -14,6 +14,13 @@ const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_CURRENT_FUEL_GALLONS = 100;
 const DEFAULT_TRUCK_MPG = 6.0;
 const LOCATION_SUGGESTION_LIMIT = 6;
+const DEFAULT_API_TIMEOUT_MS = 20000;
+const ROUTE_REQUEST_TIMEOUT_MS = 120000;
+const ROUTE_PROGRESS_STEPS = [
+  { afterSeconds: 0, label: "Tracing the route corridor and matching Love's / Pilot locations..." },
+  { afterSeconds: 12, label: "Refreshing live network prices from official sources..." },
+  { afterSeconds: 28, label: "Finishing detour checks and ranking the best stops..." }
+];
 
 function formatDistance(meters) {
   if (!meters) return "0 mi";
@@ -276,19 +283,38 @@ function deriveTruckPreset(vehicle, loadRows) {
 
 
 async function apiRequest(path, options = {}, token = "") {
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
   const headers = {
     "Content-Type": "application/json",
-    ...(options.headers || {})
+    ...(fetchOptions.headers || {})
   };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: fetchOptions.signal || controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutSeconds = Math.round(timeoutMs / 1000);
+      if (path === "/navigation/route-assistant") {
+        throw new Error(`Route build timed out after ${timeoutSeconds}s. The backend did not finish checking live prices in time.`);
+      }
+      throw new Error(`Request timed out after ${timeoutSeconds}s.`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (response.status === 204) {
     return null;
@@ -421,6 +447,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   const [routePlan, setRoutePlan] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [routeLoadingSeconds, setRouteLoadingSeconds] = useState(0);
   const [fleetSnapshot, setFleetSnapshot] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetError, setFleetError] = useState("");
@@ -450,6 +477,24 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     if (locationFieldFocus === "destination") return routeForm.destination.trim();
     return "";
   }, [locationFieldFocus, routeForm.destination, routeForm.origin]);
+
+  useEffect(() => {
+    if (!routeLoading) {
+      setRouteLoadingSeconds(0);
+      return undefined;
+    }
+
+    setRouteLoadingSeconds(0);
+    const timerId = window.setInterval(() => {
+      setRouteLoadingSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [routeLoading]);
+
+  const routeLoadingMessage = ROUTE_PROGRESS_STEPS.reduce((message, step) => (
+    routeLoadingSeconds >= step.afterSeconds ? step.label : message
+  ), ROUTE_PROGRESS_STEPS[0].label);
 
   function setSuggestionsForField(field, suggestions) {
     setLocationSuggestions((current) => ({ ...current, [field]: suggestions }));
@@ -812,7 +857,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
         amenities: [],
         affiliations: []
       };
-      const data = await apiRequest("/navigation/route-assistant", { method: "POST", body: JSON.stringify(payload) }, token);
+      const data = await apiRequest("/navigation/route-assistant", { method: "POST", body: JSON.stringify(payload), timeoutMs: ROUTE_REQUEST_TIMEOUT_MS }, token);
       setRoutePlan(data);
       setActiveFilters(nextFilters);
     } catch (plannerError) {
@@ -917,7 +962,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
           </select>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading || !routeForm.origin.trim() || !routeForm.destination.trim()}>
-          {routeLoading ? "Building route..." : "Build route"}
+          {routeLoading ? `Building route... ${routeLoadingSeconds}s` : "Build route"}
         </button>
       </div>
 
@@ -967,6 +1012,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
       </div>
 
       {fleetError ? <div className="notice error inline-notice">{fleetError}</div> : null}
+      {routeLoading ? <div className="notice info inline-notice" aria-live="polite">{routeLoadingMessage}</div> : null}
       {routeError ? <div className="notice error inline-notice">{routeError}</div> : null}
 
       {routePlan ? (

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RouteMap from "./RouteMap";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
@@ -21,6 +21,13 @@ const defaultFilters = {
   max_off_route: "50",
   ui_sort: "best"
 };
+const DEFAULT_API_TIMEOUT_MS = 20000;
+const ROUTE_REQUEST_TIMEOUT_MS = 120000;
+const ROUTE_PROGRESS_STEPS = [
+  { afterSeconds: 0, label: "Tracing the route corridor and matching Love's / Pilot locations..." },
+  { afterSeconds: 12, label: "Refreshing live network prices from official sources..." },
+  { afterSeconds: 28, label: "Finishing detour checks and ranking the best stops..." }
+];
 
 function formatDistance(meters) {
   if (!meters) return "0 mi";
@@ -49,19 +56,38 @@ function getAutoDieselPrice(stop) {
 }
 
 async function apiRequest(path, options = {}, token = "") {
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
   const headers = {
     "Content-Type": "application/json",
-    ...(options.headers || {})
+    ...(fetchOptions.headers || {})
   };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: fetchOptions.signal || controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutSeconds = Math.round(timeoutMs / 1000);
+      if (path === "/navigation/route-assistant") {
+        throw new Error(`Route build timed out after ${timeoutSeconds}s. The backend did not finish checking live prices in time.`);
+      }
+      throw new Error(`Request timed out after ${timeoutSeconds}s.`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (response.status === 204) {
     return null;
@@ -169,8 +195,27 @@ export default function RouteAssistant({ token }) {
   const [routePlan, setRoutePlan] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [routeLoadingSeconds, setRouteLoadingSeconds] = useState(0);
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
+
+  useEffect(() => {
+    if (!routeLoading) {
+      setRouteLoadingSeconds(0);
+      return undefined;
+    }
+
+    setRouteLoadingSeconds(0);
+    const timerId = window.setInterval(() => {
+      setRouteLoadingSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [routeLoading]);
+
+  const routeLoadingMessage = ROUTE_PROGRESS_STEPS.reduce((message, step) => (
+    routeLoadingSeconds >= step.afterSeconds ? step.label : message
+  ), ROUTE_PROGRESS_STEPS[0].label);
 
   const visibleStops = useMemo(() => {
     if (!routePlan) return [];
@@ -203,7 +248,7 @@ export default function RouteAssistant({ token }) {
         amenities: [],
         affiliations: []
       };
-      const data = await apiRequest("/navigation/route-assistant", { method: "POST", body: JSON.stringify(payload) }, token);
+      const data = await apiRequest("/navigation/route-assistant", { method: "POST", body: JSON.stringify(payload), timeoutMs: ROUTE_REQUEST_TIMEOUT_MS }, token);
       setRoutePlan(data);
       setActiveFilters(nextFilters);
     } catch (plannerError) {
@@ -254,10 +299,11 @@ export default function RouteAssistant({ token }) {
           </select>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
-          {routeLoading ? "Scanning networks..." : "Scan Networks"}
+          {routeLoading ? `Scanning networks... ${routeLoadingSeconds}s` : "Scan Networks"}
         </button>
       </div>
 
+      {routeLoading ? <div className="notice info inline-notice" aria-live="polite">{routeLoadingMessage}</div> : null}
       {routeError ? <div className="notice error inline-notice">{routeError}</div> : null}
 
       {routePlan ? (
