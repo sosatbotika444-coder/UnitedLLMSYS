@@ -68,6 +68,7 @@ class RouteAssistantRequest(BaseModel):
     allow_missing_cost: bool = True
     allow_unattended: bool = False
     sort_by: str = Field(default="distance", max_length=32)
+    price_target: float | None = Field(default=None, gt=0)
     start_range: str = Field(default="", max_length=8)
     full_range: str = Field(default="", max_length=8)
     amenities: list[str] = []
@@ -178,6 +179,10 @@ class FuelStrategy(BaseModel):
     decision_score: float = 0
     stop_count: int = 0
     max_stop_count: int = 3
+    price_target: float | None = None
+    price_target_breach_count: int = 0
+    price_target_total_overage: float = 0
+    price_target_max_overage: float = 0
     stops: list[FuelStrategyStop] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     map_link: str | None = None

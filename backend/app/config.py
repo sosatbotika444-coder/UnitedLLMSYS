@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     motive_user_id: int | None = None
     motive_snapshot_ttl_seconds: int = 45
     motive_vehicle_history_days: int = 2
+    live_price_background_refresh_enabled: bool = True
+    live_price_cache_ttl_seconds: int = 900
+    live_price_cache_stale_ttl_seconds: int = 43200
+    live_price_cache_persist_seconds: int = 5
+    live_price_queue_workers: int = 4
+    live_price_queue_max_size: int = 2048
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), env_file_encoding="utf-8-sig", extra="ignore")
 

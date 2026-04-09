@@ -4,11 +4,14 @@ import json
 import math
 import re
 import ssl
+import threading
+import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
+from queue import Empty, Full, Queue
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -40,6 +43,28 @@ LIVE_PRICE_REFRESH_WORKERS = 12
 ROUTE_REFINE_WORKERS = 8
 EARTH_RADIUS_M = 6371000.0
 CATALOG_PATH = Path(__file__).resolve().parent / "data" / "official_station_catalog.json"
+LIVE_PRICE_CACHE_VERSION = 1
+LIVE_PRICE_CACHE_PATH = Path(__file__).resolve().parent / "data" / "live_price_cache.json"
+LIVE_PRICE_CACHE_LOCK = threading.Lock()
+LIVE_PRICE_CACHE: dict[str, dict] = {}
+LIVE_PRICE_CACHE_LOADED = False
+LIVE_PRICE_CACHE_DIRTY = False
+LIVE_PRICE_CACHE_LAST_PERSIST = 0.0
+LIVE_PRICE_TASK_QUEUE: Queue[tuple[str, dict] | None] = Queue(maxsize=max(256, settings.live_price_queue_max_size))
+LIVE_PRICE_INFLIGHT: set[str] = set()
+LIVE_PRICE_INFLIGHT_LOCK = threading.Lock()
+LIVE_PRICE_RUNTIME_LOCK = threading.Lock()
+LIVE_PRICE_WORKER_STOP = threading.Event()
+LIVE_PRICE_WORKERS: list[threading.Thread] = []
+LIVE_PRICE_RUNTIME = {
+    "started": False,
+    "enqueued": 0,
+    "processed": 0,
+    "errors": 0,
+    "dropped": 0,
+    "last_success_at": None,
+    "last_error_at": None,
+}
 ShortlistedOfficialStation = tuple[FuelStop, dict, int]
 
 def safe_http_request(url: str, headers: dict | None = None) -> str | None:
@@ -645,23 +670,104 @@ def clone_record_as_stop(record: dict, fuel_type: str, off_route_m: float, origi
 
 
 
-def refresh_live_prices(stop: FuelStop, record: dict, fuel_type: str):
+def fetch_live_loves_record(url: str) -> dict | None:
+    html = safe_http_request(url)
+    if not html:
+        return None
+
+    next_data = extract_next_data(html)
+    page_props = ((next_data.get("props") or {}).get("pageProps") or {})
+    location_data = page_props.get("locationData") or {}
+    prices = parse_loves_prices(location_data.get("fuelPrices") or [])
+    diesel_time_match = re.search(r'"productName":"DIESEL".*?"lastCheckInDateTime":"([^"]+)"', html, re.S)
+    if not diesel_time_match:
+        diesel_time_match = re.search(r'"productName":"DIESEL".*?"lastPriceChangeDateTime":"([^"]+)"', html, re.S)
+
+    fuel_types = unique_strings([
+        str(item.get("fuelType") or item.get("displayName") or "")
+        for item in (location_data.get("fuelPrices") or [])
+    ])
+
+    return {
+        "diesel_price": prices.get("diesel_price"),
+        "auto_diesel_price": prices.get("auto_diesel_price"),
+        "unleaded_price": prices.get("unleaded_price"),
+        "fuel_types": fuel_types,
+        "price_date": diesel_time_match.group(1) if diesel_time_match else None,
+        "price_source": "Love's official site",
+    }
+
+
+def fetch_live_pilot_prices(site_id: str) -> dict[str, float | None]:
+    request_url = f"{PILOT_FUEL_API_ROOT}/{site_id}/fuelPrices"
+    proxy_url = f"{PILOT_LAMBDA_PROXY_URL}?{urlencode({'requestUrl': request_url})}"
+    try:
+        data = http_json(proxy_url)
+    except Exception:
+        return {
+            "diesel_price": None,
+            "auto_diesel_price": None,
+            "unleaded_price": None,
+            "fuel_types": [],
+        }
+
+    price_by_label: dict[str, float] = {}
+    for item in data if isinstance(data, list) else []:
+        description = str(item.get("description") or "").strip()
+        price = item.get("price")
+        if description and price is not None:
+            price_by_label[description] = float(price)
+
+    diesel_price = None
+    for label in ["Diesel #2", "Diesel #1", "Marked Diesel", "Dyed Diesel #2"]:
+        if label in price_by_label:
+            diesel_price = price_by_label[label]
+            break
+
+    auto_diesel_price = price_by_label.get("Auto Diesel")
+    unleaded_price = price_by_label.get("Unleaded")
+    fuel_types = unique_strings(list(price_by_label.keys()))
+    return {
+        "diesel_price": diesel_price,
+        "auto_diesel_price": auto_diesel_price,
+        "unleaded_price": unleaded_price,
+        "fuel_types": fuel_types,
+    }
+
+
+def build_live_price_payload(record: dict) -> dict | None:
     brand = record.get("brand")
     if brand == "Pilot Flying J" and record.get("site_id"):
-        live_prices = parse_pilot_prices(str(record.get("site_id")))
-        stop.diesel_price = live_prices.get("diesel_price")
-        stop.auto_diesel_price = live_prices.get("auto_diesel_price")
-        stop.unleaded_price = live_prices.get("unleaded_price")
-        stop.fuel_types = unique_strings(list(stop.fuel_types) + list(live_prices.get("fuel_types") or []))
-        stop.price_source = "Pilot official fuel API"
-    elif brand == "Love's" and record.get("source_url"):
-        live_record = parse_loves_page(str(record.get("source_url")))
+        live_prices = fetch_live_pilot_prices(str(record.get("site_id")))
+        return {
+            "diesel_price": live_prices.get("diesel_price"),
+            "auto_diesel_price": live_prices.get("auto_diesel_price"),
+            "unleaded_price": live_prices.get("unleaded_price"),
+            "fuel_types": list(live_prices.get("fuel_types") or []),
+            "price_source": "Pilot official fuel API",
+            "price_date": None,
+        }
+    if brand == "Love's" and record.get("source_url"):
+        live_record = fetch_live_loves_record(str(record.get("source_url")))
         if live_record:
-            stop.diesel_price = to_float(live_record.get("diesel_price"))
-            stop.auto_diesel_price = to_float(live_record.get("auto_diesel_price"))
-            stop.unleaded_price = to_float(live_record.get("unleaded_price"))
-            stop.price_date = str(live_record.get("price_date") or "") or stop.price_date
-            stop.price_source = str(live_record.get("price_source") or stop.price_source or "Love's official site")
+            return {
+                "diesel_price": to_float(live_record.get("diesel_price")),
+                "auto_diesel_price": to_float(live_record.get("auto_diesel_price")),
+                "unleaded_price": to_float(live_record.get("unleaded_price")),
+                "fuel_types": list(live_record.get("fuel_types") or []),
+                "price_source": str(live_record.get("price_source") or "Love's official site"),
+                "price_date": str(live_record.get("price_date") or "") or None,
+            }
+    return None
+
+
+def apply_live_price_payload(stop: FuelStop, payload: dict, fuel_type: str):
+    stop.diesel_price = to_float(payload.get("diesel_price"))
+    stop.auto_diesel_price = to_float(payload.get("auto_diesel_price"))
+    stop.unleaded_price = to_float(payload.get("unleaded_price"))
+    stop.fuel_types = unique_strings(list(stop.fuel_types or []) + list(payload.get("fuel_types") or []))
+    stop.price_source = str(payload.get("price_source") or stop.price_source or "Official network page")
+    stop.price_date = str(payload.get("price_date") or "") or stop.price_date
     stop.price = choose_fuel_price(
         {
             "diesel": stop.diesel_price,
@@ -671,6 +777,227 @@ def refresh_live_prices(stop: FuelStop, record: dict, fuel_type: str):
         fuel_type,
     )
 
+
+def _load_live_price_cache_locked():
+    global LIVE_PRICE_CACHE, LIVE_PRICE_CACHE_LOADED
+    if LIVE_PRICE_CACHE_LOADED:
+        return
+    LIVE_PRICE_CACHE = {}
+    if LIVE_PRICE_CACHE_PATH.exists():
+        try:
+            payload = json.loads(LIVE_PRICE_CACHE_PATH.read_text(encoding="utf-8"))
+            if payload.get("version") == LIVE_PRICE_CACHE_VERSION and isinstance(payload.get("entries"), dict):
+                LIVE_PRICE_CACHE = payload.get("entries") or {}
+        except Exception:
+            LIVE_PRICE_CACHE = {}
+    LIVE_PRICE_CACHE_LOADED = True
+
+
+def _purge_expired_live_price_entries_locked(now_ts: float | None = None):
+    now_ts = now_ts or time.time()
+    expired_keys = [key for key, entry in LIVE_PRICE_CACHE.items() if float(entry.get("stale_until_ts") or 0.0) <= now_ts]
+    for key in expired_keys:
+        LIVE_PRICE_CACHE.pop(key, None)
+
+
+def persist_live_price_cache(force: bool = False):
+    global LIVE_PRICE_CACHE_DIRTY, LIVE_PRICE_CACHE_LAST_PERSIST
+    with LIVE_PRICE_CACHE_LOCK:
+        _load_live_price_cache_locked()
+        _purge_expired_live_price_entries_locked()
+        if not LIVE_PRICE_CACHE_DIRTY:
+            return
+        interval = max(1, settings.live_price_cache_persist_seconds)
+        if not force and (time.monotonic() - LIVE_PRICE_CACHE_LAST_PERSIST) < interval:
+            return
+        LIVE_PRICE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": LIVE_PRICE_CACHE_VERSION,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "entries": LIVE_PRICE_CACHE,
+        }
+        tmp_path = LIVE_PRICE_CACHE_PATH.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp_path.replace(LIVE_PRICE_CACHE_PATH)
+        LIVE_PRICE_CACHE_DIRTY = False
+        LIVE_PRICE_CACHE_LAST_PERSIST = time.monotonic()
+
+
+def store_live_price_cache_entry(task_key: str, payload: dict):
+    global LIVE_PRICE_CACHE_DIRTY
+    now_ts = time.time()
+    entry = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "fresh_until_ts": now_ts + max(60, settings.live_price_cache_ttl_seconds),
+        "stale_until_ts": now_ts + max(max(60, settings.live_price_cache_ttl_seconds), settings.live_price_cache_stale_ttl_seconds),
+        "diesel_price": to_float(payload.get("diesel_price")),
+        "auto_diesel_price": to_float(payload.get("auto_diesel_price")),
+        "unleaded_price": to_float(payload.get("unleaded_price")),
+        "fuel_types": list(payload.get("fuel_types") or []),
+        "price_source": str(payload.get("price_source") or "Official network page"),
+        "price_date": str(payload.get("price_date") or "") or None,
+    }
+    with LIVE_PRICE_CACHE_LOCK:
+        _load_live_price_cache_locked()
+        LIVE_PRICE_CACHE[task_key] = entry
+        _purge_expired_live_price_entries_locked(now_ts)
+        LIVE_PRICE_CACHE_DIRTY = True
+    persist_live_price_cache()
+
+
+def get_live_price_cache_entry(task_key: str) -> dict | None:
+    with LIVE_PRICE_CACHE_LOCK:
+        _load_live_price_cache_locked()
+        _purge_expired_live_price_entries_locked()
+        entry = LIVE_PRICE_CACHE.get(task_key)
+        return dict(entry) if entry else None
+
+
+def is_live_price_entry_fresh(entry: dict | None, now_ts: float | None = None) -> bool:
+    if not entry:
+        return False
+    now_ts = now_ts or time.time()
+    return float(entry.get("fresh_until_ts") or 0.0) > now_ts
+
+
+def is_live_price_entry_usable(entry: dict | None, now_ts: float | None = None) -> bool:
+    if not entry:
+        return False
+    now_ts = now_ts or time.time()
+    return float(entry.get("stale_until_ts") or 0.0) > now_ts
+
+
+def apply_cached_live_price_entry(stop: FuelStop, entry: dict, fuel_type: str):
+    apply_live_price_payload(stop, entry, fuel_type)
+
+
+def _update_live_price_runtime(**changes):
+    with LIVE_PRICE_RUNTIME_LOCK:
+        for key, value in changes.items():
+            LIVE_PRICE_RUNTIME[key] = value
+
+
+def _increment_live_price_runtime(key: str, amount: int = 1):
+    with LIVE_PRICE_RUNTIME_LOCK:
+        LIVE_PRICE_RUNTIME[key] = int(LIVE_PRICE_RUNTIME.get(key) or 0) + amount
+
+
+def live_price_runtime_status() -> dict:
+    with LIVE_PRICE_CACHE_LOCK:
+        _load_live_price_cache_locked()
+        _purge_expired_live_price_entries_locked()
+        cache_entries = len(LIVE_PRICE_CACHE)
+    with LIVE_PRICE_RUNTIME_LOCK:
+        runtime = dict(LIVE_PRICE_RUNTIME)
+    return {
+        **runtime,
+        "enabled": bool(settings.live_price_background_refresh_enabled),
+        "workers": len(LIVE_PRICE_WORKERS),
+        "queue_size": LIVE_PRICE_TASK_QUEUE.qsize(),
+        "cache_entries": cache_entries,
+        "inflight": len(LIVE_PRICE_INFLIGHT),
+    }
+
+
+def enqueue_live_price_refresh(task_key: str, record: dict) -> bool:
+    if not settings.live_price_background_refresh_enabled:
+        return False
+    start_live_price_refresh_workers()
+    with LIVE_PRICE_INFLIGHT_LOCK:
+        if task_key in LIVE_PRICE_INFLIGHT:
+            return False
+        LIVE_PRICE_INFLIGHT.add(task_key)
+    try:
+        LIVE_PRICE_TASK_QUEUE.put_nowait((task_key, dict(record)))
+    except Full:
+        with LIVE_PRICE_INFLIGHT_LOCK:
+            LIVE_PRICE_INFLIGHT.discard(task_key)
+        _increment_live_price_runtime("dropped")
+        return False
+    _increment_live_price_runtime("enqueued")
+    return True
+
+
+def _live_price_worker_loop(worker_index: int):
+    while not LIVE_PRICE_WORKER_STOP.is_set():
+        try:
+            task = LIVE_PRICE_TASK_QUEUE.get(timeout=0.5)
+        except Empty:
+            persist_live_price_cache()
+            continue
+
+        if task is None:
+            LIVE_PRICE_TASK_QUEUE.task_done()
+            break
+
+        task_key, record = task
+        try:
+            payload = build_live_price_payload(record)
+            if payload:
+                store_live_price_cache_entry(task_key, payload)
+                _increment_live_price_runtime("processed")
+                _update_live_price_runtime(last_success_at=datetime.now(timezone.utc).isoformat())
+            else:
+                _increment_live_price_runtime("errors")
+                _update_live_price_runtime(last_error_at=datetime.now(timezone.utc).isoformat())
+        except Exception:
+            _increment_live_price_runtime("errors")
+            _update_live_price_runtime(last_error_at=datetime.now(timezone.utc).isoformat())
+        finally:
+            with LIVE_PRICE_INFLIGHT_LOCK:
+                LIVE_PRICE_INFLIGHT.discard(task_key)
+            LIVE_PRICE_TASK_QUEUE.task_done()
+
+    persist_live_price_cache(force=True)
+
+
+def start_live_price_refresh_workers():
+    if not settings.live_price_background_refresh_enabled:
+        return
+    with LIVE_PRICE_RUNTIME_LOCK:
+        if LIVE_PRICE_RUNTIME.get("started"):
+            return
+        LIVE_PRICE_RUNTIME["started"] = True
+    with LIVE_PRICE_CACHE_LOCK:
+        _load_live_price_cache_locked()
+    LIVE_PRICE_WORKER_STOP.clear()
+    worker_count = max(1, min(settings.live_price_queue_workers, LIVE_PRICE_REFRESH_WORKERS))
+    for index in range(worker_count):
+        worker = threading.Thread(target=_live_price_worker_loop, args=(index + 1,), name=f"live-price-worker-{index + 1}", daemon=True)
+        LIVE_PRICE_WORKERS.append(worker)
+        worker.start()
+
+
+def stop_live_price_refresh_workers():
+    with LIVE_PRICE_RUNTIME_LOCK:
+        started = bool(LIVE_PRICE_RUNTIME.get("started"))
+        LIVE_PRICE_RUNTIME["started"] = False
+    if not started:
+        return
+    LIVE_PRICE_WORKER_STOP.set()
+    for _ in LIVE_PRICE_WORKERS:
+        try:
+            LIVE_PRICE_TASK_QUEUE.put_nowait(None)
+        except Full:
+            break
+    while LIVE_PRICE_WORKERS:
+        worker = LIVE_PRICE_WORKERS.pop()
+        worker.join(timeout=2.0)
+    persist_live_price_cache(force=True)
+
+
+def refresh_live_prices(stop: FuelStop, record: dict, fuel_type: str):
+    payload = build_live_price_payload(record)
+    if payload:
+        apply_live_price_payload(stop, payload, fuel_type)
+        task_key = live_price_task_key(stop, record)
+        if task_key:
+            store_live_price_cache_entry(task_key, payload)
+        return
+
+    cached_entry = get_live_price_cache_entry(live_price_task_key(stop, record))
+    if cached_entry and is_live_price_entry_usable(cached_entry):
+        apply_cached_live_price_entry(stop, cached_entry, fuel_type)
 
 
 def live_price_task_key(stop: FuelStop, record: dict) -> str:
@@ -696,23 +1023,42 @@ def copy_live_price_fields(source: FuelStop, target: FuelStop):
 
 
 
-def refresh_shortlisted_live_prices(shortlisted: list[ShortlistedOfficialStation], fuel_type: str, max_workers: int = LIVE_PRICE_REFRESH_WORKERS):
+def refresh_shortlisted_live_prices(
+    shortlisted: list[ShortlistedOfficialStation],
+    fuel_type: str,
+    max_workers: int = LIVE_PRICE_REFRESH_WORKERS,
+    blocking: bool | None = None,
+):
     if not shortlisted:
         return
+
+    if blocking is None:
+        blocking = not settings.live_price_background_refresh_enabled
 
     grouped: dict[str, list[ShortlistedOfficialStation]] = {}
     for stop, record, nearest_index in shortlisted:
         grouped.setdefault(live_price_task_key(stop, record), []).append((stop, record, nearest_index))
 
-    def refresh_group(group: list[ShortlistedOfficialStation]):
-        primary_stop, record, _ = group[0]
-        refresh_live_prices(primary_stop, record, fuel_type)
-        for stop, _, _ in group[1:]:
-            copy_live_price_fields(primary_stop, stop)
+    if blocking:
+        def refresh_group(group: list[ShortlistedOfficialStation]):
+            primary_stop, record, _ = group[0]
+            refresh_live_prices(primary_stop, record, fuel_type)
+            for stop, _, _ in group[1:]:
+                copy_live_price_fields(primary_stop, stop)
 
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(grouped) or 1)) as executor:
-        list(executor.map(refresh_group, grouped.values()))
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(grouped) or 1)) as executor:
+            list(executor.map(refresh_group, grouped.values()))
+        persist_live_price_cache()
+        return
 
+    for task_key, group in grouped.items():
+        cached_entry = get_live_price_cache_entry(task_key)
+        if cached_entry and is_live_price_entry_usable(cached_entry):
+            for stop, _, _ in group:
+                apply_cached_live_price_entry(stop, cached_entry, fuel_type)
+            if is_live_price_entry_fresh(cached_entry):
+                continue
+        enqueue_live_price_refresh(task_key, group[0][1])
 
 
 def refine_detour(stop: FuelStop, route_points: list[RoutePoint], nearest_index: int, vehicle_type: str):

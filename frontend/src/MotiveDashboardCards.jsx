@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
+const watchlistFocusOptions = ["All", "Low Fuel", "Faults", "Stale", "Safety"];
 
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
@@ -40,10 +41,43 @@ function compactDate(value) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function dashboardVehicleMatches(vehicle, term) {
+  if (!term) return true;
+  const haystack = [
+    vehicle.number,
+    vehicle.make,
+    vehicle.model,
+    vehicle.vin,
+    vehicle.license_plate_number,
+    vehicle.driver?.full_name,
+    vehicle.permanent_driver?.full_name,
+    vehicle.location?.city,
+    vehicle.location?.state,
+    vehicle.location?.address,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(term);
+}
+
+function watchlistDetail(kind, vehicle) {
+  if (kind === "Low Fuel") return `${oneDecimal(vehicle.location?.fuel_level_percent)}%`;
+  if (kind === "Faults") return `${number(vehicle.fault_summary?.active_count)} active faults`;
+  if (kind === "Stale") return `${oneDecimal(vehicle.location?.age_minutes)} min since last ping`;
+  return `${number(vehicle.performance_summary?.pending_review_count)} pending events`;
+}
+
 export default function MotiveDashboardCards({ token, active = true }) {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [focusFilter, setFocusFilter] = useState("All");
 
   useEffect(() => {
     if (!token || !active) {
@@ -98,6 +132,32 @@ export default function MotiveDashboardCards({ token, active = true }) {
     };
   }, [snapshot]);
 
+  const filteredWatchlists = useMemo(() => {
+    const term = normalizeText(search);
+    const filterItems = (items) => items.filter((vehicle) => dashboardVehicleMatches(vehicle, term));
+    return {
+      lowFuel: filterItems(watchlists.lowFuel),
+      faults: filterItems(watchlists.faults),
+      stale: filterItems(watchlists.stale),
+      safety: filterItems(watchlists.safety),
+    };
+  }, [search, watchlists]);
+
+  const watchSections = useMemo(() => {
+    const sections = [
+      { id: "Low Fuel", title: "Low Fuel Watchlist", emptyText: "No low fuel vehicles.", items: filteredWatchlists.lowFuel },
+      { id: "Faults", title: "Fault Watchlist", emptyText: "No active fault stack.", items: filteredWatchlists.faults },
+      { id: "Stale", title: "Stale Units", emptyText: "No stale vehicles.", items: filteredWatchlists.stale },
+      { id: "Safety", title: "Safety Review Queue", emptyText: "No pending coaching events.", items: filteredWatchlists.safety },
+    ];
+    return focusFilter === "All" ? sections : sections.filter((section) => section.id === focusFilter);
+  }, [filteredWatchlists, focusFilter]);
+
+  const visibleWatchItems = useMemo(
+    () => watchSections.reduce((sum, section) => sum + section.items.length, 0),
+    [watchSections]
+  );
+
   if (!token) {
     return null;
   }
@@ -131,23 +191,43 @@ export default function MotiveDashboardCards({ token, active = true }) {
             <article className="motive-command-card"><span>IFTA Miles</span><strong>{number(snapshot.metrics.ifta_miles_30d)}</strong><small>Last 30 days</small></article>
           </div>
 
+          <div className="panel-filter-card">
+            <div className="inline-filter-grid inline-filter-grid-compact">
+              <label>
+                Search watchlists
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Truck, VIN, driver, city"
+                />
+              </label>
+              <label>
+                Focus
+                <select value={focusFilter} onChange={(event) => setFocusFilter(event.target.value)}>
+                  {watchlistFocusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="panel-filter-summary">{visibleWatchItems} watchlist rows visible. Fleet metrics above stay global.</div>
+          </div>
+
           <div className="motive-command-watchlists">
-            <section className="motive-watch-card">
-              <h3>Low Fuel Watchlist</h3>
-              {watchlists.lowFuel.length ? watchlists.lowFuel.map((vehicle) => <div key={vehicle.id}><strong>{vehicle.number}</strong><small>{oneDecimal(vehicle.location?.fuel_level_percent)}%</small></div>) : <div className="empty-route-card compact">No low fuel vehicles.</div>}
-            </section>
-            <section className="motive-watch-card">
-              <h3>Fault Watchlist</h3>
-              {watchlists.faults.length ? watchlists.faults.map((vehicle) => <div key={vehicle.id}><strong>{vehicle.number}</strong><small>{number(vehicle.fault_summary?.active_count)} active faults</small></div>) : <div className="empty-route-card compact">No active fault stack.</div>}
-            </section>
-            <section className="motive-watch-card">
-              <h3>Stale Units</h3>
-              {watchlists.stale.length ? watchlists.stale.map((vehicle) => <div key={vehicle.id}><strong>{vehicle.number}</strong><small>{oneDecimal(vehicle.location?.age_minutes)} min since last ping</small></div>) : <div className="empty-route-card compact">No stale vehicles.</div>}
-            </section>
-            <section className="motive-watch-card">
-              <h3>Safety Review Queue</h3>
-              {watchlists.safety.length ? watchlists.safety.map((vehicle) => <div key={vehicle.id}><strong>{vehicle.number}</strong><small>{number(vehicle.performance_summary?.pending_review_count)} pending events</small></div>) : <div className="empty-route-card compact">No pending coaching events.</div>}
-            </section>
+            {watchSections.map((section) => (
+              <section key={section.id} className="motive-watch-card">
+                <h3>{section.title}</h3>
+                {section.items.length ? section.items.map((vehicle) => (
+                  <div key={`${section.id}-${vehicle.id}`}>
+                    <strong>{vehicle.number}</strong>
+                    <small>{watchlistDetail(section.id, vehicle)}</small>
+                  </div>
+                )) : <div className="empty-route-card compact">{section.emptyText}</div>}
+              </section>
+            ))}
           </div>
         </>
       ) : null}

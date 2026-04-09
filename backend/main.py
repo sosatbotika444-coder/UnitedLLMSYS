@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import Base, engine
+from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
 from app.routes.auth import router as auth_router
 from app.routes.loads import router as loads_router
 from app.routes.motive import router as motive_router
@@ -19,7 +20,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
-    yield
+    start_live_price_refresh_workers()
+    try:
+        yield
+    finally:
+        stop_live_price_refresh_workers()
 
 
 app = FastAPI(title="United Lane System API", lifespan=lifespan)
@@ -55,4 +60,5 @@ def health_check():
         "database_backend": settings.database_backend,
         "compression": "gzip",
         "motive_configured": bool(settings.motive_api_key or settings.motive_access_token),
+        "live_price_background_refresh": live_price_runtime_status(),
     }

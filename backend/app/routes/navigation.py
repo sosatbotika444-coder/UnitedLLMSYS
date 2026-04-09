@@ -871,6 +871,38 @@ def resolve_fuel_inputs(payload: RouteAssistantRequest) -> tuple[float, float, f
     return current_fuel, tank_capacity, mpg, warnings
 
 
+def resolve_price_target(payload: RouteAssistantRequest) -> float | None:
+    return parse_positive_input(payload.price_target)
+
+
+def price_target_overage(price: float | None, price_target: float | None) -> float:
+    if price is None or price_target is None:
+        return 0.0
+    return max(0.0, price - price_target)
+
+
+def strategy_rank_key(item: FuelStrategy, price_target: float | None = None) -> tuple:
+    if price_target is not None:
+        return (
+            0 if item.price_target_breach_count == 0 else 1,
+            item.price_target_breach_count,
+            item.price_target_total_overage,
+            item.price_target_max_overage,
+            item.decision_score,
+            item.estimated_fuel_cost,
+            item.stop_count,
+            item.estimated_total_time_seconds,
+            item.total_route_miles,
+        )
+    return (
+        item.decision_score,
+        item.estimated_fuel_cost,
+        item.stop_count,
+        item.estimated_total_time_seconds,
+        item.total_route_miles,
+    )
+
+
 def stop_auto_diesel_price(stop: FuelStop) -> float | None:
     value = parse_float_input(stop.auto_diesel_price)
     return value if value is not None and value >= 0 else None
@@ -968,6 +1000,7 @@ def simulate_fuel_sequence(
     tank_capacity: float,
     mpg: float,
     route_miles: float,
+    price_target: float | None,
     origin: GeocodedPoint,
     destination: GeocodedPoint,
     base_warnings: list[str],
@@ -1090,7 +1123,6 @@ def simulate_fuel_sequence(
             break
 
         if chosen_target_index is not None:
-            # Continue the loop from the cheaper/required stop we planned to reach.
             while target_index < chosen_target_index:
                 target_index += 1
 
@@ -1100,6 +1132,23 @@ def simulate_fuel_sequence(
     warnings = list(base_warnings)
     if reduced_buffer:
         warnings.append("Safety buffer was reduced on one leg because the tank range is tight.")
+
+    price_target_breach_count = 0
+    price_target_total_overage = 0.0
+    price_target_max_overage = 0.0
+    if price_target is not None:
+        for item in planned_stops:
+            overage = price_target_overage(item.auto_diesel_price, price_target)
+            if overage > FUEL_EPSILON:
+                price_target_breach_count += 1
+                price_target_total_overage += overage
+                price_target_max_overage = max(price_target_max_overage, overage)
+        if price_target_breach_count:
+            stop_word = "stop" if price_target_breach_count == 1 else "stops"
+            warnings.append(
+                f"Smart price target ${price_target:.3f}/gal could not be held on every leg, so the planner allows {price_target_breach_count} higher-priced {stop_word} where reachability or trip efficiency required it."
+            )
+
     service_seconds = len(planned_stops) * FUEL_STOP_SERVICE_SECONDS
     estimated_total_time = route.travel_time_seconds + total_detour_seconds + service_seconds
     stop_count_penalty = len(planned_stops) * ((FUEL_STOP_SERVICE_SECONDS / 3600) * FUEL_TIME_VALUE_PER_HOUR)
@@ -1122,6 +1171,10 @@ def simulate_fuel_sequence(
         estimated_total_time_seconds=estimated_total_time,
         decision_score=round(decision_score, 2),
         stop_count=len(planned_stops),
+        price_target=round(price_target, 3) if price_target is not None else None,
+        price_target_breach_count=price_target_breach_count,
+        price_target_total_overage=round(price_target_total_overage, 3),
+        price_target_max_overage=round(price_target_max_overage, 3),
         stops=planned_stops,
         warnings=warnings,
         map_link=map_link,
@@ -1132,6 +1185,7 @@ def simulate_fuel_sequence(
 
 def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest, origin: GeocodedPoint, destination: GeocodedPoint) -> FuelStrategy:
     current_fuel, tank_capacity, mpg, warnings = resolve_fuel_inputs(payload)
+    price_target = resolve_price_target(payload)
     route_miles = meters_to_miles(route.distance_meters)
     full_range_miles = tank_capacity * mpg
     starting_range_miles = current_fuel * mpg
@@ -1147,6 +1201,10 @@ def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest
         "estimated_total_time_seconds": route.travel_time_seconds,
         "map_link": build_strategy_map_link(origin, destination, []),
         "max_stop_count": MAX_SMART_FUEL_STOPS,
+        "price_target": round(price_target, 3) if price_target is not None else None,
+        "price_target_breach_count": 0,
+        "price_target_total_overage": 0,
+        "price_target_max_overage": 0,
         "safety_buffer_policy": f"Small reserve per leg: {FUEL_SAFETY_BUFFER_MIN_MILES:.0f}-{FUEL_SAFETY_BUFFER_MAX_MILES:.0f} miles, capped by tank range.",
     }
 
@@ -1170,35 +1228,43 @@ def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest
     if not stops:
         return FuelStrategy(status="unreachable", warnings=warnings + ["No published Auto Diesel stops were found on this route."], **base)
 
-    strategies: list[FuelStrategy] = []
+    best_strategy: FuelStrategy | None = None
+    best_key: tuple | None = None
     for sequence in strategy_stop_sequences(stops):
-        strategy = simulate_fuel_sequence(route, stops, sequence, current_fuel, tank_capacity, mpg, route_miles, origin, destination, warnings)
+        strategy = simulate_fuel_sequence(route, stops, sequence, current_fuel, tank_capacity, mpg, route_miles, price_target, origin, destination, warnings)
         if strategy and strategy.status in {"planned", "direct"} and strategy.stop_count <= MAX_SMART_FUEL_STOPS:
-            strategies.append(strategy)
+            strategy_key = strategy_rank_key(strategy, price_target)
+            if best_key is None or strategy_key < best_key:
+                best_strategy = strategy
+                best_key = strategy_key
 
-    if strategies:
-        return min(strategies, key=lambda item: (item.decision_score, item.estimated_fuel_cost, item.stop_count, item.estimated_total_time_seconds, item.total_route_miles))
+    if best_strategy is not None:
+        return best_strategy
+
+    unreachable_warnings = warnings + [
+        f"No safe Auto Diesel plan could be completed within {MAX_SMART_FUEL_STOPS} stops. Increase starting fuel, tank capacity, or choose a route with closer priced stops."
+    ]
+    if price_target is not None:
+        unreachable_warnings.append(
+            f"Smart price target ${price_target:.3f}/gal was kept as a planning preference, but there still was no safe route plan with the current truck range."
+        )
 
     return FuelStrategy(
         status="unreachable",
-        warnings=warnings + [
-            f"No safe Auto Diesel plan could be completed within {MAX_SMART_FUEL_STOPS} stops. Increase starting fuel, tank capacity, or choose a route with closer priced stops."
-        ],
+        warnings=unreachable_warnings,
         **base,
     )
-
 
 
 def choose_best_fuel_strategy(payload: RouteAssistantRequest, origin: GeocodedPoint, destination: GeocodedPoint, routes: list[RouteOption]) -> FuelStrategy | None:
     if not routes:
         return None
+    price_target = resolve_price_target(payload)
     strategies = [build_route_fuel_strategy(route, payload, origin, destination) for route in routes]
     feasible = [strategy for strategy in strategies if strategy.status in {"planned", "direct"}]
     if feasible:
-        return min(feasible, key=lambda item: (item.decision_score, item.estimated_fuel_cost, item.estimated_total_time_seconds, item.total_route_miles))
-    return min(strategies, key=lambda item: (item.total_route_miles, item.route_label or ""))
-
-
+        return min(feasible, key=lambda item: strategy_rank_key(item, price_target))
+    return min(strategies, key=lambda item: strategy_rank_key(item, price_target) + (item.total_route_miles, item.route_label or ""))
 
 
 def point_payload(point: RoutePoint) -> dict:
@@ -1391,7 +1457,9 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = fuel_strategy.stops[0].stop if fuel_strategy and fuel_strategy.stops else (top_fuel_stops[0] if top_fuel_stops else None)
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns auto diesel pricing where the network publishes it."
+    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns auto diesel pricing where the network publishes it. Live prices now come from a local cache with background refresh, so route builds do not wait on every network call."
+    if payload.price_target:
+        price_support += f" Smart routing also tries to stay at or below ${payload.price_target:.3f}/gal and only goes above that target when the route cannot be completed safely or efficiently otherwise."
     map_link = build_map_link(origin.label, destination.label)
     data_source = "TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance"
     try:

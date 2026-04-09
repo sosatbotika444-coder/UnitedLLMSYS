@@ -222,6 +222,12 @@ export default function RouteAssistant({ token }) {
     routeLoadingSeconds >= step.afterSeconds ? step.label : message
   ), ROUTE_PROGRESS_STEPS[0].label);
   const activePriceTarget = useMemo(() => parsePriceTarget(activeFilters.price_target), [activeFilters.price_target]);
+  const plannerNeedsRefresh = useMemo(() => {
+    if (!routePlan) return false;
+    const draftPriceTarget = parsePriceTarget(draftFilters.price_target);
+    const appliedPriceTarget = parsePriceTarget(activeFilters.price_target);
+    return draftFilters.sort_by !== activeFilters.sort_by || draftPriceTarget !== appliedPriceTarget;
+  }, [activeFilters.price_target, activeFilters.sort_by, draftFilters.price_target, draftFilters.sort_by, routePlan]);
 
   const visibleStops = useMemo(() => {
     if (!routePlan) return [];
@@ -260,6 +266,7 @@ export default function RouteAssistant({ token }) {
       const payload = {
         ...routeForm,
         sort_by: nextFilters.sort_by,
+        price_target: parsePriceTarget(nextFilters.price_target),
         start_range: "",
         full_range: "",
         amenities: [],
@@ -274,6 +281,14 @@ export default function RouteAssistant({ token }) {
     } finally {
       setRouteLoading(false);
     }
+  }
+
+  function applyDraftFilters() {
+    if (plannerNeedsRefresh) {
+      buildRoutePlan(draftFilters);
+      return;
+    }
+    setActiveFilters(draftFilters);
   }
 
   return (
@@ -314,6 +329,11 @@ export default function RouteAssistant({ token }) {
             <option value="distance">Closest to route</option>
             <option value="score">Highest route score</option>
           </select>
+        </label>
+        <label>
+          Smart route target
+          <input type="number" min="0" step="0.001" placeholder="4.250" value={draftFilters.price_target} onChange={(event) => setDraftFilters({ ...draftFilters, price_target: event.target.value })} />
+          <small className="route-builder-hint">Planner aims for this auto diesel price and only goes above it when safety or reachability requires.</small>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
           {routeLoading ? `Scanning networks... ${routeLoadingSeconds}s` : "Scan Networks"}
@@ -379,8 +399,8 @@ export default function RouteAssistant({ token }) {
                   </label>
                 </div>
 
-                <button className="primary-button filter-apply-button primary-button-brand" onClick={() => setActiveFilters(draftFilters)}>
-                  Apply View Filter
+                <button className="primary-button filter-apply-button primary-button-brand" onClick={applyDraftFilters} disabled={routeLoading}>
+                  {plannerNeedsRefresh ? (routeLoading ? "Refreshing plan..." : "Apply filters + rebuild smart route") : "Apply View Filter"}
                 </button>
 
                 {priceTargetStats ? (

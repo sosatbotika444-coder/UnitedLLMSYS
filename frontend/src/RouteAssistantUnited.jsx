@@ -501,6 +501,13 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     routeLoadingSeconds >= step.afterSeconds ? step.label : message
   ), ROUTE_PROGRESS_STEPS[0].label);
   const activePriceTarget = useMemo(() => parsePriceTarget(activeFilters.price_target), [activeFilters.price_target]);
+  const smartFuelPriceTarget = useMemo(() => parsePriceTarget(fuelStrategy?.price_target), [fuelStrategy?.price_target]);
+  const plannerNeedsRefresh = useMemo(() => {
+    if (!routePlan) return false;
+    const draftPriceTarget = parsePriceTarget(draftFilters.price_target);
+    const appliedPriceTarget = parsePriceTarget(activeFilters.price_target);
+    return draftFilters.sort_by !== activeFilters.sort_by || draftPriceTarget !== appliedPriceTarget;
+  }, [activeFilters.price_target, activeFilters.sort_by, draftFilters.price_target, draftFilters.sort_by, routePlan]);
 
   function setSuggestionsForField(field, suggestions) {
     setLocationSuggestions((current) => ({ ...current, [field]: suggestions }));
@@ -869,6 +876,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
         tank_capacity_gallons: toOptionalNumber(routeForm.tank_capacity_gallons),
         mpg: toOptionalNumber(routeForm.mpg),
         sort_by: nextFilters.sort_by,
+        price_target: parsePriceTarget(nextFilters.price_target),
         start_range: "",
         full_range: "",
         amenities: [],
@@ -883,6 +891,14 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     } finally {
       setRouteLoading(false);
     }
+  }
+
+  function applyDraftFilters() {
+    if (plannerNeedsRefresh) {
+      buildRoutePlan(draftFilters);
+      return;
+    }
+    setActiveFilters(draftFilters);
   }
 
   return (
@@ -977,6 +993,11 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
             <option value="distance">Closest to route</option>
             <option value="score">Highest score</option>
           </select>
+        </label>
+        <label>
+          Smart route target
+          <input type="number" min="0" step="0.001" placeholder="4.250" value={draftFilters.price_target} onChange={(event) => setDraftFilters({ ...draftFilters, price_target: event.target.value })} />
+          <small className="route-builder-hint">Planner aims for this auto diesel price and only goes above it when safety or reachability requires.</small>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading || !routeForm.origin.trim() || !routeForm.destination.trim()}>
           {routeLoading ? `Building route... ${routeLoadingSeconds}s` : "Build route"}
@@ -1127,8 +1148,8 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                   </label>
                 </div>
 
-                <button className="primary-button filter-apply-button primary-button-brand" onClick={() => setActiveFilters(draftFilters)}>
-                  Apply View Filter
+                <button className="primary-button filter-apply-button primary-button-brand" onClick={applyDraftFilters} disabled={routeLoading}>
+                  {plannerNeedsRefresh ? (routeLoading ? "Refreshing plan..." : "Apply filters + rebuild smart route") : "Apply View Filter"}
                 </button>
 
                 {priceTargetStats ? (
@@ -1167,7 +1188,30 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                 <span><strong>{formatMiles(fuelStrategy.starting_range_miles)}</strong> start range</span>
                 <span><strong>{formatMiles(fuelStrategy.full_tank_range_miles)}</strong> full tank</span>
                 <span><strong>{formatDuration(fuelStrategy.estimated_total_time_seconds)}</strong> total time</span>
+                {smartFuelPriceTarget !== null ? <span><strong>{formatPriceTarget(smartFuelPriceTarget)}</strong> target</span> : null}
               </div>
+
+              {smartFuelPriceTarget !== null ? (
+                <div className="price-target-summary smart-price-target-summary">
+                  <div className="price-target-summary-head">
+                    <strong>Smart target {formatPriceTarget(smartFuelPriceTarget)}/gal</strong>
+                    <span>{fuelStrategy.price_target_breach_count ? `${fuelStrategy.price_target_breach_count} planned stop${fuelStrategy.price_target_breach_count === 1 ? "" : "s"} above target` : "All planned fuel stops are at or below target"}</span>
+                  </div>
+                  <div className="price-target-stat-row">
+                    <span className={`price-target-stat ${fuelStrategy.price_target_breach_count ? "price-above-target" : "price-below-target"}`.trim()}>
+                      {fuelStrategy.price_target_breach_count ? "Target exceeded where needed" : "Target held on every stop"}
+                    </span>
+                    <span className={`price-target-stat ${fuelStrategy.price_target_breach_count ? "price-above-target" : "price-below-target"}`.trim()}>
+                      Above target {fuelStrategy.price_target_breach_count || 0}
+                    </span>
+                    {fuelStrategy.price_target_breach_count ? (
+                      <span className="price-target-stat price-above-target">Max +${Number(fuelStrategy.price_target_max_overage || 0).toFixed(3)}/gal</span>
+                    ) : (
+                      <span className="price-target-stat price-below-target">Max +$0.000/gal</span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
 
               {fuelStrategy.safety_buffer_policy ? <p className="smart-fuel-policy">{fuelStrategy.safety_buffer_policy}</p> : null}
 
