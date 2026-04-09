@@ -3,15 +3,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const DEFAULT_ASSISTANT_NAME = "Safety Team";
 const quickPrompts = [
-  "Review diesel prices along this route.",
-  "Summarize today's dispatch priorities.",
-  "Compare Love's and Pilot for parking and fuel planning.",
-  "Draft a message to a driver about a route change."
+  "Write a driver coaching message for speeding and hard braking.",
+  "Give me a post-accident checklist for a truck driver.",
+  "Review this safety issue and tell me the immediate next steps.",
+  "Draft a pre-trip inspection reminder for drivers."
 ];
 const welcomeMessage = {
   role: "assistant",
-  text: "Assistant is ready. Ask about routes, loads, stations, messages, writing help, or attach a photo for analysis."
+  assistantName: DEFAULT_ASSISTANT_NAME,
+  text: "Safety Team is ready. Ask about truck safety, incidents, inspections, driver coaching, or attach a photo for review."
 };
 
 async function sendChatMessage(message, token, context = "", attachment = null) {
@@ -31,7 +33,7 @@ async function sendChatMessage(message, token, context = "", attachment = null) 
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || "UnitedLane could not answer right now.");
+    throw new Error(data.detail || "Safety Team could not answer right now.");
   }
 
   return data;
@@ -65,7 +67,7 @@ export default function UnitedLaneChat({ token, user }) {
     if (!user) return "";
     return [
       `Signed in user: ${user.full_name} (${user.email})`,
-      "Workspace: UnitedLane dispatch, official station routing, and assistant panel"
+      "Workspace: UnitedLane trucking safety, dispatch, routing, and fleet operations panel"
     ].join("\n");
   }, [user]);
 
@@ -116,7 +118,7 @@ export default function UnitedLaneChat({ token, user }) {
 
   async function submitMessage(text, nextAttachment = attachment) {
     const trimmed = text.trim();
-    const outgoingText = trimmed || (nextAttachment ? "Please analyze the attached image." : "");
+    const outgoingText = trimmed || (nextAttachment ? "Please review the attached image for truck safety issues." : "");
     if (!outgoingText || !token || sending) return;
 
     const userMessage = {
@@ -133,13 +135,21 @@ export default function UnitedLaneChat({ token, user }) {
 
     try {
       const data = await sendChatMessage(outgoingText, token, context, nextAttachment);
-      setMessages([...nextMessages, { role: "assistant", text: data.message }]);
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          assistantName: data.assistant_name || DEFAULT_ASSISTANT_NAME,
+          text: data.message
+        }
+      ]);
     } catch (error) {
       setMessages([
         ...nextMessages,
         {
           role: "assistant",
-          text: error.message || "UnitedLane could not answer right now."
+          assistantName: DEFAULT_ASSISTANT_NAME,
+          text: error.message || "Safety Team could not answer right now."
         }
       ]);
     } finally {
@@ -156,12 +166,12 @@ export default function UnitedLaneChat({ token, user }) {
     <section className="panel unitedlane-ai-workspace">
       <div className="panel-head unitedlane-ai-head">
         <div>
-          <h2>Assistant</h2>
-          <span>Ask about routes, dispatch notes, station comparisons, writing help, or upload a local image for analysis.</span>
+          <h2>Safety Team</h2>
+          <span>Ask about truck safety, incidents, inspections, driver coaching, HOS basics, or upload a local image for review.</span>
         </div>
         <div className="unitedlane-ai-status">
           <span>{sending ? "Thinking" : "Online"}</span>
-          <strong>{sending ? "Preparing assistant response" : "OpenRouter multimodal assistant available"}</strong>
+          <strong>{sending ? "Preparing safety guidance" : "Safety Team assistant available"}</strong>
         </div>
       </div>
 
@@ -176,13 +186,13 @@ export default function UnitedLaneChat({ token, user }) {
       <div className="unitedlane-ai-layout">
         <aside className="unitedlane-ai-sidebar">
           <div className="unitedlane-ai-sidebar-card">
-            <span className="brand-pill">UnitedLane</span>
+            <span className="brand-pill">Safety Team</span>
             <h3>How to use it</h3>
-            <p>Type a question, attach a photo from disk, or combine both in one request.</p>
+            <p>Type a safety question, attach a photo from disk, or combine both in one request.</p>
           </div>
           <div className="unitedlane-ai-sidebar-card subdued">
             <strong>Image support</strong>
-            <p>Upload route screenshots, station photos, dispatch dashboards, bills, or documents. PNG, JPEG, WEBP, and GIF are supported up to {formatBytes(MAX_IMAGE_ATTACHMENT_BYTES)}.</p>
+            <p>Upload truck, trailer, load, dashboard, inspection, or incident photos. PNG, JPEG, WEBP, and GIF are supported up to {formatBytes(MAX_IMAGE_ATTACHMENT_BYTES)}.</p>
           </div>
         </aside>
 
@@ -190,7 +200,7 @@ export default function UnitedLaneChat({ token, user }) {
           <div className="unitedlane-ai-log" ref={logRef}>
             {messages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`unitedlane-ai-bubble unitedlane-ai-bubble-${message.role}`}>
-                <strong>{message.role === "assistant" ? "UnitedLane" : "You"}</strong>
+                <strong>{message.role === "assistant" ? (message.assistantName || DEFAULT_ASSISTANT_NAME) : "You"}</strong>
                 {message.imageUrl ? <img className="unitedlane-ai-bubble-image" src={message.imageUrl} alt={message.imageName || "Uploaded attachment"} /> : null}
                 {message.imageName ? <span className="unitedlane-ai-bubble-meta">Attached image: {message.imageName}</span> : null}
                 <p>{message.text}</p>
@@ -205,7 +215,7 @@ export default function UnitedLaneChat({ token, user }) {
                 <img src={attachment.dataUrl} alt={attachment.name} className="unitedlane-ai-attachment-thumb" />
                 <div className="unitedlane-ai-attachment-copy">
                   <strong>{attachment.name}</strong>
-                  <span>{formatBytes(attachment.size)} | Ready for analysis</span>
+                  <span>{formatBytes(attachment.size)} | Ready for safety review</span>
                 </div>
                 <button type="button" className="secondary-button unitedlane-ai-remove-attachment" onClick={clearAttachment} disabled={sending}>
                   Remove
@@ -218,7 +228,7 @@ export default function UnitedLaneChat({ token, user }) {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about routing, station pricing, dispatch, writing, or upload a photo for UnitedLane to inspect"
+              placeholder="Ask about truck safety, incidents, inspections, driver coaching, or upload a photo for Safety Team to review"
               rows={4}
             />
             <div className="unitedlane-ai-formbar">

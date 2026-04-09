@@ -227,7 +227,7 @@ class UnitedLaneChatRequest(BaseModel):
 
 
 class UnitedLaneChatResponse(BaseModel):
-    assistant_name: str = "UnitedLane"
+    assistant_name: str = "Safety Team"
     message: str
 
 class MotiveIntegrationStatus(BaseModel):

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import re
@@ -21,15 +21,16 @@ DEFAULT_APP_NAME = settings.openrouter_app_name
 DEFAULT_APP_URL = settings.openrouter_app_url
 DEFAULT_OPENROUTER_API_KEY = settings.openrouter_api_key
 UNITEDLANE_IDENTITY = "UnitedLane"
+UNITEDLANE_CHAT_IDENTITY = "Safety Team"
 CHAT_IMAGE_DATA_URL_PATTERN = re.compile(r"^data:(image/(?:png|jpeg|webp|gif));base64,[A-Za-z0-9+/=\s]+$")
 CHAT_IMAGE_MAX_DATA_URL_LENGTH = 8_000_000
 CHAT_IMAGE_DECLINE_PATTERNS = (
     re.compile(r"\b(?:can(?:not|'t)|unable to|do not|don't|currently can't)\b.{0,80}\b(?:view|see|analy[sz]e|inspect)\b.{0,30}\bimage", re.IGNORECASE),
     re.compile(r"\b(?:if|once)\s+you\s+describe\b.{0,80}\b(?:image|content)\b", re.IGNORECASE),
 )
-UNITEDLANE_CHAT_PROVIDER_UNAVAILABLE_MESSAGE = "UnitedLane assistant couldn't reach OpenRouter right now. Please retry in a moment."
+UNITEDLANE_CHAT_PROVIDER_UNAVAILABLE_MESSAGE = "Safety Team couldn't reach OpenRouter right now. Please retry in a moment."
 UNITEDLANE_IMAGE_ANALYSIS_UNAVAILABLE_MESSAGE = (
-    "I couldn't analyze the attached image right now. Please retry in a moment or upload a smaller PNG, JPEG, WEBP, or GIF image."
+    "Safety Team couldn't analyze the attached image right now. Please retry in a moment or upload a smaller PNG, JPEG, WEBP, or GIF image."
 )
 logger = logging.getLogger(__name__)
 
@@ -369,26 +370,44 @@ def generate_unitedlane_route_guidance(
 if __name__ == "__main__":
     print(lookup_station_price_by_address("Times Square, New York, NY", fuel_type="diesel"))
 
-UNITEDLANE_CHAT_SYSTEM_PROMPT = """You are UnitedLane, the company AI assistant for the United Lane platform.
+UNITEDLANE_CHAT_SYSTEM_PROMPT = """You are Safety Team, the internal trucking safety assistant for the United Lane platform.
 
 Identity rules:
-1. If asked who you are, answer exactly: I am UnitedLane Assistant for the United Lane platform.
-2. Always speak in polished, warm, helpful English.
-3. Never claim to be human.
-4. Never describe yourself as a generic chatbot detached from the company.
+1. If asked who you are, answer exactly: I am Safety Team for the United Lane platform.
+2. Speak as an experienced fleet safety and risk-reduction support team.
+3. Always use polished, clear, professional English.
+4. Never claim to be human.
+5. Never describe yourself as a generic chatbot detached from the company.
+6. Do not present yourself as a lawyer, law enforcement officer, or regulator.
 
-Capability rules:
-1. You can help with routing, fuel planning, dispatch, trucking operations, load coordination, station analysis, driver communication, customer-facing writing, business productivity, and general day-to-day questions.
-2. You can analyze attached images such as route screenshots, station photos, dispatch screenshots, bills, dashboards, and documents when an image is provided.
-3. When the user asks about routes, stations, pricing, dispatch, or trucking, prioritize practical transportation guidance first.
-4. When the user asks broader questions, answer helpfully in a professional UnitedLane tone instead of refusing.
-5. If a request is high-risk or specialized, give cautious general guidance and suggest consulting the appropriate licensed professional when needed.
+Mission rules:
+1. Your main job is to help dispatchers, drivers, managers, and operations staff with truck safety, incident response, driver coaching, and practical risk reduction.
+2. You should answer as the company's Safety Team first, even when the question is broad.
+3. You can still help with writing, summaries, image review, and operational communication, but your framing should stay safety-aware.
+
+Core knowledge areas:
+1. Pre-trip and post-trip inspections, DVIR, defect logging, maintenance escalation, and out-of-service warning signs.
+2. HOS and ELD basics, fatigue risk, rest planning, and log accuracy at a general operational level.
+3. Safe following distance, speed management, lane changes, merging, turns, backing, parking, intersections, work zones, night driving, mountain driving, and adverse weather driving.
+4. Cargo securement basics, load shift warning signs, trailer safety, brake and tire concerns, lights, air system issues, and visible mechanical red flags.
+5. Accident, incident, and near-miss response: scene safety, emergency escalation, reporting sequence, photos, witness details, and supervisor handoff.
+6. Driver coaching notes, corrective action language, toolbox talks, safety reminders, and dispatch-to-driver safety messaging.
+7. FMCSA/DOT-style best practices in a general sense, without inventing company-specific or jurisdiction-specific rules.
+
+Behavior rules:
+1. Prioritize immediate safety first. If a person, vehicle, roadway, cargo, or scene may be unsafe, say the safest immediate action before anything else.
+2. Prefer structured answers such as: Immediate action, risk check, who to notify, documentation, next steps.
+3. If the user asks about company policy, discipline, legal exposure, or an exact regulation you cannot verify, explain the general best-practice answer and say that the company SOP or jurisdiction should confirm the final rule.
+4. Never invent exact legal citations, penalties, inspection outcomes, or company procedures.
+5. If an image is attached, inspect it like a safety review: identify visible hazards, damage, missing securement, documentation concerns, and what cannot be confirmed from the image alone.
+6. If the user needs a driver-facing message, make it short, respectful, and ready to send.
+7. If the user needs a manager-facing message, make it clear, accountable, and operational.
 
 Style rules:
-1. Keep answers clear, useful, and commercially polished.
-2. Prefer direct recommendations, summaries, and next steps over abstract theory.
-3. When route or station details are missing, make a reasonable assumption and say what extra detail would improve the answer.
-4. If site context is provided, use it naturally in the response.
+1. Be calm, direct, practical, and safety-first.
+2. Prefer concise checklists, numbered steps, and recommended next actions over abstract theory.
+3. Make the answer easy for a dispatcher or safety manager to use immediately.
+4. When useful, finish with a short section titled: Send this to the driver.
 """
 
 
@@ -429,7 +448,7 @@ def build_unitedlane_chat_provider_error(exc: Exception, image_requested: bool, 
             "Add credits or switch OPENROUTER_CHAT_MODEL to another model."
         )
     if status_code == 429:
-        return UnitedLaneChatProviderError("OpenRouter is rate-limiting the assistant right now. Please retry in a moment.")
+        return UnitedLaneChatProviderError("OpenRouter is rate-limiting Safety Team right now. Please retry in a moment.")
     if status_code == 400 and image_requested:
         return UnitedLaneImageAnalysisUnavailableError(
             "OpenRouter rejected the attached image for the configured assistant model. "
@@ -442,14 +461,14 @@ def build_unitedlane_chat_provider_error(exc: Exception, image_requested: bool, 
     if image_requested and ("image" in lowered or "vision" in lowered):
         return UnitedLaneImageAnalysisUnavailableError(UNITEDLANE_IMAGE_ANALYSIS_UNAVAILABLE_MESSAGE)
     return UnitedLaneChatProviderError(
-        f"UnitedLane assistant request failed for model {model}. Please retry in a moment."
+        f"Safety Team request failed for model {model}. Please retry in a moment."
     )
 
 
 def build_unitedlane_chat_user_text(message: str, context: str = "", image_name: str = "") -> str:
     user_message = message.strip()
     if not user_message:
-        user_message = "Please analyze the attached image in a practical UnitedLane style."
+        user_message = "Please analyze the attached image in a practical Safety Team style."
 
     parts: list[str] = []
     if context.strip():
@@ -522,12 +541,12 @@ def generate_unitedlane_chat_reply(
     except Exception as exc:
         if APIStatusError is not None and isinstance(exc, APIStatusError):
             raise build_unitedlane_chat_provider_error(exc, image_requested=image_requested, model=resolved_model) from exc
-        logger.warning("UnitedLane assistant request failed for model %s.", resolved_model, exc_info=True)
+        logger.warning("Safety Team request failed for model %s.", resolved_model, exc_info=True)
         raise UnitedLaneChatProviderError(UNITEDLANE_CHAT_PROVIDER_UNAVAILABLE_MESSAGE) from exc
 
     content = coerce_openrouter_message_text(response.choices[0].message.content)
     if not content.strip():
-        raise UnitedLaneChatProviderError("OpenRouter returned an empty assistant reply. Please retry in a moment.")
+        raise UnitedLaneChatProviderError("OpenRouter returned an empty Safety Team reply. Please retry in a moment.")
     if image_requested and chat_reply_declines_image_analysis(content):
         raise UnitedLaneImageAnalysisUnavailableError(
             f"The configured assistant model {resolved_model} did not analyze the attached image. "

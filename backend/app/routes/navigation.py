@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.ai_settings import (
+    UNITEDLANE_CHAT_IDENTITY,
     UNITEDLANE_IDENTITY,
     UnitedLaneChatProviderError,
     generate_unitedlane_chat_reply,
@@ -1516,4 +1517,4 @@ def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except UnitedLaneChatProviderError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    return UnitedLaneChatResponse(assistant_name=UNITEDLANE_IDENTITY, message=reply)
+    return UnitedLaneChatResponse(assistant_name=UNITEDLANE_CHAT_IDENTITY, message=reply)
