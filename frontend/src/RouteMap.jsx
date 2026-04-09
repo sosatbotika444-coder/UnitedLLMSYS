@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
+import { getPriceSignalMeta } from "./priceSignals";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
@@ -24,7 +25,8 @@ function formatMoney(value) {
   return value !== null && value !== undefined ? `$${Number(value).toFixed(3)}` : "N/A";
 }
 
-function buildStopPopup(stop) {
+function buildStopPopup(stop, priceTarget) {
+  const priceSignalMeta = getPriceSignalMeta(stop, priceTarget);
   const title = stop.brand || stop.name;
   const subtitle = stop.location_type
     ? `${stop.location_type}${stop.store_number ? ` - Store #${stop.store_number}` : ""}`
@@ -39,6 +41,7 @@ function buildStopPopup(stop) {
     stop.phone ? `Phone: ${stop.phone}` : null,
     stop.strategy_stop ? "Smart fuel plan stop" : null,
     stop.official_match ? "Official Love's/Pilot station page matched" : null,
+    priceSignalMeta.target !== null ? `Target signal: ${priceSignalMeta.summary}` : null,
     stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `Auto Diesel: ${formatMoney(stop.auto_diesel_price)}` : null,
     stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `Unleaded: ${formatMoney(stop.unleaded_price)}` : null,
     stop.price_date ? `As of: ${stop.price_date}` : null,
@@ -52,13 +55,16 @@ function buildStopPopup(stop) {
     .join("<br/>");
 }
 
-function buildPriceLabel(stop) {
+function buildPriceLabel(stop, priceTarget) {
+  const priceSignalMeta = getPriceSignalMeta(stop, priceTarget);
   const autoDiesel = stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined ? `$${Number(stop.auto_diesel_price).toFixed(3)}` : "-";
-  return `Auto Diesel
-${autoDiesel}`;
+  if (priceSignalMeta.signal === "below") return `Below target\n${autoDiesel}`;
+  if (priceSignalMeta.signal === "above") return `Above target\n${autoDiesel}`;
+  if (priceSignalMeta.signal === "unknown") return `No price\n${autoDiesel}`;
+  return `Auto Diesel\n${autoDiesel}`;
 }
 
-export default function RouteMap({ plan, isFullscreen = false, active = true }) {
+export default function RouteMap({ plan, isFullscreen = false, active = true, priceTarget = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -158,7 +164,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true }) 
 
         popupRef.current = new maplibregl.Popup({ offset: 18 })
           .setLngLat(coordinates)
-          .setHTML(buildStopPopup(stop))
+          .setHTML(buildStopPopup(stop, priceTarget))
           .addTo(mapLibreMap);
       });
 
@@ -197,23 +203,28 @@ export default function RouteMap({ plan, isFullscreen = false, active = true }) 
         }
       }));
 
-      const stopFeatures = allStops.map((stop) => ({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [stop.lon, stop.lat]
-        },
-        properties: {
-          id: stop.id,
-          isBest: plan.top_fuel_stops.some((item) => item.id === stop.id),
-          isStrategyStop: strategyStopIds.has(stop.id),
-          isIndependent: stop.brand === "Independent",
-          price: stop.auto_diesel_price ?? null,
-          score: stop.overall_score ?? 0,
-          priceLabel: buildPriceLabel(stop),
-          stop: JSON.stringify({ ...stop, strategy_stop: strategyStopIds.has(stop.id) })
-        }
-      }));
+      const stopFeatures = allStops.map((stop) => {
+        const priceSignalMeta = getPriceSignalMeta(stop, priceTarget);
+        return ({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [stop.lon, stop.lat]
+          },
+          properties: {
+            id: stop.id,
+            isBest: plan.top_fuel_stops.some((item) => item.id === stop.id),
+            isStrategyStop: strategyStopIds.has(stop.id),
+            isIndependent: stop.brand === "Independent",
+            hasPriceTarget: priceSignalMeta.target !== null,
+            priceSignal: priceSignalMeta.signal,
+            price: stop.auto_diesel_price ?? null,
+            score: stop.overall_score ?? 0,
+            priceLabel: buildPriceLabel(stop, priceTarget),
+            stop: JSON.stringify({ ...stop, strategy_stop: strategyStopIds.has(stop.id) })
+          }
+        });
+      });
 
       if (mapLibreMap.getLayer(ROUTES_LAYER_ID)) {
         mapLibreMap.removeLayer(ROUTES_LAYER_ID);
@@ -314,6 +325,12 @@ export default function RouteMap({ plan, isFullscreen = false, active = true }) 
         paint: {
           "circle-color": [
             "case",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "below"]],
+            "#16a34a",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "above"]],
+            "#dc2626",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "unknown"]],
+            "#64748b",
             ["boolean", ["get", "isStrategyStop"], false],
             "#f59e0b",
             ["boolean", ["get", "isBest"], false],
@@ -360,7 +377,16 @@ export default function RouteMap({ plan, isFullscreen = false, active = true }) 
           "symbol-sort-key": ["-", ["get", "score"]]
         },
         paint: {
-          "text-color": "#ffffff",
+          "text-color": [
+            "case",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "below"]],
+            "#4ade80",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "above"]],
+            "#f87171",
+            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "unknown"]],
+            "#e2e8f0",
+            "#ffffff"
+          ],
           "text-halo-color": "rgba(15, 23, 42, 0.9)",
           "text-halo-width": 4,
           "text-halo-blur": 1
@@ -430,7 +456,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true }) 
       }
       mapRef.current = null;
     };
-  }, [allStops, plan, strategyStopIds]);
+  }, [allStops, plan, priceTarget, strategyStopIds]);
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;

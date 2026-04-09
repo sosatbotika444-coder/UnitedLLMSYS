@@ -6413,3 +6413,113 @@ body.theme-blue .route-vehicle-bridge {
     display: grid;
   }
 }
+
+
+.fuel-stop-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.fuel-stop-chip-row .network-chip {
+  margin-bottom: 0;
+}
+
+.price-target-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.price-target-chip.price-below-target,
+.price-target-stat.price-below-target {
+  background: rgba(22, 163, 74, 0.14);
+  color: #166534;
+}
+
+.price-target-chip.price-above-target,
+.price-target-stat.price-above-target {
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
+}
+
+.price-target-chip.price-unknown-target,
+.price-target-stat.price-unknown-target {
+  background: rgba(100, 116, 139, 0.14);
+  color: #475569;
+}
+
+.fuel-stop-card-brand.price-below-target {
+  border-color: rgba(22, 163, 74, 0.34);
+  background: linear-gradient(180deg, rgba(240, 253, 244, 0.98), rgba(248, 250, 252, 0.98));
+}
+
+.fuel-stop-card-brand.price-above-target {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.98), rgba(248, 250, 252, 0.98));
+}
+
+.fuel-stop-card-brand.price-unknown-target {
+  border-color: rgba(100, 116, 139, 0.22);
+}
+
+.fuel-price-row-brand.price-below-target {
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.fuel-price-row-brand.price-above-target {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.fuel-price-row-brand.price-unknown-target {
+  background: rgba(100, 116, 139, 0.08);
+}
+
+.price-target-summary {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.price-target-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #334155;
+}
+
+.price-target-summary-head strong {
+  color: #0f172a;
+}
+
+.price-target-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.price-target-stat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}

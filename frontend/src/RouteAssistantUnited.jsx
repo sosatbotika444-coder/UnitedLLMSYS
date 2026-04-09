@@ -1,4 +1,11 @@
 ﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  formatPriceTarget,
+  getAutoDieselPrice,
+  getPriceSignalClass,
+  getPriceSignalMeta,
+  parsePriceTarget
+} from "./priceSignals";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
@@ -8,6 +15,7 @@ const defaultFilters = {
   sort_by: "best",
   search: "",
   max_off_route: "50",
+  price_target: "",
   ui_sort: "best"
 };
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
@@ -38,14 +46,6 @@ function formatDuration(seconds) {
   const minutes = Math.round((seconds % 3600) / 60);
   if (hours <= 0) return `${minutes}m`;
   return `${hours}h ${minutes}m`;
-}
-
-function getAutoDieselPrice(stop) {
-  if (stop.auto_diesel_price !== null && stop.auto_diesel_price !== undefined) {
-    const price = Number(stop.auto_diesel_price);
-    return Number.isFinite(price) ? price : null;
-  }
-  return null;
 }
 
 function toOptionalNumber(value) {
@@ -366,14 +366,19 @@ function getNetworkLabel(stop) {
   return stop.brand || stop.name || "Fuel Stop";
 }
 
-function StopCard({ stop, compact = false }) {
+function StopCard({ stop, compact = false, priceTarget = null }) {
   const tone = getNetworkTone(stop);
   const autoDieselPrice = getAutoDieselPrice(stop);
+  const priceSignalMeta = getPriceSignalMeta(stop, priceTarget);
+  const priceSignalClass = getPriceSignalClass(priceSignalMeta.signal);
   return (
-    <article className={`fuel-stop-card fuel-stop-card-brand ${tone} ${compact ? "fuel-stop-card-compact" : ""}`}>
+    <article className={`fuel-stop-card fuel-stop-card-brand ${tone} ${priceSignalClass} ${compact ? "fuel-stop-card-compact" : ""}`.trim()}>
       <div className="fuel-stop-top">
         <div>
-          <span className="network-chip">{getNetworkLabel(stop)}</span>
+          <div className="fuel-stop-chip-row">
+            <span className="network-chip">{getNetworkLabel(stop)}</span>
+            {priceSignalMeta.target !== null ? <span className={`price-target-chip ${priceSignalClass}`.trim()}>{priceSignalMeta.label}</span> : null}
+          </div>
           <strong>{stop.brand || stop.name}</strong>
           <span>{stop.city}{stop.state_code ? `, ${stop.state_code}` : ""}</span>
           {stop.location_type ? <span>{stop.location_type}{stop.store_number ? ` - #${stop.store_number}` : ""}</span> : stop.store_number ? <span>Store #{stop.store_number}</span> : null}
@@ -386,10 +391,10 @@ function StopCard({ stop, compact = false }) {
 
       <p>{stop.address}</p>
 
-      <div className="fuel-price-row fuel-price-row-brand">
+      <div className={`fuel-price-row fuel-price-row-brand ${priceSignalClass}`.trim()}>
         <div>
           <strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
-          <span>{stop.price_source || "Official Love's/Pilot network page"}</span>
+          <span>{priceSignalMeta.target !== null ? `${stop.price_source || "Official Love's/Pilot network page"} | ${priceSignalMeta.summary}` : (stop.price_source || "Official Love's/Pilot network page")}</span>
         </div>
         {stop.source_url ? (
           <a className="fuel-source-link" href={stop.source_url} target="_blank" rel="noreferrer">
@@ -495,6 +500,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   const routeLoadingMessage = ROUTE_PROGRESS_STEPS.reduce((message, step) => (
     routeLoadingSeconds >= step.afterSeconds ? step.label : message
   ), ROUTE_PROGRESS_STEPS[0].label);
+  const activePriceTarget = useMemo(() => parsePriceTarget(activeFilters.price_target), [activeFilters.price_target]);
 
   function setSuggestionsForField(field, suggestions) {
     setLocationSuggestions((current) => ({ ...current, [field]: suggestions }));
@@ -779,6 +785,17 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     () => buildStopsRouteLink(routePlan, cheapestStopsRouteOrder),
     [cheapestStopsRouteOrder, routePlan]
   );
+  const priceTargetStats = useMemo(() => {
+    if (activePriceTarget === null) return null;
+
+    return visibleStops.reduce((stats, stop) => {
+      const signal = getPriceSignalMeta(stop, activePriceTarget).signal;
+      if (signal === "below") stats.below += 1;
+      else if (signal === "above") stats.above += 1;
+      else if (signal === "unknown") stats.unknown += 1;
+      return stats;
+    }, { below: 0, above: 0, unknown: 0 });
+  }, [activePriceTarget, visibleStops]);
 
   useEffect(() => {
     document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
@@ -1028,7 +1045,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                   {mapFullscreen ? "Close full screen" : "Full screen"}
                 </button>
               </div>
-              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} /></Suspense>
+              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} priceTarget={activePriceTarget} /></Suspense>
             </div>
 
             <aside className="route-side-panel">
@@ -1104,11 +1121,29 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                       <option value="0">Any</option>
                     </select>
                   </label>
+                  <label>
+                    Auto diesel target
+                    <input type="number" min="0" step="0.001" placeholder="4.250" value={draftFilters.price_target} onChange={(event) => setDraftFilters({ ...draftFilters, price_target: event.target.value })} />
+                  </label>
                 </div>
 
                 <button className="primary-button filter-apply-button primary-button-brand" onClick={() => setActiveFilters(draftFilters)}>
                   Apply View Filter
                 </button>
+
+                {priceTargetStats ? (
+                  <div className="price-target-summary">
+                    <div className="price-target-summary-head">
+                      <strong>Auto diesel target {formatPriceTarget(activePriceTarget)}/gal</strong>
+                      <span>{visibleStops.length} stops checked</span>
+                    </div>
+                    <div className="price-target-stat-row">
+                      <span className="price-target-stat price-below-target">Green {priceTargetStats.below}</span>
+                      <span className="price-target-stat price-above-target">Red {priceTargetStats.above}</span>
+                      <span className="price-target-stat price-unknown-target">No price {priceTargetStats.unknown}</span>
+                    </div>
+                  </div>
+                ) : null}
 
                 <p className="fuel-filter-note">{routePlan.price_support}</p>
               </div>
@@ -1251,7 +1286,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                 <span>Best overall matches</span>
               </div>
               <div className="fuel-stop-grid">
-                {bestStops.length ? bestStops.map((stop) => <StopCard key={`best-${stop.id}`} stop={stop} compact />) : <div className="empty-route-card">No brand hits on this route.</div>}
+                {bestStops.length ? bestStops.map((stop) => <StopCard key={`best-${stop.id}`} stop={stop} compact priceTarget={activePriceTarget} />) : <div className="empty-route-card">No brand hits on this route.</div>}
               </div>
             </section>
 
@@ -1261,7 +1296,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                 <span>Lowest detour distance first</span>
               </div>
               <div className="fuel-stop-grid">
-                {closestStops.length ? closestStops.map((stop) => <StopCard key={`close-${stop.id}`} stop={stop} compact />) : <div className="empty-route-card">No close branded stops found.</div>}
+                {closestStops.length ? closestStops.map((stop) => <StopCard key={`close-${stop.id}`} stop={stop} compact priceTarget={activePriceTarget} />) : <div className="empty-route-card">No close branded stops found.</div>}
               </div>
             </section>
 
@@ -1271,7 +1306,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
                 <span>Most explicit Pilot and Love's matches</span>
               </div>
               <div className="fuel-stop-grid">
-                {brandPowerStops.length ? brandPowerStops.map((stop) => <StopCard key={`brand-${stop.id}`} stop={stop} compact />) : <div className="empty-route-card">No exact brand-family matches found.</div>}
+                {brandPowerStops.length ? brandPowerStops.map((stop) => <StopCard key={`brand-${stop.id}`} stop={stop} compact priceTarget={activePriceTarget} />) : <div className="empty-route-card">No exact brand-family matches found.</div>}
               </div>
             </section>
           </div>
@@ -1282,7 +1317,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
               <span>Official Love's and Pilot locations on this route.</span>
             </div>
             <div className="fuel-stop-grid fuel-stop-grid-expanded">
-              {visibleStops.length ? visibleStops.map((stop) => <StopCard key={stop.id} stop={stop} />) : <div className="empty-route-card">No network stops matched this view.</div>}
+              {visibleStops.length ? visibleStops.map((stop) => <StopCard key={stop.id} stop={stop} priceTarget={activePriceTarget} />) : <div className="empty-route-card">No network stops matched this view.</div>}
             </div>
           </div>
         </div>
