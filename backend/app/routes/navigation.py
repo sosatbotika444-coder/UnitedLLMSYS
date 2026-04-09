@@ -4,6 +4,7 @@ import re
 import ssl
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import lru_cache
 from itertools import combinations
@@ -19,7 +20,13 @@ from app.auth import get_current_user
 from app.config import get_settings
 from app.database import get_db
 from app.models import RoutingFuelStop, RoutingRequest, RoutingRoute, User
-from app.official_stations import find_official_stations_along_route
+from app.official_stations import (
+    ShortlistedOfficialStation,
+    finalize_shortlisted_official_stations,
+    refresh_shortlisted_live_prices,
+    refine_shortlisted_detours,
+    shortlist_official_stations_along_route,
+)
 from app.schemas import (
     ApiCapability,
     FuelStop,
@@ -106,6 +113,15 @@ TOMTOM_CAPABILITIES = [
     ApiCapability(id="traffic-incidents-api", name="Traffic Incidents API", category="Traffic", status="Ready", description="Accidents, closures, and delays for operations visibility."),
     ApiCapability(id="waypoint-optimization-api", name="Waypoint Optimization API", category="Routing", status="Ready", description="Optimizes stop order for efficient multi-stop dispatch trips."),
 ]
+
+
+@dataclass
+class RouteStationContext:
+    index: int
+    summary: dict
+    route_points: list[RoutePoint]
+    routing_points: list[RoutePoint]
+    shortlisted_stations: list[ShortlistedOfficialStation]
 
 
 def http_request(url: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None) -> str:
@@ -629,6 +645,19 @@ def to_route_points(route: dict, max_points: int = 220) -> list[RoutePoint]:
     if sampled[-1] != points[-1]:
         sampled.append(points[-1])
     return sampled
+
+
+def build_route_station_context(index: int, route: dict, fuel_type: str) -> RouteStationContext:
+    summary = route.get("summary", {})
+    route_points = to_route_points(route)
+    routing_points = to_route_points(route, max_points=700)
+    return RouteStationContext(
+        index=index,
+        summary=summary,
+        route_points=route_points,
+        routing_points=routing_points,
+        shortlisted_stations=shortlist_official_stations_along_route(routing_points, fuel_type),
+    )
 
 
 def normalize_text(value: str) -> str:
@@ -1331,22 +1360,29 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     if not raw_routes:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No route alternatives found")
 
+    route_contexts = [
+        build_route_station_context(index, route, payload.fuel_type)
+        for index, route in enumerate(raw_routes[:3], start=1)
+    ]
+    refresh_shortlisted_live_prices(
+        [item for context in route_contexts for item in context.shortlisted_stations],
+        payload.fuel_type,
+    )
+
     routes: list[RouteOption] = []
     combined_stops: dict[str, FuelStop] = {}
-    for index, route in enumerate(raw_routes[:3], start=1):
-        summary = route.get("summary", {})
-        route_points = to_route_points(route)
-        routing_points = to_route_points(route, max_points=700)
-        fuel_stops = sort_stops(find_official_stations_along_route(routing_points, payload.vehicle_type, payload.fuel_type), payload.sort_by)
+    for context in route_contexts:
+        refine_shortlisted_detours(context.shortlisted_stations, context.routing_points, payload.vehicle_type)
+        fuel_stops = sort_stops(finalize_shortlisted_official_stations(context.shortlisted_stations), payload.sort_by)
         for stop in fuel_stops:
             merge_stop(combined_stops, stop)
         routes.append(RouteOption(
-            id=f"route-{index}",
-            label=f"Option {index}",
-            distance_meters=int(summary.get("lengthInMeters", 0)),
-            travel_time_seconds=int(summary.get("travelTimeInSeconds", 0)),
-            traffic_delay_seconds=int(summary.get("trafficDelayInSeconds", 0)),
-            points=route_points,
+            id=f"route-{context.index}",
+            label=f"Option {context.index}",
+            distance_meters=int(context.summary.get("lengthInMeters", 0)),
+            travel_time_seconds=int(context.summary.get("travelTimeInSeconds", 0)),
+            traffic_delay_seconds=int(context.summary.get("trafficDelayInSeconds", 0)),
+            points=context.route_points,
             fuel_stops=fuel_stops,
         ))
 

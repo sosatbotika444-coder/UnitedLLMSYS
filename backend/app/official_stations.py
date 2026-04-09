@@ -34,10 +34,13 @@ CATALOG_VERSION = 1
 CATALOG_MAX_AGE = timedelta(days=7)
 CATALOG_WORKERS = 18
 DEFAULT_ROUTE_CORRIDOR_MILES = 35.0
+SHORTLISTED_ROUTE_STATION_LIMIT = 80
 ROUTE_REFINE_LIMIT = 28
+LIVE_PRICE_REFRESH_WORKERS = 12
+ROUTE_REFINE_WORKERS = 8
 EARTH_RADIUS_M = 6371000.0
 CATALOG_PATH = Path(__file__).resolve().parent / "data" / "official_station_catalog.json"
-
+ShortlistedOfficialStation = tuple[FuelStop, dict, int]
 
 def safe_http_request(url: str, headers: dict | None = None) -> str | None:
     #here is main problem where can be srtuted are all other continiuds
@@ -670,6 +673,48 @@ def refresh_live_prices(stop: FuelStop, record: dict, fuel_type: str):
 
 
 
+def live_price_task_key(stop: FuelStop, record: dict) -> str:
+    brand = str(record.get("brand") or "")
+    site_id = str(record.get("site_id") or "").strip()
+    if brand == "Pilot Flying J" and site_id:
+        return f"pilot:{site_id}"
+    source_url = str(record.get("source_url") or "").strip()
+    if brand == "Love's" and source_url:
+        return f"loves:{source_url}"
+    return stop.id
+
+
+
+def copy_live_price_fields(source: FuelStop, target: FuelStop):
+    target.diesel_price = source.diesel_price
+    target.auto_diesel_price = source.auto_diesel_price
+    target.unleaded_price = source.unleaded_price
+    target.fuel_types = list(source.fuel_types or [])
+    target.price = source.price
+    target.price_date = source.price_date
+    target.price_source = source.price_source
+
+
+
+def refresh_shortlisted_live_prices(shortlisted: list[ShortlistedOfficialStation], fuel_type: str, max_workers: int = LIVE_PRICE_REFRESH_WORKERS):
+    if not shortlisted:
+        return
+
+    grouped: dict[str, list[ShortlistedOfficialStation]] = {}
+    for stop, record, nearest_index in shortlisted:
+        grouped.setdefault(live_price_task_key(stop, record), []).append((stop, record, nearest_index))
+
+    def refresh_group(group: list[ShortlistedOfficialStation]):
+        primary_stop, record, _ = group[0]
+        refresh_live_prices(primary_stop, record, fuel_type)
+        for stop, _, _ in group[1:]:
+            copy_live_price_fields(primary_stop, stop)
+
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(grouped) or 1)) as executor:
+        list(executor.map(refresh_group, grouped.values()))
+
+
+
 def refine_detour(stop: FuelStop, route_points: list[RoutePoint], nearest_index: int, vehicle_type: str):
     if not settings.tomtom_api_key:
         return
@@ -703,7 +748,33 @@ def refine_detour(stop: FuelStop, route_points: list[RoutePoint], nearest_index:
 
 
 
-def find_official_stations_along_route(route_points: list[RoutePoint], vehicle_type: str, fuel_type: str) -> list[FuelStop]:
+def refine_shortlisted_detours(
+    shortlisted: list[ShortlistedOfficialStation],
+    route_points: list[RoutePoint],
+    vehicle_type: str,
+    limit: int = ROUTE_REFINE_LIMIT,
+    max_workers: int = ROUTE_REFINE_WORKERS,
+):
+    refine_candidates = shortlisted[:limit]
+    if not refine_candidates:
+        return
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(refine_candidates) or 1)) as executor:
+        list(executor.map(lambda item: refine_detour(item[0], route_points, item[2], vehicle_type), refine_candidates))
+
+
+
+def finalize_shortlisted_official_stations(shortlisted: list[ShortlistedOfficialStation]) -> list[FuelStop]:
+    stops = [item[0] for item in shortlisted]
+    deduped: dict[str, FuelStop] = {}
+    for stop in stops:
+        current = deduped.get(stop.id)
+        if current is None or (stop.overall_score or 0) > (current.overall_score or 0):
+            deduped[stop.id] = stop
+    return list(deduped.values())
+
+
+
+def shortlist_official_stations_along_route(route_points: list[RoutePoint], fuel_type: str) -> list[ShortlistedOfficialStation]:
     if len(route_points) < 2:
         return []
 
@@ -717,7 +788,7 @@ def find_official_stations_along_route(route_points: list[RoutePoint], vehicle_t
     lat_padding = DEFAULT_ROUTE_CORRIDOR_MILES / 69.0
     lon_padding = DEFAULT_ROUTE_CORRIDOR_MILES / max(10.0, 69.0 * math.cos(math.radians((min_lat + max_lat) / 2 or 1)))
 
-    candidates: list[tuple[FuelStop, dict, int]] = []
+    candidates: list[ShortlistedOfficialStation] = []
     for record in catalog:
         lat = float(record.get("lat"))
         lon = float(record.get("lon"))
@@ -732,19 +803,12 @@ def find_official_stations_along_route(route_points: list[RoutePoint], vehicle_t
         candidates.append((stop, record, nearest_index))
 
     candidates.sort(key=lambda item: (item[0].off_route_miles or 9999, item[0].origin_miles or 9999, item[0].name.lower()))
-    shortlisted = candidates[:80]
+    return candidates[:SHORTLISTED_ROUTE_STATION_LIMIT]
 
-    for stop, record, _ in shortlisted:
-        refresh_live_prices(stop, record, fuel_type)
 
-    refine_candidates = shortlisted[:ROUTE_REFINE_LIMIT]
-    with ThreadPoolExecutor(max_workers=min(8, len(refine_candidates) or 1)) as executor:
-        list(executor.map(lambda item: refine_detour(item[0], route_points, item[2], vehicle_type), refine_candidates))
 
-    stops = [item[0] for item in shortlisted]
-    deduped: dict[str, FuelStop] = {}
-    for stop in stops:
-        current = deduped.get(stop.id)
-        if current is None or (stop.overall_score or 0) > (current.overall_score or 0):
-            deduped[stop.id] = stop
-    return list(deduped.values())
+def find_official_stations_along_route(route_points: list[RoutePoint], vehicle_type: str, fuel_type: str) -> list[FuelStop]:
+    shortlisted = shortlist_official_stations_along_route(route_points, fuel_type)
+    refresh_shortlisted_live_prices(shortlisted, fuel_type)
+    refine_shortlisted_detours(shortlisted, route_points, vehicle_type)
+    return finalize_shortlisted_official_stations(shortlisted)
