@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import logging
 import re
 from textwrap import dedent
 
@@ -14,12 +15,34 @@ settings = get_settings()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = settings.openrouter_model
 DEFAULT_CHAT_MODEL = settings.openrouter_chat_model
+DEFAULT_CHAT_IMAGE_MODELS = tuple(
+    model_name
+    for model_name in [candidate.strip() for candidate in settings.openrouter_chat_image_models.split(",")]
+    if model_name
+)
 DEFAULT_APP_NAME = settings.openrouter_app_name
 DEFAULT_APP_URL = settings.openrouter_app_url
 DEFAULT_OPENROUTER_API_KEY = settings.openrouter_api_key
 UNITEDLANE_IDENTITY = "UnitedLane"
 CHAT_IMAGE_DATA_URL_PATTERN = re.compile(r"^data:(image/(?:png|jpeg|webp|gif));base64,[A-Za-z0-9+/=\s]+$")
 CHAT_IMAGE_MAX_DATA_URL_LENGTH = 8_000_000
+CHAT_IMAGE_DECLINE_PATTERNS = (
+    re.compile(r"\b(?:can(?:not|'t)|unable to|do not|don't|currently can't)\b.{0,80}\b(?:view|see|analy[sz]e|inspect)\b.{0,30}\bimage", re.IGNORECASE),
+    re.compile(r"\b(?:if|once)\s+you\s+describe\b.{0,80}\b(?:image|content)\b", re.IGNORECASE),
+)
+UNITEDLANE_IMAGE_ANALYSIS_UNAVAILABLE_MESSAGE = (
+    "I couldn't analyze the attached image right now because the free OpenRouter vision providers are temporarily unavailable. "
+    "Please retry in a moment or upload a smaller PNG, JPEG, WEBP, or GIF image."
+)
+logger = logging.getLogger(__name__)
+
+
+class UnitedLaneChatProviderError(RuntimeError):
+    pass
+
+
+class UnitedLaneImageAnalysisUnavailableError(UnitedLaneChatProviderError):
+    pass
 
 STATION_PRICE_SYSTEM_PROMPT = """You are a US fuel price lookup assistant.
 
@@ -383,6 +406,41 @@ def normalize_chat_image_data_url(image_data_url: str = "") -> str:
     return normalized
 
 
+def resolve_unitedlane_chat_models(model: str = DEFAULT_CHAT_MODEL, image_requested: bool = False) -> list[str]:
+    ordered_candidates: list[str] = []
+    configured_candidates = DEFAULT_CHAT_IMAGE_MODELS if image_requested else ()
+    for candidate in (model, *configured_candidates):
+        cleaned = (candidate or "").strip()
+        if cleaned and cleaned not in ordered_candidates:
+            ordered_candidates.append(cleaned)
+    return ordered_candidates or [DEFAULT_CHAT_MODEL]
+
+
+def chat_reply_declines_image_analysis(content: str) -> bool:
+    normalized = " ".join((content or "").split())
+    if not normalized:
+        return True
+    return any(pattern.search(normalized) for pattern in CHAT_IMAGE_DECLINE_PATTERNS)
+
+
+def build_image_provider_unavailable_message(last_error: Exception | None, error_messages: list[str] | None = None) -> str:
+    lowered = "\n".join(error_messages or [])
+    if str(last_error or ""):
+        lowered = f"{lowered}\n{last_error}" if lowered else str(last_error)
+    lowered = lowered.lower()
+    if "free-models-per-day" in lowered or "rate limit" in lowered:
+        return (
+            "I couldn't analyze the attached image because the free OpenRouter image models are currently rate-limited. "
+            "Please retry later, or add credits in OpenRouter to raise the free usage cap."
+        )
+    if "unable to process input image" in lowered or "invalid_argument" in lowered:
+        return (
+            "I couldn't analyze the attached image because the free vision provider rejected this upload. "
+            "Please retry or upload a smaller PNG, JPEG, WEBP, or GIF image."
+        )
+    return UNITEDLANE_IMAGE_ANALYSIS_UNAVAILABLE_MESSAGE
+
+
 def build_unitedlane_chat_user_text(message: str, context: str = "", image_name: str = "") -> str:
     user_message = message.strip()
     if not user_message:
@@ -442,24 +500,50 @@ def generate_unitedlane_chat_reply(
         "and general day-to-day questions in a practical UnitedLane style."
     )
     normalized_image_data_url = normalize_chat_image_data_url(image_data_url)
-    try:
-        client = get_openrouter_client(api_key=api_key)
-        response = client.chat.completions.create(
-            model=model,
-            messages=build_unitedlane_chat_messages(
-                message=message,
-                context=context,
-                image_data_url=normalized_image_data_url,
-                image_name=image_name,
-            ),
-            extra_headers={
-                "HTTP-Referer": DEFAULT_APP_URL,
-                "X-Title": DEFAULT_APP_NAME,
-            },
-        )
-        content = coerce_openrouter_message_text(response.choices[0].message.content)
-        return content.strip() or fallback
-    except ValueError:
-        raise
-    except Exception:
-        return fallback
+    image_requested = bool(normalized_image_data_url)
+    candidate_models = resolve_unitedlane_chat_models(model=model, image_requested=image_requested)
+    messages = build_unitedlane_chat_messages(
+        message=message,
+        context=context,
+        image_data_url=normalized_image_data_url,
+        image_name=image_name,
+    )
+    client = get_openrouter_client(api_key=api_key)
+    last_error: Exception | None = None
+    error_messages: list[str] = []
+
+    for candidate_model in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=candidate_model,
+                messages=messages,
+                extra_headers={
+                    "HTTP-Referer": DEFAULT_APP_URL,
+                    "X-Title": DEFAULT_APP_NAME,
+                },
+            )
+            content = coerce_openrouter_message_text(response.choices[0].message.content)
+            if image_requested and chat_reply_declines_image_analysis(content):
+                last_error = RuntimeError(f"Model {candidate_model} replied without analyzing the image.")
+                error_messages.append(str(last_error))
+                logger.warning("UnitedLane assistant model %s returned a non-vision reply for an image request.", candidate_model)
+                continue
+            if content.strip():
+                return content.strip()
+            last_error = RuntimeError(f"OpenRouter returned an empty assistant reply for model {candidate_model}.")
+            error_messages.append(str(last_error))
+            logger.warning("UnitedLane assistant received an empty reply from model %s.", candidate_model)
+        except ValueError:
+            raise
+        except Exception as exc:
+            last_error = exc
+            error_messages.append(str(exc))
+            logger.warning("UnitedLane assistant model %s failed.", candidate_model, exc_info=True)
+            continue
+
+    if image_requested:
+        raise UnitedLaneImageAnalysisUnavailableError(build_image_provider_unavailable_message(last_error, error_messages)) from last_error
+
+    if last_error is not None:
+        logger.warning("UnitedLane assistant fell back to the default text reply after provider failures: %s", last_error)
+    return fallback

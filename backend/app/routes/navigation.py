@@ -15,7 +15,12 @@ import certifi
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.ai_settings import UNITEDLANE_IDENTITY, generate_unitedlane_chat_reply, generate_unitedlane_route_guidance
+from app.ai_settings import (
+    UNITEDLANE_IDENTITY,
+    UnitedLaneChatProviderError,
+    generate_unitedlane_chat_reply,
+    generate_unitedlane_route_guidance,
+)
 from app.auth import get_current_user
 from app.config import get_settings
 from app.database import get_db
@@ -1509,4 +1514,6 @@ def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UnitedLaneChatProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return UnitedLaneChatResponse(assistant_name=UNITEDLANE_IDENTITY, message=reply)
