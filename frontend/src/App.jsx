@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import brandAvatar from "../../templates/DPsearchfuel logo with digital globe.png";
+import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
@@ -163,6 +163,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("command");
+  const [sitePanel, setSitePanel] = useState("");
 
   useEffect(() => {
     if (!token) {
@@ -220,6 +221,21 @@ export default function App() {
     const timers = [60, 220].map((delay) => window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [activeWorkspace]);
+
+  useEffect(() => {
+    if (!sitePanel) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setSitePanel("");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sitePanel]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -377,118 +393,153 @@ export default function App() {
     setRows([]);
     setMessage("Signed out.");
     setError("");
+    setSitePanel("");
+  }
+
+  function openSitePanel(panel) {
+    setSitePanel(panel);
+  }
+
+  function handleHomeNavigation() {
+    setSitePanel("");
+
+    if (!user) {
+      setMode("login");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setActiveWorkspace("command");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   if (!user) {
     return (
-      <main className="auth-shell">
-        <section className="auth-panel">
-          <div className="auth-panel-head">
-            <span className="brand-pill">DPsearchfuels</span>
-            <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
-            <p>{mode === "login" ? "Enter your email and password to continue." : "Create an account to use the workspace."}</p>
-          </div>
+      <div className="site-page-shell">
+        <SiteHeader
+          onHome={handleHomeNavigation}
+          onAbout={() => openSitePanel("about")}
+          onPrivacy={() => openSitePanel("privacy")}
+        />
 
-          {message ? <div className="notice success">{message}</div> : null}
-          {error ? <div className="notice error">{error}</div> : null}
+        <main className="auth-shell site-auth-shell">
+          <section className="auth-panel">
+            <div className="auth-panel-head">
+              <span className="brand-pill">United Lane LLC</span>
+              <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+              <p>{mode === "login" ? "Enter your email and password to continue." : "Create an account to use the workspace."}</p>
+            </div>
 
-          <div className="tabs">
-            <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
-              Login
-            </button>
-            <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
-              Register
-            </button>
-          </div>
+            {message ? <div className="notice success">{message}</div> : null}
+            {error ? <div className="notice error">{error}</div> : null}
 
-          {mode === "login" ? (
-            <form
-              className="auth-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitAuth("/auth/login", loginForm);
-              }}
-            >
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
-                  placeholder="name@company.com"
-                  required
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-                  placeholder="Enter password"
-                  required
-                />
-              </label>
-              <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                {loading ? "Signing in..." : "Continue"}
+            <div className="tabs">
+              <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
+                Login
               </button>
-            </form>
-          ) : (
-            <form
-              className="auth-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitAuth("/auth/register", registerForm);
-              }}
-            >
-              <label>
-                Full Name
-                <input
-                  type="text"
-                  value={registerForm.full_name}
-                  onChange={(event) => setRegisterForm({ ...registerForm, full_name: event.target.value })}
-                  placeholder="Full name"
-                  required
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={registerForm.email}
-                  onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
-                  placeholder="name@company.com"
-                  required
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  value={registerForm.password}
-                  onChange={(event) => setRegisterForm({ ...registerForm, password: event.target.value })}
-                  placeholder="Minimum 6 characters"
-                  minLength="6"
-                  required
-                />
-              </label>
-              <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Account"}
+              <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
+                Register
               </button>
-            </form>
-          )}
-        </section>
-      </main>
+            </div>
+
+            {mode === "login" ? (
+              <form
+                className="auth-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitAuth("/auth/login", loginForm);
+                }}
+              >
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={loginForm.email}
+                    onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                    placeholder="name@company.com"
+                    required
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={loginForm.password}
+                    onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                    placeholder="Enter password"
+                    required
+                  />
+                </label>
+                <button type="submit" className="primary-button auth-submit" disabled={loading}>
+                  {loading ? "Signing in..." : "Continue"}
+                </button>
+              </form>
+            ) : (
+              <form
+                className="auth-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitAuth("/auth/register", registerForm);
+                }}
+              >
+                <label>
+                  Full Name
+                  <input
+                    type="text"
+                    value={registerForm.full_name}
+                    onChange={(event) => setRegisterForm({ ...registerForm, full_name: event.target.value })}
+                    placeholder="Full name"
+                    required
+                  />
+                </label>
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={registerForm.email}
+                    onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
+                    placeholder="name@company.com"
+                    required
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={registerForm.password}
+                    onChange={(event) => setRegisterForm({ ...registerForm, password: event.target.value })}
+                    placeholder="Minimum 6 characters"
+                    minLength="6"
+                    required
+                  />
+                </label>
+                <button type="submit" className="primary-button auth-submit" disabled={loading}>
+                  {loading ? "Creating..." : "Create Account"}
+                </button>
+              </form>
+            )}
+          </section>
+        </main>
+
+        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
+      </div>
     );
   }
 
   return (
-    <main className="workspace-app-shell">
+    <div className="site-page-shell">
+      <SiteHeader
+        onHome={handleHomeNavigation}
+        onAbout={() => openSitePanel("about")}
+        onPrivacy={() => openSitePanel("privacy")}
+      />
+
+      <main className="workspace-app-shell site-workspace-shell">
       <aside className="workspace-sidebar-shell">
         <div className="workspace-sidebar-brand">
-          <div className="workspace-sidebar-logo"><img src={brandAvatar} alt="dpsearchfuels" className="workspace-sidebar-logo-image" /></div>
+          <div className="workspace-sidebar-logo"><UnitedLaneMark className="workspace-sidebar-logo-mark" /></div>
           <div className="workspace-sidebar-brand-copy">
-            <strong>dpsearchfuels</strong>
+            <strong>United Lane LLC</strong>
             <span>{user.full_name}</span>
             <small>{user.email}</small>
           </div>
@@ -843,6 +894,9 @@ export default function App() {
           </section>
       </section>
     </main>
+
+    {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
+  </div>
   );
 }
 
