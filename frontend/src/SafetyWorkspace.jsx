@@ -851,13 +851,17 @@ export default function SafetyWorkspace({ token, user }) {
         <SafetyAutomationPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
       </section>
 
-      <section hidden={activeTab !== "services"}>
-        <SafetyServiceTools token={token} mode="service" />
-      </section>
+      {activeTab === "services" ? (
+        <section>
+          <SafetyServiceTools token={token} mode="service" active />
+        </section>
+      ) : null}
 
-      <section hidden={activeTab !== "emergency"}>
-        <SafetyServiceTools token={token} mode="emergency" />
-      </section>
+      {activeTab === "emergency" ? (
+        <section>
+          <SafetyServiceTools token={token} mode="emergency" active />
+        </section>
+      ) : null}
 
       <section hidden={activeTab !== "documents"}>
         <SafetyDocumentsPanel token={token} />
@@ -873,6 +877,7 @@ export default function SafetyWorkspace({ token, user }) {
     </section>
   );
 }
+
 
 
 

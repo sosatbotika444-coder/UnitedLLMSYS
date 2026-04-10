@@ -40,7 +40,7 @@ function formatDistance(value) {
 }
 
 function detailHref(item) {
-  if (!item?.lat && !item?.lon) return "#";
+  if (item?.lat === null || item?.lat === undefined || item?.lon === null || item?.lon === undefined) return "#";
   return `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}`;
 }
 
@@ -65,7 +65,7 @@ function ServicePill({ children, tone = "default" }) {
   return <span className={`safety-chip safety-service-pill safety-service-pill-${tone}`}>{children}</span>;
 }
 
-export default function SafetyServiceTools({ token, mode = "service" }) {
+export default function SafetyServiceTools({ token, mode = "service", active = false }) {
   const isEmergency = mode === "emergency";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -129,8 +129,11 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
   );
 
   useEffect(() => {
+    if (!active) {
+      return;
+    }
     loadData(false);
-  }, [loadData]);
+  }, [active, loadData]);
 
   useEffect(() => {
     if (!data?.selected_vehicle_id) {
@@ -224,7 +227,6 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
               onChange={(event) => {
                 const nextVehicleId = event.target.value;
                 setVehicleId(nextVehicleId);
-                loadData(false, { vehicleId: nextVehicleId });
               }}
             >
               {(data?.vehicles || []).map((vehicle) => (
@@ -240,7 +242,6 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
               onChange={(event) => {
                 const nextRadius = event.target.value;
                 setRadius(nextRadius);
-                loadData(false, { radius: nextRadius });
               }}
             >
               {radiusOptions.map((option) => (
@@ -257,7 +258,6 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
                 onChange={(event) => {
                   const nextCategoryId = event.target.value;
                   setCategoryId(nextCategoryId);
-                  loadData(false, { categoryId: nextCategoryId });
                 }}
               >
                 {categoryOptions.map((option) => (
@@ -273,7 +273,6 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
                 onChange={(event) => {
                   const nextScenarioId = event.target.value;
                   setScenarioId(nextScenarioId);
-                  loadData(false, { scenarioId: nextScenarioId });
                 }}
               >
                 {scenarioOptions.map((option) => (
@@ -318,7 +317,7 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
             items={filteredItems}
             selectedItemId={selectedItemId}
             onSelect={setSelectedItemId}
-            active
+            active={active}
           />
         </section>
 
@@ -417,5 +416,10 @@ export default function SafetyServiceTools({ token, mode = "service" }) {
     </section>
   );
 }
+
+
+
+
+
 
 
