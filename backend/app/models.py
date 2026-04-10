@@ -12,7 +12,17 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    department: Mapped[str] = mapped_column(String(32), default="fuel", nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class SafetyNote(Base):
+    __tablename__ = "safety_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class Load(Base):

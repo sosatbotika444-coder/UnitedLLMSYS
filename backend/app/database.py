@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import get_settings
@@ -43,6 +43,25 @@ if settings.database_backend == "sqlite":
 
 class Base(DeclarativeBase):
     pass
+
+
+def ensure_runtime_schema() -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "users" not in table_names:
+        return
+
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "department" in user_columns:
+        return
+
+    if settings.database_backend == "postgresql":
+        statement = "ALTER TABLE users ADD COLUMN department VARCHAR(32) NOT NULL DEFAULT 'fuel'"
+    else:
+        statement = "ALTER TABLE users ADD COLUMN department VARCHAR(32) NOT NULL DEFAULT 'fuel'"
+
+    with engine.begin() as connection:
+        connection.execute(text(statement))
 
 
 def get_db():

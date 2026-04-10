@@ -6,12 +6,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
-from app.database import Base, engine
+from app.database import Base, engine, ensure_runtime_schema
 from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
 from app.routes.auth import router as auth_router
 from app.routes.loads import router as loads_router
 from app.routes.motive import router as motive_router
 from app.routes.navigation import router as navigation_router
+from app.routes.safety import router as safety_router
 
 
 settings = get_settings()
@@ -20,6 +21,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_runtime_schema()
     start_live_price_refresh_workers()
     try:
         yield
@@ -46,6 +48,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(loads_router, prefix="/api")
 app.include_router(navigation_router, prefix="/api")
 app.include_router(motive_router, prefix="/api")
+app.include_router(safety_router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)

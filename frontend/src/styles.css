@@ -7374,3 +7374,81 @@ body.theme-dark .workspace-sidebar-note {
     min-height: unset;
   }
 }
+
+.auth-shell-compact {
+  grid-template-columns: minmax(320px, 520px) !important;
+  justify-content: center;
+}
+
+.auth-panel-compact {
+  width: min(100%, 520px);
+}
+
+.auth-department-grid {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 14px;
+}
+
+.auth-lock-note {
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workspace-app-shell-safety {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.safety-workspace-stack {
+  gap: 18px;
+}
+
+.safety-notes-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.safety-notes-field {
+  display: grid;
+  gap: 10px;
+}
+
+.safety-notes-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.safety-notes-field textarea {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface-muted);
+  color: var(--text);
+  padding: 18px;
+  outline: none;
+}
+
+.safety-notes-field textarea:focus {
+  border-color: rgba(32, 209, 139, 0.45);
+  box-shadow: 0 0 0 4px rgba(32, 209, 139, 0.12);
+}
+
+.unitedlane-ai-layout-single {
+  display: block;
+}
+
+.unitedlane-ai-layout-single .unitedlane-ai-chatcard {
+  min-width: 0;
+}
+
+@media (max-width: 980px) {
+  .workspace-app-shell-safety {
+    grid-template-columns: 1fr;
+  }
+}

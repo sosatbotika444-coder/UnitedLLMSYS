@@ -1,21 +1,29 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
+
+DepartmentName = Literal["fuel", "safety"]
 
 
 class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=2, max_length=255)
     password: str = Field(min_length=6, max_length=128)
+    department: DepartmentName
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
+    department: DepartmentName
 
 
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
     full_name: str
+    department: DepartmentName
 
     model_config = {"from_attributes": True}
 
@@ -24,6 +32,17 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class SafetyNoteUpdate(BaseModel):
+    content: str = Field(default="", max_length=12000)
+
+
+class SafetyNoteResponse(BaseModel):
+    content: str = ""
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class LoadBase(BaseModel):
@@ -219,6 +238,7 @@ class TomTomCapabilityCatalog(BaseModel):
     requires_access: int
     capabilities: list[ApiCapability]
 
+
 class UnitedLaneChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     context: str = Field(default="", max_length=4000)
@@ -229,6 +249,7 @@ class UnitedLaneChatRequest(BaseModel):
 class UnitedLaneChatResponse(BaseModel):
     assistant_name: str = "Safety Team"
     message: str
+
 
 class MotiveIntegrationStatus(BaseModel):
     configured: bool
@@ -310,4 +331,3 @@ class MotiveFleetSnapshot(BaseModel):
     drivers: list[MotiveUserSummary] = Field(default_factory=list)
     vehicles: list[MotiveVehicleSummary] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-

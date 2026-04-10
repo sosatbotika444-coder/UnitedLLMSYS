@@ -14,6 +14,10 @@ from app.models import User
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 bearer_scheme = HTTPBearer()
 settings = get_settings()
+DEPARTMENT_LABELS = {
+    "fuel": "Fuel Service",
+    "safety": "Safety",
+}
 
 
 def hash_password(password: str) -> str:
@@ -49,3 +53,19 @@ def get_current_user(
     if not user:
         raise unauthorized
     return user
+
+
+def require_user_department(*allowed_departments: str):
+    allowed = {department.strip().lower() for department in allowed_departments if department.strip()}
+
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.department not in allowed:
+            allowed_labels = ", ".join(DEPARTMENT_LABELS.get(item, item.title()) for item in sorted(allowed))
+            current_label = DEPARTMENT_LABELS.get(current_user.department, current_user.department.title())
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This account belongs to {current_label}. Access is limited to {allowed_labels}.",
+            )
+        return current_user
+
+    return dependency

@@ -22,7 +22,7 @@ from app.ai_settings import (
     generate_unitedlane_chat_reply,
     generate_unitedlane_route_guidance,
 )
-from app.auth import get_current_user
+from app.auth import require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.models import RoutingFuelStop, RoutingRequest, RoutingRoute, User
@@ -1408,13 +1408,13 @@ def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, 
 def location_suggestions(
     q: str = Query(min_length=2, max_length=255),
     limit: int = Query(default=6, ge=1, le=8),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_user_department("fuel")),
 ):
     return LocationSuggestionResponse(query=q, suggestions=search_location_suggestions(q, limit=limit))
 
 
 @router.get("/tomtom-capabilities", response_model=TomTomCapabilityCatalog)
-def tomtom_capabilities(current_user: User = Depends(get_current_user)):
+def tomtom_capabilities(current_user: User = Depends(require_user_department("fuel"))):
     live = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Live")
     ready = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Ready")
     requires_access = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Requires Access")
@@ -1422,7 +1422,7 @@ def tomtom_capabilities(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/route-assistant", response_model=RouteAssistantResponse)
-def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(require_user_department("fuel")), db: Session = Depends(get_db)):
     if not settings.tomtom_api_key:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="TOMTOM_API_KEY is missing on the backend")
 
@@ -1505,7 +1505,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     )
 
 @router.post("/assistant-chat", response_model=UnitedLaneChatResponse)
-def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(get_current_user)):
+def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(require_user_department("safety"))):
     try:
         reply = generate_unitedlane_chat_reply(
             message=payload.message,
@@ -1518,3 +1518,5 @@ def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(
     except UnitedLaneChatProviderError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return UnitedLaneChatResponse(assistant_name=UNITEDLANE_CHAT_IDENTITY, message=reply)
+
+
