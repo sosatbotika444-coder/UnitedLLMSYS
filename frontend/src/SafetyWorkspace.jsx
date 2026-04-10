@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UnitedLaneChat from "./UnitedLaneChat";
+import SafetyServiceTools from "./SafetyServiceTools";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
@@ -7,6 +8,8 @@ const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.g
 const safetyTabs = [
   { id: "fleet", label: "Fleet Safety" },
   { id: "automation", label: "Automation" },
+  { id: "services", label: "Service Map" },
+  { id: "emergency", label: "Emergency" },
   { id: "documents", label: "Documents" },
   { id: "notes", label: "Notes" },
   { id: "ai", label: "AI Chat" }
@@ -848,6 +851,14 @@ export default function SafetyWorkspace({ token, user }) {
         <SafetyAutomationPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
       </section>
 
+      <section hidden={activeTab !== "services"}>
+        <SafetyServiceTools token={token} mode="service" />
+      </section>
+
+      <section hidden={activeTab !== "emergency"}>
+        <SafetyServiceTools token={token} mode="emergency" />
+      </section>
+
       <section hidden={activeTab !== "documents"}>
         <SafetyDocumentsPanel token={token} />
       </section>
@@ -862,3 +873,6 @@ export default function SafetyWorkspace({ token, user }) {
     </section>
   );
 }
+
+
+

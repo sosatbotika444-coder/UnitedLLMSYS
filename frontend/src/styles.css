@@ -8051,3 +8051,157 @@ body.theme-dark .safety-automation-queue-watch {
     border-radius: 18px;
   }
 }
+
+.safety-service-tools-stack {
+  gap: 18px;
+}
+
+.safety-service-filter-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.safety-service-note {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(8, 145, 178, 0.08);
+  color: var(--muted-strong);
+}
+
+.safety-service-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  gap: 18px;
+}
+
+.safety-service-sidebar {
+  display: grid;
+  gap: 18px;
+}
+
+.safety-service-map-panel,
+.safety-service-detail-panel,
+.safety-service-list-panel {
+  border-radius: 24px !important;
+}
+
+.safety-service-map-canvas {
+  width: 100%;
+  min-height: 520px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.safety-link-button {
+  text-decoration: none;
+}
+
+.safety-service-result-list {
+  display: grid;
+  gap: 12px;
+  max-height: 580px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.safety-service-result-card {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.safety-service-result-card:hover,
+.safety-service-result-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(14, 116, 144, 0.34);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
+}
+
+.safety-service-result-card p,
+.safety-service-result-card small {
+  margin: 0;
+  color: var(--muted);
+}
+
+.safety-service-pill-official {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0369a1;
+}
+
+.safety-service-pill-emergency {
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
+}
+
+.safety-service-pill-poi {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.safety-service-map-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.94);
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+}
+
+.safety-service-map-marker-vehicle {
+  background: #0f172a;
+}
+
+.safety-service-map-marker-official {
+  background: #0284c7;
+}
+
+.safety-service-map-marker-emergency {
+  background: #dc2626;
+}
+
+.safety-service-map-marker-poi {
+  background: #d97706;
+}
+
+.safety-service-map-marker.selected {
+  transform: scale(1.08);
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.28);
+}
+
+body.theme-dark .safety-service-result-card,
+body.theme-dark .safety-service-note {
+  background: rgba(15, 23, 42, 0.8);
+}
+
+@media (max-width: 1240px) {
+  .safety-service-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .safety-service-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .safety-service-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .safety-service-map-canvas {
+    min-height: 360px;
+  }
+}

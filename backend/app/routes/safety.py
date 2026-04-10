@@ -9,6 +9,7 @@ from app.models import SafetyDocument, SafetyNote, User
 from app.motive import MotiveClient
 from app.safety_documents import SafetyDocumentError, analyze_uploaded_safety_document
 from app.safety_fleet import build_safety_fleet_snapshot
+from app.safety_service_map import build_service_map_snapshot
 from app.schemas import (
     SafetyDocumentResponse,
     SafetyDocumentUpload,
@@ -84,3 +85,26 @@ def get_safety_fleet(
 ):
     snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
     return build_safety_fleet_snapshot(snapshot)
+
+
+@router.get("/services")
+def get_safety_services(
+    mode: str = Query(default="service", description="service or emergency"),
+    vehicle_id: int | None = Query(default=None, ge=1),
+    radius_miles: int = Query(default=80, ge=10, le=180),
+    category_id: str = Query(default="all"),
+    scenario_id: str = Query(default="mechanical"),
+    refresh: bool = Query(default=False, description="Force a fresh Motive fetch before building the service map."),
+    current_user: User = Depends(require_user_department("safety")),
+):
+    snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
+    return build_service_map_snapshot(
+        snapshot,
+        settings,
+        mode=mode,
+        vehicle_id=vehicle_id,
+        radius_miles=radius_miles,
+        category_id=category_id,
+        scenario_id=scenario_id,
+    )
+
