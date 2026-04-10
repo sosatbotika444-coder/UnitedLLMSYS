@@ -7626,3 +7626,428 @@ body.theme-dark .safety-upload-copy {
     grid-template-columns: 1fr;
   }
 }
+
+.safety-fleet-stack,
+.safety-automation-stack {
+  gap: 18px;
+}
+
+.safety-fleet-metrics,
+.safety-automation-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.safety-stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
+}
+
+.safety-stat-card span,
+.safety-detail-bullet span,
+.safety-vehicle-card small,
+.safety-filter-summary span,
+.safety-automation-item p,
+.safety-automation-item small,
+.safety-empty-inline,
+.safety-empty-state {
+  color: var(--muted);
+}
+
+.safety-stat-card strong {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.safety-stat-card small {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.safety-stat-card-critical {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(254, 242, 242, 0.98));
+}
+
+.safety-stat-card-alert,
+.safety-stat-card-warning {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 251, 235, 0.98));
+}
+
+.safety-stat-card-info {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.98));
+}
+
+.safety-stat-card-dark {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));
+}
+
+.safety-stat-card-dark span,
+.safety-stat-card-dark strong,
+.safety-stat-card-dark small {
+  color: #f8fafc;
+}
+
+.safety-filter-panel,
+.safety-automation-header,
+.safety-vehicle-list-panel,
+.safety-detail-panel,
+.safety-automation-queue {
+  border-radius: 24px !important;
+}
+
+.safety-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(140px, 0.7fr));
+  gap: 14px;
+}
+
+.safety-filter-grid label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+
+.safety-filter-grid input,
+.safety-filter-grid select {
+  width: 100%;
+}
+
+.safety-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.safety-filter-summary strong {
+  color: var(--text);
+}
+
+.safety-fleet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 18px;
+}
+
+.safety-vehicle-list,
+.safety-automation-list,
+.safety-detail-bullets,
+.safety-action-list {
+  display: grid;
+  gap: 12px;
+}
+
+.safety-vehicle-card {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.safety-vehicle-card:hover,
+.safety-vehicle-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(14, 116, 144, 0.34);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.safety-vehicle-head,
+.safety-vehicle-summary-row,
+.safety-detail-head-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.safety-vehicle-head.compact {
+  align-items: center;
+}
+
+.safety-vehicle-head strong,
+.safety-detail-kicker strong,
+.safety-detail-list strong,
+.safety-detail-bullet strong,
+.safety-automation-item strong {
+  color: var(--text);
+}
+
+.safety-vehicle-head span,
+.safety-vehicle-summary-row small,
+.safety-detail-kicker p,
+.safety-detail-list small {
+  color: var(--muted);
+}
+
+.safety-risk-pill,
+.safety-queue-pill,
+.safety-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.safety-risk-pill-critical,
+.safety-queue-pill-critical {
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
+}
+
+.safety-risk-pill-high,
+.safety-queue-pill-maintenance {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.safety-risk-pill-medium,
+.safety-queue-pill-coaching {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0369a1;
+}
+
+.safety-risk-pill-low,
+.safety-queue-pill-compliance,
+.safety-queue-pill-watch,
+.safety-chip {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--muted-strong);
+}
+
+.safety-chip.strong {
+  background: rgba(8, 145, 178, 0.12);
+  color: #0f766e;
+}
+
+.safety-chip-row,
+.safety-detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.safety-vehicle-stat-row,
+.safety-detail-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.safety-vehicle-stat-row div,
+.safety-detail-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.safety-vehicle-stat-row span,
+.safety-detail-list span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.safety-vehicle-stat-row strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.safety-detail-panel,
+.safety-automation-header {
+  display: grid;
+  gap: 16px;
+}
+
+.safety-detail-kicker {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.safety-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.safety-detail-section {
+  display: grid;
+  gap: 12px;
+}
+
+.safety-detail-section h3,
+.safety-automation-summary-card h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.safety-detail-bullet,
+.safety-action-item,
+.safety-automation-item,
+.safety-automation-summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.safety-detail-bullet small {
+  color: var(--muted-strong);
+  font-weight: 800;
+}
+
+.safety-action-item {
+  color: var(--text);
+}
+
+.safety-empty-inline,
+.safety-empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px dashed var(--line);
+  text-align: center;
+}
+
+.safety-empty-state.small {
+  min-height: 90px;
+}
+
+.safety-automation-summary-grid,
+.safety-automation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.safety-automation-queue {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.safety-automation-queue-critical {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(254, 242, 242, 0.98)) !important;
+}
+
+.safety-automation-queue-maintenance {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 251, 235, 0.98)) !important;
+}
+
+.safety-automation-queue-coaching {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.98)) !important;
+}
+
+.safety-automation-queue-compliance,
+.safety-automation-queue-watch {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98)) !important;
+}
+
+.safety-automation-item p,
+.safety-automation-item small {
+  margin: 0;
+  line-height: 1.5;
+}
+
+body.theme-dark .safety-stat-card,
+body.theme-dark .safety-vehicle-card,
+body.theme-dark .safety-detail-bullet,
+body.theme-dark .safety-action-item,
+body.theme-dark .safety-automation-item,
+body.theme-dark .safety-automation-summary-card {
+  background: rgba(15, 23, 42, 0.8);
+}
+
+body.theme-dark .safety-filter-summary,
+body.theme-dark .safety-detail-kicker {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+body.theme-dark .safety-automation-queue-critical {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(127, 29, 29, 0.3)) !important;
+}
+
+body.theme-dark .safety-automation-queue-maintenance {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(120, 53, 15, 0.3)) !important;
+}
+
+body.theme-dark .safety-automation-queue-coaching {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(30, 64, 175, 0.3)) !important;
+}
+
+body.theme-dark .safety-automation-queue-compliance,
+body.theme-dark .safety-automation-queue-watch {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(51, 65, 85, 0.24)) !important;
+}
+
+@media (max-width: 1240px) {
+  .safety-fleet-metrics,
+  .safety-automation-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .safety-automation-summary-grid,
+  .safety-automation-grid,
+  .safety-fleet-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .safety-filter-grid,
+  .safety-vehicle-stat-row,
+  .safety-detail-card-grid,
+  .safety-detail-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .safety-fleet-metrics,
+  .safety-automation-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .safety-stat-card,
+  .safety-vehicle-card,
+  .safety-detail-bullet,
+  .safety-action-item,
+  .safety-automation-item,
+  .safety-automation-summary-card {
+    border-radius: 18px;
+  }
+}

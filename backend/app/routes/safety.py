@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import require_user_department
+from app.config import get_settings
 from app.database import get_db
 from app.models import SafetyDocument, SafetyNote, User
+from app.motive import MotiveClient
 from app.safety_documents import SafetyDocumentError, analyze_uploaded_safety_document
+from app.safety_fleet import build_safety_fleet_snapshot
 from app.schemas import (
     SafetyDocumentResponse,
     SafetyDocumentUpload,
@@ -15,6 +18,8 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/safety", tags=["safety"])
+settings = get_settings()
+motive_client = MotiveClient(settings)
 
 
 @router.get("/notes", response_model=SafetyNoteResponse)
@@ -70,3 +75,12 @@ def upload_safety_document(payload: SafetyDocumentUpload, current_user: User = D
     db.commit()
     db.refresh(document)
     return document
+
+
+@router.get("/fleet")
+def get_safety_fleet(
+    refresh: bool = Query(default=False, description="Force a fresh Motive fetch instead of the cached safety fleet snapshot."),
+    current_user: User = Depends(require_user_department("safety")),
+):
+    snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
+    return build_safety_fleet_snapshot(snapshot)

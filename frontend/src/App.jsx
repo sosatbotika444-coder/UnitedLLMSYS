@@ -14,7 +14,7 @@ const PRODUCT_KEY = "unitedlane_active_product";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
   { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking" },
-  { id: "safety", label: "Safety", detail: "Notes and AI" }
+  { id: "safety", label: "Safety", detail: "Fleet, docs, AI" }
 ];
 const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
@@ -630,7 +630,7 @@ export default function App() {
               <div className="workspace-sidebar-footer-card">
                 <span>{currentDate}</span>
                 <strong>Safety ready</strong>
-                <small>Documents, notes, AI</small>
+                <small>Fleet, automation, docs</small>
               </div>
               <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
                 Logout
@@ -643,7 +643,7 @@ export default function App() {
               <div className="workspace-main-heading">
                 <span className="workspace-main-kicker">Safety</span>
                 <h1>Safety</h1>
-                <p>Documents, notes, AI.</p>
+                <p>Fleet safety, automation, documents, notes, AI.</p>
               </div>
 
               <div className="workspace-main-meta">
@@ -1053,4 +1053,5 @@ export default function App() {
     </div>
   );
 }
+
 
