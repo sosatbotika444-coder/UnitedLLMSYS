@@ -630,7 +630,7 @@ export default function App() {
               <div className="workspace-sidebar-footer-card">
                 <span>{currentDate}</span>
                 <strong>Safety ready</strong>
-                <small>Notes and AI</small>
+                <small>Documents, notes, AI</small>
               </div>
               <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
                 Logout
@@ -643,7 +643,7 @@ export default function App() {
               <div className="workspace-main-heading">
                 <span className="workspace-main-kicker">Safety</span>
                 <h1>Safety</h1>
-                <p>Notes and AI.</p>
+                <p>Documents, notes, AI.</p>
               </div>
 
               <div className="workspace-main-meta">
@@ -1053,3 +1053,4 @@ export default function App() {
     </div>
   );
 }
+

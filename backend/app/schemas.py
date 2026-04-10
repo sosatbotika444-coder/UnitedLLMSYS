@@ -45,6 +45,27 @@ class SafetyNoteResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
+class SafetyDocumentUpload(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(default="", max_length=128)
+    data_url: str = Field(min_length=10, max_length=14_000_000)
+
+
+class SafetyDocumentResponse(BaseModel):
+    id: int
+    file_name: str
+    content_type: str
+    bucket: Literal["approved", "review", "bad"]
+    document_type: str
+    summary: str
+    issues: list[str] = Field(default_factory=list)
+    recommended_action: str
+    excerpt: str = ""
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
 class LoadBase(BaseModel):
     driver: str = Field(default="", max_length=255)
     truck: str = Field(default="", max_length=64)
@@ -331,3 +352,4 @@ class MotiveFleetSnapshot(BaseModel):
     drivers: list[MotiveUserSummary] = Field(default_factory=list)
     vehicles: list[MotiveVehicleSummary] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+

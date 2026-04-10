@@ -25,6 +25,22 @@ class SafetyNote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+
+class SafetyDocument(Base):
+    __tablename__ = "safety_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    bucket: Mapped[str] = mapped_column(String(32), default="review", index=True, nullable=False)
+    document_type: Mapped[str] = mapped_column(String(64), default="other", nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    issues: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    recommended_action: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
 class Load(Base):
     __tablename__ = "loads"
 
@@ -129,3 +145,4 @@ class RoutingFuelStop(Base):
     amenities: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     location_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     official_match: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
