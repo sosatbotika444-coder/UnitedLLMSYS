@@ -43,6 +43,223 @@ const shiftBriefChecklist = [
   "Check stale telemetry, compliance dates, and document follow-ups.",
   "Leave a concise handoff note for the next safety user."
 ];
+const SAFETY_INVESTIGATION_STORAGE_KEY = "unitedlane_safety_investigations_v1";
+const SAFETY_SHIFT_BRIEF_STORAGE_KEY = "unitedlane_safety_shift_briefs_v1";
+const actionStatusOptions = ["Open", "In Progress", "Blocked", "Done"];
+const shiftStatusOptions = ["Open", "Handoff Ready", "Archived"];
+const managementOwnerOptions = ["Safety", "Dispatch", "Maintenance", "Driver Manager", "Compliance"];
+const EMPTY_SAFETY_LIST = [];
+
+function splitManagementLines(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function makeManagementId(prefix) {
+  const randomPart = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${randomPart}`;
+}
+
+function getUserStorageKey(baseKey, user) {
+  const identity = user?.email || user?.id || user?.full_name || "local";
+  return `${baseKey}:${String(identity).replace(/[^a-z0-9_.@-]/gi, "_")}`;
+}
+
+function loadStoredList(key, fallback = []) {
+  if (typeof window === "undefined" || !window.localStorage) return fallback;
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredList(key, items) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(items));
+  } catch {
+    // Local persistence is best effort when browser storage is unavailable.
+  }
+}
+
+function useStoredList(storageKey, fallback = []) {
+  const [stored, setStored] = useState(() => ({
+    key: storageKey,
+    items: loadStoredList(storageKey, fallback)
+  }));
+
+  useEffect(() => {
+    setStored({ key: storageKey, items: loadStoredList(storageKey, fallback) });
+  }, [storageKey]);
+
+  const setItems = useCallback((updater) => {
+    setStored((current) => {
+      const nextItems = typeof updater === "function" ? updater(current.items) : updater;
+      const safeItems = Array.isArray(nextItems) ? nextItems : [];
+      saveStoredList(current.key, safeItems);
+      return { key: current.key, items: safeItems };
+    });
+  }, []);
+
+  return [stored.items, setItems];
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function downloadTextFile(fileName, content, mimeType) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+
+  const blob = new Blob([content], { type: mimeType });
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
+}
+
+function fileDateStamp() {
+  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+}
+
+function exportRowsToExcel(rows, fileName, sheetName = "Safety Export") {
+  const safeRows = Array.isArray(rows) && rows.length ? rows : [{ Message: "No rows available" }];
+  const columns = Array.from(
+    safeRows.reduce((columnSet, row) => {
+      Object.keys(row || {}).forEach((key) => columnSet.add(key));
+      return columnSet;
+    }, new Set())
+  );
+  const headerHtml = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const rowHtml = safeRows
+    .map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(row?.[column])}</td>`).join("")}</tr>`)
+    .join("");
+  const html = `\ufeff<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}th,td{border:1px solid #ccd3df;padding:6px 8px;text-align:left;vertical-align:top}th{background:#eef3f8;font-weight:700}</style></head><body><h2>${escapeHtml(sheetName)}</h2><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table></body></html>`;
+  downloadTextFile(fileName.endsWith(".xls") ? fileName : `${fileName}.xls`, html, "application/vnd.ms-excel;charset=utf-8");
+}
+
+function createInvestigationDraft(vehicle = null, user = null) {
+  const now = new Date().toISOString();
+  return {
+    id: "",
+    title: "New safety investigation",
+    type: "Accident",
+    status: "Intake",
+    severity: "Elevated",
+    owner: user?.full_name || "Safety",
+    dueDate: "",
+    vehicleId: vehicle?.id ? String(vehicle.id) : "",
+    facts: "Time, location, people involved, and known sequence of events.",
+    evidence: "Photos, dashcam, Motive events, driver statement, dispatch notes.",
+    questions: "What happened first?\nWhat evidence is missing?\nWhat action prevents repeat risk?",
+    actionPlan: "",
+    outcome: "",
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createPriorityAction(item, vehicle = null) {
+  const queueId = item.queueId || item.queue_id || vehicle?.primary_queue || "watch";
+  return {
+    id: `live-${queueId}-${item.vehicle_id || vehicle?.id || item.number}`,
+    source: "Live Queue",
+    title: `${item.number || vehicle?.number || "Unit"}: ${item.summary || vehicle?.headline || "Review safety risk"}`,
+    queueId,
+    queueLabel: item.queueLabel || queueLabels[queueId] || queueId,
+    driverName: vehicle?.driver_name || item.driver_name || "Unassigned",
+    contact: vehicle?.driver_contact || item.driver_contact || "",
+    truckNumber: item.number || vehicle?.number || "",
+    riskLevel: item.risk_level || vehicle?.risk_level || "",
+    riskScore: item.risk_score ?? vehicle?.risk_score ?? "",
+    status: "Open",
+    owner: "Safety",
+    dueDate: "Today",
+    notes: "",
+    summary: item.summary || vehicle?.summary || "",
+    recommendedAction: item.actions?.[0] || vehicle?.recommended_actions?.[0] || "Review and assign next owner."
+  };
+}
+
+function createShiftBriefDraft(user = null, actions = []) {
+  const now = new Date().toISOString();
+  return {
+    id: "",
+    title: `Shift Brief ${formatDate(now)}`,
+    shift: "Day Shift",
+    status: "Open",
+    owner: user?.full_name || "Safety",
+    handoffNote: "",
+    checklist: shiftBriefChecklist.map((label, index) => ({ id: `check-${index}`, label, done: false })),
+    actions,
+    createdAt: now,
+    updatedAt: now,
+    snapshotAt: now
+  };
+}
+
+function mergeLiveActions(currentActions, liveActions) {
+  const currentById = new Map((currentActions || []).map((action) => [action.id, action]));
+  const liveIds = new Set((liveActions || []).map((action) => action.id));
+  const mergedLive = (liveActions || []).map((action) => {
+    const existing = currentById.get(action.id);
+    if (!existing) return action;
+    return {
+      ...action,
+      status: existing.status || action.status,
+      owner: existing.owner || action.owner,
+      dueDate: existing.dueDate || action.dueDate,
+      notes: existing.notes || ""
+    };
+  });
+  const manualActions = (currentActions || []).filter((action) => !liveIds.has(action.id) && action.source !== "Live Queue");
+  return [...mergedLive, ...manualActions];
+}
+
+function buildRiskyPeopleRows(data, source = "Safety") {
+  const riskyLevels = new Set(["Critical", "High", "Medium"]);
+  const riskyQueues = new Set(["critical", "maintenance", "coaching", "compliance"]);
+  return (data?.vehicles || [])
+    .filter((vehicle) => {
+      const queues = vehicle.queue_ids || [];
+      return riskyLevels.has(vehicle.risk_level) || Number(vehicle.risk_score || 0) >= 50 || queues.some((queueId) => riskyQueues.has(queueId));
+    })
+    .sort((left, right) => Number(right.risk_score || 0) - Number(left.risk_score || 0))
+    .map((vehicle) => ({
+      Driver: vehicle.driver_name || "Unassigned",
+      Contact: vehicle.driver_contact || "",
+      Truck: vehicle.number || vehicle.vehicle_label || "",
+      Vehicle: vehicle.vehicle_label || "",
+      "Risk Level": vehicle.risk_level || "",
+      "Risk Score": vehicle.risk_score ?? "",
+      Queue: queueLabels[vehicle.primary_queue] || vehicle.primary_queue || "",
+      Location: vehicle.location_label || "",
+      Faults: vehicle.active_faults ?? 0,
+      "Pending Events": vehicle.pending_events ?? 0,
+      "Fuel %": vehicle.fuel_level_percent ?? "",
+      "Telemetry Age": formatAge(vehicle.age_minutes),
+      "Risk Factors": (vehicle.risk_factors || []).map((factor) => `${factor.label}: ${factor.detail}`).join(" | ") || vehicle.headline || vehicle.summary || "",
+      "Recommended Actions": (vehicle.recommended_actions || []).join(" | "),
+      Snapshot: formatDateTime(data?.fetched_at),
+      Source: source
+    }));
+}
 
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
@@ -450,7 +667,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
   const [focusFilter, setFocusFilter] = useState("All");
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
 
-  const vehicles = data?.vehicles || [];
+  const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
   const metrics = data?.metrics || {};
   const riskOptions = data?.filters?.risk_levels || ["All", "Critical", "High", "Medium", "Low"];
   const queueOptions = data?.filters?.queue_ids || ["All", "critical", "maintenance", "coaching", "compliance", "watch"];
@@ -687,7 +904,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
 function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) {
   const metrics = data?.metrics || {};
   const algorithm = data?.algorithm || {};
-  const queues = data?.queues || [];
+  const queues = data?.queues || EMPTY_SAFETY_LIST;
 
   return (
     <section className="workspace-content-stack safety-automation-stack">
@@ -798,36 +1015,64 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
 }
 
 function SafetyInvestigationPanel({ token, user, data, loading, refreshing, error, onRefresh }) {
-  const vehicles = data?.vehicles || [];
-  const [caseTitle, setCaseTitle] = useState("New safety investigation");
-  const [caseType, setCaseType] = useState("Accident");
-  const [caseStatus, setCaseStatus] = useState("Intake");
-  const [severity, setSeverity] = useState("Elevated");
-  const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [caseFacts, setCaseFacts] = useState("Time, location, people involved, and known sequence of events.");
-  const [caseEvidence, setCaseEvidence] = useState("Photos, dashcam, Motive events, driver statement, dispatch notes.");
-  const [caseQuestions, setCaseQuestions] = useState("What happened first?\nWhat evidence is missing?\nWhat action prevents repeat risk?");
+  const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
+  const storageKey = useMemo(() => getUserStorageKey(SAFETY_INVESTIGATION_STORAGE_KEY, user), [user]);
+  const [cases, setCases] = useStoredList(storageKey);
+  const [activeCaseId, setActiveCaseId] = useState("");
+  const [caseSearch, setCaseSearch] = useState("");
+  const [caseStatusFilter, setCaseStatusFilter] = useState("All");
+  const [caseMessage, setCaseMessage] = useState("");
+  const [draft, setDraft] = useState(() => createInvestigationDraft(null, user));
 
   useEffect(() => {
     if (!vehicles.length) {
-      if (selectedVehicleId) {
-        setSelectedVehicleId("");
+      if (draft.vehicleId) {
+        setDraft((current) => ({ ...current, vehicleId: "" }));
       }
       return;
     }
-    if (!vehicles.some((vehicle) => String(vehicle.id) === String(selectedVehicleId))) {
-      setSelectedVehicleId(String(vehicles[0].id));
+
+    if (!draft.vehicleId && !draft.id) {
+      setDraft((current) => ({ ...current, vehicleId: String(vehicles[0].id) }));
+      return;
     }
-  }, [selectedVehicleId, vehicles]);
 
-  const selectedVehicle = useMemo(
-    () => vehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId)) || null,
-    [selectedVehicleId, vehicles]
-  );
+    if (draft.vehicleId && !vehicles.some((vehicle) => String(vehicle.id) === String(draft.vehicleId))) {
+      setDraft((current) => ({ ...current, vehicleId: "" }));
+    }
+  }, [draft.id, draft.vehicleId, vehicles]);
 
-  const factCount = caseFacts.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
-  const evidenceCount = caseEvidence.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
-  const questionCount = caseQuestions.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
+  const vehicleById = useMemo(() => {
+    return new Map(vehicles.map((vehicle) => [String(vehicle.id), vehicle]));
+  }, [vehicles]);
+
+  const selectedVehicle = vehicleById.get(String(draft.vehicleId)) || null;
+  const riskyPeopleRows = useMemo(() => buildRiskyPeopleRows(data, "Investigations"), [data]);
+  const factCount = splitManagementLines(draft.facts).length;
+  const evidenceCount = splitManagementLines(draft.evidence).length;
+  const questionCount = splitManagementLines(draft.questions).length;
+  const openCaseCount = cases.filter((caseItem) => caseItem.status !== "Closed").length;
+  const criticalCaseCount = cases.filter((caseItem) => caseItem.severity === "Critical" || caseItem.severity === "High").length;
+
+  const filteredCases = useMemo(() => {
+    const term = caseSearch.trim().toLowerCase();
+    return cases.filter((caseItem) => {
+      const caseVehicle = vehicleById.get(String(caseItem.vehicleId)) || null;
+      const haystack = [
+        caseItem.title,
+        caseItem.type,
+        caseItem.status,
+        caseItem.severity,
+        caseItem.owner,
+        caseItem.facts,
+        caseVehicle?.number,
+        caseVehicle?.driver_name
+      ].join(" ").toLowerCase();
+      const matchesSearch = !term || haystack.includes(term);
+      const matchesStatus = caseStatusFilter === "All" || caseItem.status === caseStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [caseSearch, caseStatusFilter, cases, vehicleById]);
 
   const investigationContext = useMemo(() => {
     const vehicleContext = selectedVehicle
@@ -847,41 +1092,199 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
     return [
       "Safety investigation workspace. Treat this as an internal case review.",
       "Separate confirmed facts, assumptions, missing evidence, driver interview questions, and next actions.",
-      `Case title: ${caseTitle}`,
-      `Case type: ${caseType}`,
-      `Severity: ${severity}`,
-      `Status: ${caseStatus}`,
+      `Case title: ${draft.title}`,
+      `Case type: ${draft.type}`,
+      `Severity: ${draft.severity}`,
+      `Status: ${draft.status}`,
+      `Owner: ${draft.owner || "Unassigned"}`,
+      `Due date: ${draft.dueDate || "Not set"}`,
       vehicleContext,
-      `Known facts:\n${caseFacts}`,
-      `Evidence list:\n${caseEvidence}`,
-      `Open questions:\n${caseQuestions}`
+      `Known facts:\n${draft.facts}`,
+      `Evidence list:\n${draft.evidence}`,
+      `Open questions:\n${draft.questions}`,
+      `Action plan:\n${draft.actionPlan || "Not written yet."}`,
+      `Outcome:\n${draft.outcome || "Not closed yet."}`
     ].join("\n\n");
-  }, [caseEvidence, caseFacts, caseQuestions, caseStatus, caseTitle, caseType, selectedVehicle, severity]);
+  }, [draft, selectedVehicle]);
+
+  function updateDraft(field, value) {
+    setCaseMessage("");
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function startNewCase() {
+    setCaseMessage("");
+    setActiveCaseId("");
+    setDraft(createInvestigationDraft(vehicles[0] || null, user));
+  }
+
+  function saveCase(draftOverride = draft) {
+    const now = new Date().toISOString();
+    const nextCase = {
+      ...draftOverride,
+      id: draftOverride.id || makeManagementId("case"),
+      title: draftOverride.title.trim() || "Untitled safety investigation",
+      owner: draftOverride.owner.trim() || user?.full_name || "Safety",
+      createdAt: draftOverride.createdAt || now,
+      updatedAt: now
+    };
+
+    setCases((current) => {
+      const exists = current.some((caseItem) => caseItem.id === nextCase.id);
+      return exists
+        ? current.map((caseItem) => (caseItem.id === nextCase.id ? nextCase : caseItem))
+        : [nextCase, ...current];
+    });
+    setDraft(nextCase);
+    setActiveCaseId(nextCase.id);
+    setCaseMessage("Case saved on this device.");
+  }
+
+  function loadCase(caseItem) {
+    setCaseMessage("");
+    setActiveCaseId(caseItem.id);
+    setDraft({ ...createInvestigationDraft(null, user), ...caseItem, vehicleId: caseItem.vehicleId ? String(caseItem.vehicleId) : "" });
+  }
+
+  function duplicateCase() {
+    const now = new Date().toISOString();
+    const duplicatedCase = {
+      ...draft,
+      id: makeManagementId("case"),
+      title: `${draft.title || "Investigation"} copy`,
+      status: "Intake",
+      createdAt: now,
+      updatedAt: now
+    };
+    setCases((current) => [duplicatedCase, ...current]);
+    setDraft(duplicatedCase);
+    setActiveCaseId(duplicatedCase.id);
+    setCaseMessage("Case duplicated.");
+  }
+
+  function deleteCase(caseId = draft.id) {
+    if (!caseId) {
+      startNewCase();
+      return;
+    }
+
+    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this investigation case from this device?");
+    if (!shouldDelete) return;
+
+    setCases((current) => current.filter((caseItem) => caseItem.id !== caseId));
+    startNewCase();
+    setCaseMessage("Case deleted from this device.");
+  }
+
+  function closeCase() {
+    saveCase({ ...draft, status: "Closed" });
+  }
+
+  function exportCasesExcel() {
+    const caseRows = cases.map((caseItem) => {
+      const caseVehicle = vehicleById.get(String(caseItem.vehicleId)) || null;
+      return {
+        "Case ID": caseItem.id,
+        Title: caseItem.title,
+        Type: caseItem.type,
+        Status: caseItem.status,
+        Severity: caseItem.severity,
+        Owner: caseItem.owner || "",
+        "Due Date": caseItem.dueDate || "",
+        Truck: caseVehicle?.number || "",
+        Driver: caseVehicle?.driver_name || "",
+        Facts: caseItem.facts || "",
+        Evidence: caseItem.evidence || "",
+        Questions: caseItem.questions || "",
+        "Action Plan": caseItem.actionPlan || "",
+        Outcome: caseItem.outcome || "",
+        Created: formatDateTime(caseItem.createdAt),
+        Updated: formatDateTime(caseItem.updatedAt)
+      };
+    });
+    exportRowsToExcel(caseRows, `safety_investigations_${fileDateStamp()}.xls`, "Safety Investigations");
+  }
+
+  function exportRiskyPeopleExcel() {
+    exportRowsToExcel(riskyPeopleRows, `safety_risky_people_${fileDateStamp()}.xls`, "Risky People");
+  }
 
   return (
     <section className="workspace-content-stack safety-investigation-stack">
       <section className="panel safety-investigation-hero">
-        <div className="panel-head">
+        <div className="panel-head safety-management-head">
           <div>
             <h2>Investigation Desk</h2>
-            <span>Build the case packet, then investigate it with Safety Team AI.</span>
+            <span>Manage cases, save local history, export risk, and investigate with AI.</span>
           </div>
-          <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh Fleet Context"}
-          </button>
+          <div className="safety-management-actions">
+            <button className="secondary-button" type="button" onClick={startNewCase}>New Case</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()}>Save Case</button>
+            <button className="secondary-button" type="button" onClick={exportCasesExcel}>Export Cases Excel</button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel}>Export Risky People Excel</button>
+            <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
+              {refreshing ? "Refreshing..." : "Refresh Fleet"}
+            </button>
+          </div>
         </div>
 
+        {caseMessage ? <div className="notice success inline-notice">{caseMessage}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-investigation-metrics">
-          <SafetyStatCard label="Case Status" value={caseStatus} detail={caseType} tone={severity === "Critical" ? "critical" : "neutral"} />
-          <SafetyStatCard label="Facts" value={formatCount(factCount)} detail="Lines in case packet" tone="info" />
-          <SafetyStatCard label="Evidence" value={formatCount(evidenceCount)} detail="Items to verify" tone="warning" />
-          <SafetyStatCard label="Questions" value={formatCount(questionCount)} detail="Open investigator prompts" tone="dark" />
+          <SafetyStatCard label="Saved Cases" value={formatCount(cases.length)} detail={`${formatCount(openCaseCount)} open`} tone="neutral" />
+          <SafetyStatCard label="High Severity" value={formatCount(criticalCaseCount)} detail="High or critical cases" tone="critical" />
+          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for Excel export" tone="warning" />
+          <SafetyStatCard label="Current Packet" value={draft.status} detail={`${draft.type} | ${draft.severity}`} tone={draft.severity === "Critical" ? "critical" : "info"} />
         </div>
       </section>
 
-      <div className="safety-investigation-layout">
+      <div className="safety-investigation-management-layout">
+        <section className="panel safety-management-registry-panel">
+          <div className="panel-head compact-panel-head">
+            <div>
+              <h2>Case Registry</h2>
+              <span>{formatCount(filteredCases.length)} case(s) visible</span>
+            </div>
+          </div>
+
+          <div className="safety-management-filter-grid compact">
+            <label>
+              Search
+              <input type="text" value={caseSearch} onChange={(event) => setCaseSearch(event.target.value)} placeholder="Title, owner, driver, truck" />
+            </label>
+            <label>
+              Status
+              <select value={caseStatusFilter} onChange={(event) => setCaseStatusFilter(event.target.value)}>
+                <option value="All">All</option>
+                {investigationStatuses.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="safety-management-list">
+            {filteredCases.length ? filteredCases.map((caseItem) => {
+              const caseVehicle = vehicleById.get(String(caseItem.vehicleId)) || null;
+              return (
+                <button
+                  className={`safety-management-list-card ${activeCaseId === caseItem.id ? "active" : ""}`}
+                  type="button"
+                  key={caseItem.id}
+                  onClick={() => loadCase(caseItem)}
+                >
+                  <div className="safety-management-card-top">
+                    <strong>{caseItem.title}</strong>
+                    <span>{caseItem.status}</span>
+                  </div>
+                  <small>{caseItem.type} | {caseItem.severity} | {caseVehicle?.number || "No truck"}</small>
+                  <p>{splitManagementLines(caseItem.facts)[0] || "No facts added."}</p>
+                  <em>Updated {formatDateTime(caseItem.updatedAt)}</em>
+                </button>
+              );
+            }) : <div className="safety-empty-state small">No saved cases yet. Save the current packet to start the registry.</div>}
+          </div>
+        </section>
+
         <section className="panel safety-investigation-case-panel">
           <div className="panel-head compact-panel-head">
             <div>
@@ -893,47 +1296,74 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           <div className="safety-investigation-form">
             <label>
               Case Title
-              <input type="text" value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} />
+              <input type="text" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
             </label>
             <label>
               Type
-              <select value={caseType} onChange={(event) => setCaseType(event.target.value)}>
+              <select value={draft.type} onChange={(event) => updateDraft("type", event.target.value)}>
                 {investigationTypes.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
             <label>
               Severity
-              <select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+              <select value={draft.severity} onChange={(event) => updateDraft("severity", event.target.value)}>
                 {investigationSeverities.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
             <label>
               Status
-              <select value={caseStatus} onChange={(event) => setCaseStatus(event.target.value)}>
+              <select value={draft.status} onChange={(event) => updateDraft("status", event.target.value)}>
                 {investigationStatuses.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
             <label>
+              Owner
+              <input type="text" value={draft.owner} onChange={(event) => updateDraft("owner", event.target.value)} list="safety-management-owner-options" />
+            </label>
+            <label>
+              Due Date
+              <input type="date" value={draft.dueDate || ""} onChange={(event) => updateDraft("dueDate", event.target.value)} />
+            </label>
+            <label>
               Truck Context
-              <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)}>
+              <select value={draft.vehicleId} onChange={(event) => updateDraft("vehicleId", event.target.value)}>
                 <option value="">No truck selected</option>
                 {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>{vehicle.number} | {vehicle.risk_level} {vehicle.risk_score}</option>
+                  <option key={vehicle.id} value={vehicle.id}>{vehicle.number} | {vehicle.driver_name || "No driver"} | {vehicle.risk_level} {vehicle.risk_score}</option>
                 ))}
               </select>
             </label>
             <label>
               Known Facts
-              <textarea value={caseFacts} onChange={(event) => setCaseFacts(event.target.value)} rows={5} />
+              <textarea value={draft.facts} onChange={(event) => updateDraft("facts", event.target.value)} rows={5} />
             </label>
             <label>
               Evidence
-              <textarea value={caseEvidence} onChange={(event) => setCaseEvidence(event.target.value)} rows={4} />
+              <textarea value={draft.evidence} onChange={(event) => updateDraft("evidence", event.target.value)} rows={4} />
             </label>
             <label>
               Open Questions
-              <textarea value={caseQuestions} onChange={(event) => setCaseQuestions(event.target.value)} rows={4} />
+              <textarea value={draft.questions} onChange={(event) => updateDraft("questions", event.target.value)} rows={4} />
             </label>
+            <label>
+              Action Plan
+              <textarea value={draft.actionPlan} onChange={(event) => updateDraft("actionPlan", event.target.value)} rows={4} placeholder="Corrective action, owner, prevention step, deadline." />
+            </label>
+            <label>
+              Outcome
+              <textarea value={draft.outcome} onChange={(event) => updateDraft("outcome", event.target.value)} rows={3} placeholder="Closure summary, final decision, coaching or maintenance result." />
+            </label>
+          </div>
+
+          <datalist id="safety-management-owner-options">
+            {managementOwnerOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+
+          <div className="safety-management-actions case-actions">
+            <button className="primary-button" type="button" onClick={() => saveCase()}>Save</button>
+            <button className="secondary-button" type="button" onClick={duplicateCase}>Duplicate</button>
+            <button className="secondary-button" type="button" onClick={closeCase}>Close Case</button>
+            <button className="delete-button" type="button" onClick={() => deleteCase()} disabled={!draft.id}>Delete</button>
           </div>
 
           <section className="safety-investigation-context-card">
@@ -959,78 +1389,436 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
   );
 }
 
-function SafetyShiftBriefPanel({ data, loading, refreshing, error, onRefresh }) {
+function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefresh }) {
   const metrics = data?.metrics || {};
-  const queues = data?.queues || [];
+  const queues = data?.queues || EMPTY_SAFETY_LIST;
+  const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
+  const storageKey = useMemo(() => getUserStorageKey(SAFETY_SHIFT_BRIEF_STORAGE_KEY, user), [user]);
+  const [briefs, setBriefs] = useStoredList(storageKey);
+  const [activeBriefId, setActiveBriefId] = useState("");
+  const [briefSearch, setBriefSearch] = useState("");
+  const [actionSearch, setActionSearch] = useState("");
+  const [actionStatusFilter, setActionStatusFilter] = useState("All");
+  const [manualActionTitle, setManualActionTitle] = useState("");
+  const [briefMessage, setBriefMessage] = useState("");
+
+  const vehicleById = useMemo(() => {
+    return new Map(vehicles.map((vehicle) => [String(vehicle.id), vehicle]));
+  }, [vehicles]);
+
   const priorityItems = useMemo(
-    () => queues.flatMap((queue) => (queue.items || []).slice(0, 2).map((item) => ({ ...item, queueId: queue.id, queueLabel: queue.label }))).slice(0, 6),
+    () => queues.flatMap((queue) => (queue.items || []).slice(0, 3).map((item) => ({ ...item, queueId: queue.id, queueLabel: queue.label }))).slice(0, 10),
     [queues]
   );
+
+  const liveActions = useMemo(
+    () => priorityItems.map((item) => createPriorityAction(item, vehicleById.get(String(item.vehicle_id)) || null)),
+    [priorityItems, vehicleById]
+  );
+
+  const [draft, setDraft] = useState(() => createShiftBriefDraft(user, []));
+
+  useEffect(() => {
+    setDraft((current) => ({
+      ...current,
+      actions: mergeLiveActions(current.actions || [], liveActions),
+      snapshotAt: data?.fetched_at || current.snapshotAt
+    }));
+  }, [data?.fetched_at, liveActions]);
+
+  const checklist = draft.checklist?.length ? draft.checklist : shiftBriefChecklist.map((label, index) => ({ id: `check-${index}`, label, done: false }));
+  const actions = draft.actions || [];
+  const doneChecklistCount = checklist.filter((item) => item.done).length;
+  const doneActionCount = actions.filter((item) => item.status === "Done").length;
+  const openActionCount = actions.filter((item) => item.status !== "Done").length;
+  const riskyPeopleRows = useMemo(() => buildRiskyPeopleRows(data, "Shift Brief"), [data]);
+
+  const filteredBriefs = useMemo(() => {
+    const term = briefSearch.trim().toLowerCase();
+    return briefs.filter((brief) => {
+      if (!term) return true;
+      return [brief.title, brief.shift, brief.status, brief.owner, brief.handoffNote]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [briefSearch, briefs]);
+
+  const filteredActions = useMemo(() => {
+    const term = actionSearch.trim().toLowerCase();
+    return actions.filter((action) => {
+      const matchesStatus = actionStatusFilter === "All" || action.status === actionStatusFilter;
+      const haystack = [
+        action.title,
+        action.driverName,
+        action.truckNumber,
+        action.queueLabel,
+        action.owner,
+        action.notes,
+        action.recommendedAction,
+        action.summary
+      ].join(" ").toLowerCase();
+      const matchesSearch = !term || haystack.includes(term);
+      return matchesStatus && matchesSearch;
+    });
+  }, [actionSearch, actionStatusFilter, actions]);
+
+  function updateBrief(field, value) {
+    setBriefMessage("");
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateChecklistItem(itemId, done) {
+    setBriefMessage("");
+    setDraft((current) => ({
+      ...current,
+      checklist: (current.checklist || checklist).map((item) => (item.id === itemId ? { ...item, done } : item))
+    }));
+  }
+
+  function updateAction(actionId, patch) {
+    setBriefMessage("");
+    setDraft((current) => ({
+      ...current,
+      actions: (current.actions || []).map((action) => (action.id === actionId ? { ...action, ...patch } : action))
+    }));
+  }
+
+  function addManualAction() {
+    const title = manualActionTitle.trim();
+    if (!title) return;
+
+    const manualAction = {
+      id: makeManagementId("action"),
+      source: "Manual",
+      title,
+      queueId: "manual",
+      queueLabel: "Manual",
+      driverName: "",
+      contact: "",
+      truckNumber: "",
+      riskLevel: "",
+      riskScore: "",
+      status: "Open",
+      owner: draft.owner || "Safety",
+      dueDate: "Today",
+      notes: "",
+      summary: title,
+      recommendedAction: "Manual safety follow-up."
+    };
+
+    setDraft((current) => ({ ...current, actions: [...(current.actions || []), manualAction] }));
+    setManualActionTitle("");
+    setBriefMessage("Manual action added.");
+  }
+
+  function removeAction(actionId) {
+    setDraft((current) => ({
+      ...current,
+      actions: (current.actions || []).filter((action) => action.id !== actionId)
+    }));
+  }
+
+  function startNewBrief() {
+    setBriefMessage("");
+    setActiveBriefId("");
+    setDraft(createShiftBriefDraft(user, liveActions));
+  }
+
+  function saveBrief(draftOverride = draft) {
+    const now = new Date().toISOString();
+    const nextBrief = {
+      ...draftOverride,
+      id: draftOverride.id || makeManagementId("brief"),
+      title: draftOverride.title.trim() || `Shift Brief ${formatDate(now)}`,
+      owner: draftOverride.owner.trim() || user?.full_name || "Safety",
+      checklist,
+      actions,
+      createdAt: draftOverride.createdAt || now,
+      updatedAt: now,
+      snapshotAt: data?.fetched_at || draftOverride.snapshotAt || now
+    };
+
+    setBriefs((current) => {
+      const exists = current.some((brief) => brief.id === nextBrief.id);
+      return exists
+        ? current.map((brief) => (brief.id === nextBrief.id ? nextBrief : brief))
+        : [nextBrief, ...current];
+    });
+    setDraft(nextBrief);
+    setActiveBriefId(nextBrief.id);
+    setBriefMessage("Shift brief saved on this device.");
+  }
+
+  function loadBrief(brief) {
+    setBriefMessage("");
+    setActiveBriefId(brief.id);
+    setDraft({
+      ...createShiftBriefDraft(user, []),
+      ...brief,
+      checklist: brief.checklist?.length ? brief.checklist : shiftBriefChecklist.map((label, index) => ({ id: `check-${index}`, label, done: false })),
+      actions: brief.actions || []
+    });
+  }
+
+  function duplicateBrief() {
+    const now = new Date().toISOString();
+    const duplicatedBrief = {
+      ...draft,
+      id: makeManagementId("brief"),
+      title: `${draft.title || "Shift Brief"} copy`,
+      status: "Open",
+      createdAt: now,
+      updatedAt: now
+    };
+    setBriefs((current) => [duplicatedBrief, ...current]);
+    setDraft(duplicatedBrief);
+    setActiveBriefId(duplicatedBrief.id);
+    setBriefMessage("Shift brief duplicated.");
+  }
+
+  function archiveBrief() {
+    saveBrief({ ...draft, status: "Archived" });
+  }
+
+  function deleteBrief(briefId = draft.id) {
+    if (!briefId) {
+      startNewBrief();
+      return;
+    }
+
+    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this shift brief from this device?");
+    if (!shouldDelete) return;
+
+    setBriefs((current) => current.filter((brief) => brief.id !== briefId));
+    startNewBrief();
+    setBriefMessage("Shift brief deleted from this device.");
+  }
+
+  function exportBriefExcel() {
+    const summaryRows = [
+      { Category: "Brief", Item: "Title", Status: draft.status, Owner: draft.owner, Detail: draft.title, Notes: draft.handoffNote || "" },
+      { Category: "Brief", Item: "Shift", Status: draft.status, Owner: draft.owner, Detail: draft.shift, Notes: `Snapshot ${formatDateTime(draft.snapshotAt)}` }
+    ];
+    const checklistRows = checklist.map((item, index) => ({
+      Category: "Checklist",
+      Item: `${index + 1}. ${item.label}`,
+      Status: item.done ? "Done" : "Open",
+      Owner: draft.owner,
+      Detail: "First action",
+      Notes: ""
+    }));
+    const actionRows = actions.map((action) => ({
+      Category: "Action",
+      Item: action.title,
+      Status: action.status,
+      Owner: action.owner,
+      "Due Date": action.dueDate,
+      Driver: action.driverName,
+      Truck: action.truckNumber,
+      Queue: action.queueLabel,
+      "Risk Level": action.riskLevel,
+      "Risk Score": action.riskScore,
+      Detail: action.recommendedAction || action.summary,
+      Notes: action.notes
+    }));
+    exportRowsToExcel([...summaryRows, ...checklistRows, ...actionRows], `safety_shift_brief_${fileDateStamp()}.xls`, "Shift Brief Management");
+  }
+
+  function exportRiskyPeopleExcel() {
+    exportRowsToExcel(riskyPeopleRows, `shift_brief_risky_people_${fileDateStamp()}.xls`, "Risky People");
+  }
 
   return (
     <section className="workspace-content-stack safety-brief-stack">
       <section className="panel safety-brief-hero">
-        <div className="panel-head">
+        <div className="panel-head safety-management-head">
           <div>
             <h2>Shift Brief</h2>
-            <span>Daily safety handoff: urgent items, queue coverage, and first actions.</span>
+            <span>Manage handoff, checklist, live safety actions, saved brief history, and Excel exports.</span>
           </div>
-          <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh Brief"}
-          </button>
+          <div className="safety-management-actions">
+            <button className="secondary-button" type="button" onClick={startNewBrief}>New Brief</button>
+            <button className="primary-button" type="button" onClick={() => saveBrief()}>Save Brief</button>
+            <button className="secondary-button" type="button" onClick={exportBriefExcel}>Export Brief Excel</button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel}>Export Risky People Excel</button>
+            <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
+              {refreshing ? "Refreshing..." : "Refresh Brief"}
+            </button>
+          </div>
         </div>
 
+        {briefMessage ? <div className="notice success inline-notice">{briefMessage}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-automation-metrics safety-brief-metrics">
-          <SafetyStatCard label="Immediate" value={formatCount(metrics.critical_units)} detail="Clear first" tone="critical" />
-          <SafetyStatCard label="Maintenance" value={formatCount(metrics.maintenance_units)} detail="Fault ownership" tone="warning" />
-          <SafetyStatCard label="Coaching" value={formatCount(metrics.coaching_units)} detail="Driver follow-up" tone="info" />
-          <SafetyStatCard label="Compliance" value={formatCount(metrics.compliance_units)} detail="Docs and expiry" tone="neutral" />
+          <SafetyStatCard label="Saved Briefs" value={formatCount(briefs.length)} detail={`${formatCount(openActionCount)} open actions`} tone="neutral" />
+          <SafetyStatCard label="Checklist" value={`${formatCount(doneChecklistCount)}/${formatCount(checklist.length)}`} detail="First actions complete" tone="info" />
+          <SafetyStatCard label="Action Board" value={formatCount(actions.length)} detail={`${formatCount(doneActionCount)} done`} tone="warning" />
+          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for Excel export" tone="critical" />
         </div>
       </section>
 
       {loading && !data ? <section className="panel safety-empty-state">Loading shift brief...</section> : null}
 
-      <div className="safety-brief-layout">
+      <div className="safety-brief-management-layout">
+        <section className="panel safety-brief-editor-panel">
+          <div className="panel-head compact-panel-head">
+            <div>
+              <h2>Brief Setup</h2>
+              <span>{activeBriefId ? "Saved brief selected" : "Current working brief"}</span>
+            </div>
+          </div>
+
+          <div className="safety-management-filter-grid">
+            <label>
+              Title
+              <input type="text" value={draft.title} onChange={(event) => updateBrief("title", event.target.value)} />
+            </label>
+            <label>
+              Shift
+              <input type="text" value={draft.shift} onChange={(event) => updateBrief("shift", event.target.value)} placeholder="Day Shift, Night Shift, Weekend" />
+            </label>
+            <label>
+              Status
+              <select value={draft.status} onChange={(event) => updateBrief("status", event.target.value)}>
+                {shiftStatusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              Owner
+              <input type="text" value={draft.owner} onChange={(event) => updateBrief("owner", event.target.value)} list="safety-management-owner-options" />
+            </label>
+            <label className="wide-field">
+              Handoff Note
+              <textarea rows={4} value={draft.handoffNote} onChange={(event) => updateBrief("handoffNote", event.target.value)} placeholder="What the next safety user needs to know." />
+            </label>
+          </div>
+
+          <div className="safety-management-actions case-actions">
+            <button className="primary-button" type="button" onClick={() => saveBrief()}>Save</button>
+            <button className="secondary-button" type="button" onClick={duplicateBrief}>Duplicate</button>
+            <button className="secondary-button" type="button" onClick={archiveBrief}>Archive</button>
+            <button className="delete-button" type="button" onClick={() => deleteBrief()} disabled={!draft.id}>Delete</button>
+          </div>
+
+          <div className="safety-brief-history-block">
+            <div className="panel-head compact-panel-head">
+              <div>
+                <h2>Saved Briefs</h2>
+                <span>{formatCount(filteredBriefs.length)} visible</span>
+              </div>
+            </div>
+            <label className="safety-management-search-field">
+              Search history
+              <input type="text" value={briefSearch} onChange={(event) => setBriefSearch(event.target.value)} placeholder="Shift, owner, note" />
+            </label>
+            <div className="safety-management-list compact-list">
+              {filteredBriefs.length ? filteredBriefs.map((brief) => (
+                <button
+                  type="button"
+                  className={`safety-management-list-card ${activeBriefId === brief.id ? "active" : ""}`}
+                  key={brief.id}
+                  onClick={() => loadBrief(brief)}
+                >
+                  <div className="safety-management-card-top">
+                    <strong>{brief.title}</strong>
+                    <span>{brief.status}</span>
+                  </div>
+                  <small>{brief.shift} | {brief.owner}</small>
+                  <p>{brief.handoffNote || "No handoff note yet."}</p>
+                  <em>Updated {formatDateTime(brief.updatedAt)}</em>
+                </button>
+              )) : <div className="safety-empty-state small">No saved shift briefs yet.</div>}
+            </div>
+          </div>
+        </section>
+
         <section className="panel safety-brief-checklist-panel">
           <div className="panel-head compact-panel-head">
             <div>
               <h2>First Actions</h2>
-              <span>Use this before handoff or dispatch rush.</span>
+              <span>{formatCount(doneChecklistCount)} of {formatCount(checklist.length)} complete</span>
             </div>
           </div>
-          <div className="safety-brief-checklist">
-            {shiftBriefChecklist.map((item, index) => (
-              <article className="safety-brief-check-item" key={item}>
+          <div className="safety-brief-checklist managed">
+            {checklist.map((item, index) => (
+              <label className={`safety-brief-check-item ${item.done ? "done" : ""}`} key={item.id}>
+                <input type="checkbox" checked={item.done} onChange={(event) => updateChecklistItem(item.id, event.target.checked)} />
                 <span>{index + 1}</span>
-                <strong>{item}</strong>
-              </article>
+                <strong>{item.label}</strong>
+              </label>
             ))}
           </div>
         </section>
 
-        <section className="panel safety-brief-priority-panel">
+        <section className="panel safety-brief-priority-panel safety-brief-action-board">
           <div className="panel-head compact-panel-head">
             <div>
-              <h2>Priority Queue</h2>
-              <span>{formatCount(priorityItems.length)} item(s) ready for review</span>
+              <h2>Action Board</h2>
+              <span>{formatCount(filteredActions.length)} action(s) visible</span>
             </div>
           </div>
-          <div className="safety-brief-priority-list">
-            {priorityItems.length ? priorityItems.map((item) => (
-              <article className="safety-brief-priority-card" key={`${item.queueId}-${item.vehicle_id}`}>
-                <div className="safety-vehicle-head compact">
+
+          <div className="safety-management-filter-grid action-filters">
+            <label>
+              Search actions
+              <input type="text" value={actionSearch} onChange={(event) => setActionSearch(event.target.value)} placeholder="Driver, truck, owner, issue" />
+            </label>
+            <label>
+              Status
+              <select value={actionStatusFilter} onChange={(event) => setActionStatusFilter(event.target.value)}>
+                <option value="All">All</option>
+                {actionStatusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="safety-brief-manual-action">
+            <input type="text" value={manualActionTitle} onChange={(event) => setManualActionTitle(event.target.value)} placeholder="Add manual follow-up" />
+            <button className="secondary-button" type="button" onClick={addManualAction}>Add Action</button>
+          </div>
+
+          <div className="safety-brief-priority-list managed-actions">
+            {filteredActions.length ? filteredActions.map((action) => (
+              <article className="safety-brief-action-card" key={action.id}>
+                <div className="safety-management-card-top">
                   <div>
-                    <strong>{item.number}</strong>
-                    <span>{item.queueLabel}</span>
+                    <strong>{action.title}</strong>
+                    <small>{action.queueLabel} | {action.source}</small>
                   </div>
-                  <RiskPill level={item.risk_level} score={item.risk_score} />
+                  {action.riskLevel ? <RiskPill level={action.riskLevel} score={action.riskScore} /> : <span className="safety-queue-pill safety-queue-pill-watch">Manual</span>}
                 </div>
-                <p>{item.summary}</p>
-                {item.actions?.length ? <small>{item.actions[0]}</small> : null}
+                <p>{action.recommendedAction || action.summary}</p>
+                <div className="safety-brief-action-meta">
+                  <span>Driver: {action.driverName || "Unassigned"}</span>
+                  <span>Truck: {action.truckNumber || "None"}</span>
+                </div>
+                <div className="safety-brief-action-controls">
+                  <label>
+                    Status
+                    <select value={action.status} onChange={(event) => updateAction(action.id, { status: event.target.value })}>
+                      {actionStatusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Owner
+                    <input type="text" value={action.owner} onChange={(event) => updateAction(action.id, { owner: event.target.value })} list="safety-management-owner-options" />
+                  </label>
+                  <label>
+                    Due
+                    <input type="text" value={action.dueDate} onChange={(event) => updateAction(action.id, { dueDate: event.target.value })} placeholder="Today" />
+                  </label>
+                  <label className="wide-field">
+                    Notes
+                    <textarea rows={2} value={action.notes} onChange={(event) => updateAction(action.id, { notes: event.target.value })} placeholder="Follow-up, call result, handoff detail" />
+                  </label>
+                </div>
+                {action.source === "Manual" ? (
+                  <button className="delete-button compact-delete-button" type="button" onClick={() => removeAction(action.id)}>Remove Manual Action</button>
+                ) : null}
               </article>
-            )) : <div className="safety-empty-state small">No queue items in the current safety snapshot.</div>}
+            )) : <div className="safety-empty-state small">No actions match the current filters.</div>}
           </div>
         </section>
       </div>
@@ -1123,7 +1911,7 @@ export default function SafetyWorkspace({ token, user }) {
       </section>
 
       <section hidden={activeTab !== "brief"}>
-        <SafetyShiftBriefPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+        <SafetyShiftBriefPanel data={fleetData} user={user} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
       </section>
 
       {activeTab === "services" ? (

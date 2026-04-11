@@ -9362,3 +9362,294 @@ textarea:focus,
     max-height: 260px;
   }
 }
+/* Safety management layer */
+.safety-management-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.safety-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 280px;
+}
+
+.safety-management-actions .primary-button,
+.safety-management-actions .secondary-button,
+.safety-management-actions .delete-button {
+  width: auto;
+  min-width: 112px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.safety-investigation-management-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.72fr) minmax(360px, 1.15fr) minmax(340px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.safety-brief-management-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(280px, 0.7fr) minmax(420px, 1.35fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.safety-management-registry-panel,
+.safety-brief-editor-panel,
+.safety-brief-action-board,
+.safety-investigation-case-panel,
+.safety-investigation-ai-panel {
+  min-width: 0;
+}
+
+.safety-management-filter-grid,
+.safety-brief-action-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.safety-management-filter-grid.compact {
+  grid-template-columns: 1fr;
+}
+
+.safety-management-filter-grid label,
+.safety-brief-action-controls label,
+.safety-management-search-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.safety-management-filter-grid .wide-field,
+.safety-brief-action-controls .wide-field {
+  grid-column: 1 / -1;
+}
+
+.safety-investigation-form label:nth-child(n + 6) {
+  grid-column: auto;
+}
+
+.safety-investigation-form label:nth-child(n + 8) {
+  grid-column: 1 / -1;
+}
+
+.safety-management-list,
+.safety-brief-history-block,
+.managed-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.safety-management-list {
+  max-height: 720px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.safety-management-list.compact-list {
+  max-height: 360px;
+}
+
+.safety-management-list-card {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.safety-management-list-card:hover,
+.safety-management-list-card.active {
+  border-color: var(--brand);
+  background: var(--surface-muted);
+}
+
+.safety-management-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.safety-management-card-top strong,
+.safety-brief-action-card strong {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.safety-management-card-top span {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.safety-management-list-card small,
+.safety-management-list-card p,
+.safety-management-list-card em {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.safety-management-list-card em {
+  font-style: normal;
+  font-size: 12px;
+}
+
+.case-actions {
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.safety-brief-history-block {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.safety-brief-checklist.managed {
+  gap: 10px;
+}
+
+.safety-brief-checklist.managed .safety-brief-check-item {
+  grid-template-columns: 20px 32px minmax(0, 1fr);
+  align-items: center;
+}
+
+.safety-brief-check-item input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.safety-brief-check-item.done {
+  border-color: var(--brand);
+  background: var(--surface-muted);
+}
+
+.safety-brief-check-item.done strong {
+  color: var(--muted-strong);
+}
+
+.safety-brief-manual-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.safety-brief-manual-action .secondary-button {
+  width: auto;
+  min-width: 120px;
+}
+
+.safety-brief-action-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.safety-brief-action-card p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.safety-brief-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.safety-brief-action-meta span {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.safety-brief-action-controls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact-delete-button {
+  justify-self: start;
+  width: auto;
+  min-width: 160px;
+  min-height: 36px;
+}
+
+@media (max-width: 1320px) {
+  .safety-investigation-management-layout,
+  .safety-brief-management-layout {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .safety-investigation-ai-panel,
+  .safety-brief-action-board {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 920px) {
+  .safety-management-head {
+    align-items: stretch;
+  }
+
+  .safety-management-actions {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .safety-investigation-management-layout,
+  .safety-brief-management-layout,
+  .safety-management-filter-grid,
+  .safety-brief-action-controls,
+  .safety-brief-manual-action {
+    grid-template-columns: 1fr;
+  }
+
+  .safety-investigation-ai-panel,
+  .safety-brief-action-board {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .safety-management-actions .primary-button,
+  .safety-management-actions .secondary-button,
+  .safety-management-actions .delete-button,
+  .safety-brief-manual-action .secondary-button,
+  .compact-delete-button {
+    width: 100%;
+  }
+}
