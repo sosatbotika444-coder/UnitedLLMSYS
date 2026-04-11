@@ -8,6 +8,8 @@ const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.g
 const safetyTabs = [
   { id: "fleet", label: "Fleet Safety" },
   { id: "automation", label: "Automation" },
+  { id: "investigations", label: "Investigations" },
+  { id: "brief", label: "Shift Brief" },
   { id: "services", label: "Service Map" },
   { id: "emergency", label: "Emergency" },
   { id: "documents", label: "Documents" },
@@ -26,6 +28,21 @@ const queueLabels = {
   compliance: "Compliance",
   watch: "Watchlist"
 };
+const investigationTypes = ["Accident", "Near Miss", "Roadside Issue", "Driver Complaint", "Cargo Claim", "Compliance Review"];
+const investigationStatuses = ["Intake", "Investigating", "Waiting on Evidence", "Action Plan", "Closed"];
+const investigationSeverities = ["Routine", "Elevated", "High", "Critical"];
+const investigationPromptOptions = [
+  "Build an investigation plan from this case packet.",
+  "Separate confirmed facts from assumptions and gaps.",
+  "Draft the driver interview questions and next actions."
+];
+const shiftBriefChecklist = [
+  "Clear Immediate Action items before the next dispatch wave.",
+  "Confirm maintenance ownership for active fault units.",
+  "Review coaching events with driver-facing language ready.",
+  "Check stale telemetry, compliance dates, and document follow-ups.",
+  "Leave a concise handoff note for the next safety user."
+];
 
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
@@ -780,6 +797,256 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
   );
 }
 
+function SafetyInvestigationPanel({ token, user, data, loading, refreshing, error, onRefresh }) {
+  const vehicles = data?.vehicles || [];
+  const [caseTitle, setCaseTitle] = useState("New safety investigation");
+  const [caseType, setCaseType] = useState("Accident");
+  const [caseStatus, setCaseStatus] = useState("Intake");
+  const [severity, setSeverity] = useState("Elevated");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [caseFacts, setCaseFacts] = useState("Time, location, people involved, and known sequence of events.");
+  const [caseEvidence, setCaseEvidence] = useState("Photos, dashcam, Motive events, driver statement, dispatch notes.");
+  const [caseQuestions, setCaseQuestions] = useState("What happened first?\nWhat evidence is missing?\nWhat action prevents repeat risk?");
+
+  useEffect(() => {
+    if (!vehicles.length) {
+      if (selectedVehicleId) {
+        setSelectedVehicleId("");
+      }
+      return;
+    }
+    if (!vehicles.some((vehicle) => String(vehicle.id) === String(selectedVehicleId))) {
+      setSelectedVehicleId(String(vehicles[0].id));
+    }
+  }, [selectedVehicleId, vehicles]);
+
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId)) || null,
+    [selectedVehicleId, vehicles]
+  );
+
+  const factCount = caseFacts.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
+  const evidenceCount = caseEvidence.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
+  const questionCount = caseQuestions.split(/\n+/).map((item) => item.trim()).filter(Boolean).length;
+
+  const investigationContext = useMemo(() => {
+    const vehicleContext = selectedVehicle
+      ? [
+          `Truck: ${selectedVehicle.number}`,
+          `Driver: ${selectedVehicle.driver_name || "Unknown"}`,
+          `Risk: ${selectedVehicle.risk_level} ${selectedVehicle.risk_score}`,
+          `Location: ${selectedVehicle.location_label || "Unknown"}`,
+          `Current queue: ${queueLabels[selectedVehicle.primary_queue] || selectedVehicle.primary_queue || "None"}`,
+          `Headline: ${selectedVehicle.headline || "No headline"}`,
+          `Summary: ${selectedVehicle.summary || "No summary"}`,
+          `Recommended actions: ${(selectedVehicle.recommended_actions || []).join(" | ") || "None listed"}`,
+          `Risk factors: ${(selectedVehicle.risk_factors || []).map((factor) => `${factor.label}: ${factor.detail}`).join(" | ") || "None listed"}`
+        ].join("\n")
+      : "Truck: Not selected";
+
+    return [
+      "Safety investigation workspace. Treat this as an internal case review.",
+      "Separate confirmed facts, assumptions, missing evidence, driver interview questions, and next actions.",
+      `Case title: ${caseTitle}`,
+      `Case type: ${caseType}`,
+      `Severity: ${severity}`,
+      `Status: ${caseStatus}`,
+      vehicleContext,
+      `Known facts:\n${caseFacts}`,
+      `Evidence list:\n${caseEvidence}`,
+      `Open questions:\n${caseQuestions}`
+    ].join("\n\n");
+  }, [caseEvidence, caseFacts, caseQuestions, caseStatus, caseTitle, caseType, selectedVehicle, severity]);
+
+  return (
+    <section className="workspace-content-stack safety-investigation-stack">
+      <section className="panel safety-investigation-hero">
+        <div className="panel-head">
+          <div>
+            <h2>Investigation Desk</h2>
+            <span>Build the case packet, then investigate it with Safety Team AI.</span>
+          </div>
+          <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh Fleet Context"}
+          </button>
+        </div>
+
+        {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+        <div className="safety-investigation-metrics">
+          <SafetyStatCard label="Case Status" value={caseStatus} detail={caseType} tone={severity === "Critical" ? "critical" : "neutral"} />
+          <SafetyStatCard label="Facts" value={formatCount(factCount)} detail="Lines in case packet" tone="info" />
+          <SafetyStatCard label="Evidence" value={formatCount(evidenceCount)} detail="Items to verify" tone="warning" />
+          <SafetyStatCard label="Questions" value={formatCount(questionCount)} detail="Open investigator prompts" tone="dark" />
+        </div>
+      </section>
+
+      <div className="safety-investigation-layout">
+        <section className="panel safety-investigation-case-panel">
+          <div className="panel-head compact-panel-head">
+            <div>
+              <h2>Case Packet</h2>
+              <span>{loading && !data ? "Loading fleet context..." : `${formatCount(vehicles.length)} truck(s) available`}</span>
+            </div>
+          </div>
+
+          <div className="safety-investigation-form">
+            <label>
+              Case Title
+              <input type="text" value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} />
+            </label>
+            <label>
+              Type
+              <select value={caseType} onChange={(event) => setCaseType(event.target.value)}>
+                {investigationTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              Severity
+              <select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+                {investigationSeverities.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              Status
+              <select value={caseStatus} onChange={(event) => setCaseStatus(event.target.value)}>
+                {investigationStatuses.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              Truck Context
+              <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)}>
+                <option value="">No truck selected</option>
+                {vehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>{vehicle.number} | {vehicle.risk_level} {vehicle.risk_score}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Known Facts
+              <textarea value={caseFacts} onChange={(event) => setCaseFacts(event.target.value)} rows={5} />
+            </label>
+            <label>
+              Evidence
+              <textarea value={caseEvidence} onChange={(event) => setCaseEvidence(event.target.value)} rows={4} />
+            </label>
+            <label>
+              Open Questions
+              <textarea value={caseQuestions} onChange={(event) => setCaseQuestions(event.target.value)} rows={4} />
+            </label>
+          </div>
+
+          <section className="safety-investigation-context-card">
+            <strong>AI case context</strong>
+            <pre>{investigationContext}</pre>
+          </section>
+        </section>
+
+        <UnitedLaneChat
+          token={token}
+          user={user}
+          title="Investigation AI"
+          assistantName="Safety Investigator"
+          workspace="Safety Investigation"
+          extraContext={investigationContext}
+          promptOptions={investigationPromptOptions}
+          welcomeText="Safety Investigator is ready. Fill the case packet, then ask for a plan, interview questions, or missing evidence."
+          placeholder="Ask the investigator to build a timeline, identify gaps, draft interview questions, or write the corrective action plan."
+          className="safety-investigation-ai-panel"
+        />
+      </div>
+    </section>
+  );
+}
+
+function SafetyShiftBriefPanel({ data, loading, refreshing, error, onRefresh }) {
+  const metrics = data?.metrics || {};
+  const queues = data?.queues || [];
+  const priorityItems = useMemo(
+    () => queues.flatMap((queue) => (queue.items || []).slice(0, 2).map((item) => ({ ...item, queueId: queue.id, queueLabel: queue.label }))).slice(0, 6),
+    [queues]
+  );
+
+  return (
+    <section className="workspace-content-stack safety-brief-stack">
+      <section className="panel safety-brief-hero">
+        <div className="panel-head">
+          <div>
+            <h2>Shift Brief</h2>
+            <span>Daily safety handoff: urgent items, queue coverage, and first actions.</span>
+          </div>
+          <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh Brief"}
+          </button>
+        </div>
+
+        {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+        <div className="safety-automation-metrics safety-brief-metrics">
+          <SafetyStatCard label="Immediate" value={formatCount(metrics.critical_units)} detail="Clear first" tone="critical" />
+          <SafetyStatCard label="Maintenance" value={formatCount(metrics.maintenance_units)} detail="Fault ownership" tone="warning" />
+          <SafetyStatCard label="Coaching" value={formatCount(metrics.coaching_units)} detail="Driver follow-up" tone="info" />
+          <SafetyStatCard label="Compliance" value={formatCount(metrics.compliance_units)} detail="Docs and expiry" tone="neutral" />
+        </div>
+      </section>
+
+      {loading && !data ? <section className="panel safety-empty-state">Loading shift brief...</section> : null}
+
+      <div className="safety-brief-layout">
+        <section className="panel safety-brief-checklist-panel">
+          <div className="panel-head compact-panel-head">
+            <div>
+              <h2>First Actions</h2>
+              <span>Use this before handoff or dispatch rush.</span>
+            </div>
+          </div>
+          <div className="safety-brief-checklist">
+            {shiftBriefChecklist.map((item, index) => (
+              <article className="safety-brief-check-item" key={item}>
+                <span>{index + 1}</span>
+                <strong>{item}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel safety-brief-priority-panel">
+          <div className="panel-head compact-panel-head">
+            <div>
+              <h2>Priority Queue</h2>
+              <span>{formatCount(priorityItems.length)} item(s) ready for review</span>
+            </div>
+          </div>
+          <div className="safety-brief-priority-list">
+            {priorityItems.length ? priorityItems.map((item) => (
+              <article className="safety-brief-priority-card" key={`${item.queueId}-${item.vehicle_id}`}>
+                <div className="safety-vehicle-head compact">
+                  <div>
+                    <strong>{item.number}</strong>
+                    <span>{item.queueLabel}</span>
+                  </div>
+                  <RiskPill level={item.risk_level} score={item.risk_score} />
+                </div>
+                <p>{item.summary}</p>
+                {item.actions?.length ? <small>{item.actions[0]}</small> : null}
+              </article>
+            )) : <div className="safety-empty-state small">No queue items in the current safety snapshot.</div>}
+          </div>
+        </section>
+      </div>
+
+      <section className="safety-brief-queue-grid">
+        {queues.map((queue) => (
+          <article className={`panel safety-brief-queue-card safety-automation-queue-${queue.id}`} key={queue.id}>
+            <span>{queue.label}</span>
+            <strong>{formatCount(queue.count)}</strong>
+            <p>{queue.description}</p>
+          </article>
+        ))}
+      </section>
+    </section>
+  );
+}
 export default function SafetyWorkspace({ token, user }) {
   const [activeTab, setActiveTab] = useState("fleet");
   const [fleetData, setFleetData] = useState(null);
@@ -849,6 +1116,14 @@ export default function SafetyWorkspace({ token, user }) {
 
       <section hidden={activeTab !== "automation"}>
         <SafetyAutomationPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+      </section>
+
+      <section hidden={activeTab !== "investigations"}>
+        <SafetyInvestigationPanel token={token} user={user} data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+      </section>
+
+      <section hidden={activeTab !== "brief"}>
+        <SafetyShiftBriefPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
       </section>
 
       {activeTab === "services" ? (

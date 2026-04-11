@@ -9202,3 +9202,163 @@ textarea:focus,
     width: 100%;
   }
 }
+/* Safety investigations and shift brief */
+.safety-investigation-metrics,
+.safety-brief-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.safety-investigation-layout,
+.safety-brief-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.safety-investigation-case-panel,
+.safety-investigation-ai-panel,
+.safety-brief-checklist-panel,
+.safety-brief-priority-panel {
+  min-width: 0;
+}
+
+.safety-investigation-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.safety-investigation-form label,
+.safety-notes-field,
+.unitedlane-ai-form {
+  min-width: 0;
+}
+
+.safety-investigation-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.safety-investigation-form label:nth-child(n + 6),
+.safety-investigation-context-card {
+  grid-column: 1 / -1;
+}
+
+.safety-investigation-form textarea {
+  resize: vertical;
+}
+
+.safety-investigation-context-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.safety-investigation-context-card strong {
+  color: var(--text);
+}
+
+.safety-investigation-context-card pre {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--muted-strong);
+  font: 12px/1.55 "Aptos", "Segoe UI", sans-serif;
+}
+
+.safety-investigation-ai-panel .unitedlane-ai-log {
+  min-height: 440px;
+}
+
+.safety-brief-checklist,
+.safety-brief-priority-list,
+.safety-brief-queue-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.safety-brief-check-item,
+.safety-brief-priority-card,
+.safety-brief-queue-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.safety-brief-check-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.safety-brief-check-item span {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--brand-strong);
+  font-weight: 900;
+}
+
+.safety-brief-check-item strong,
+.safety-brief-priority-card strong,
+.safety-brief-queue-card strong {
+  color: var(--text);
+}
+
+.safety-brief-priority-card p,
+.safety-brief-priority-card small,
+.safety-brief-queue-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.safety-brief-queue-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.safety-brief-queue-card span {
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.safety-brief-queue-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+@media (max-width: 1080px) {
+  .safety-investigation-layout,
+  .safety-brief-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .safety-investigation-form {
+    grid-template-columns: 1fr;
+  }
+
+  .safety-investigation-context-card pre {
+    max-height: 260px;
+  }
+}

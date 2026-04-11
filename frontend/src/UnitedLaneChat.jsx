@@ -4,16 +4,19 @@ const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const DEFAULT_ASSISTANT_NAME = "Safety Team";
-const quickPrompts = [
+const DEFAULT_QUICK_PROMPTS = [
   "Write a short driver coaching message.",
   "Give me a post-accident checklist.",
   "Review this safety issue and tell me the next steps."
 ];
-const welcomeMessage = {
-  role: "assistant",
-  assistantName: DEFAULT_ASSISTANT_NAME,
-  text: "Safety Team is ready."
-};
+
+function createWelcomeMessage(assistantName = DEFAULT_ASSISTANT_NAME, text = "Safety Team is ready.") {
+  return {
+    role: "assistant",
+    assistantName,
+    text
+  };
+}
 
 async function sendChatMessage(message, token, context = "", attachment = null) {
   const response = await fetch(`${API_URL}/navigation/assistant-chat`, {
@@ -53,19 +56,41 @@ function formatBytes(value) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function UnitedLaneChat({ token, user }) {
+export default function UnitedLaneChat({
+  token,
+  user,
+  title = "Safety AI",
+  assistantName = DEFAULT_ASSISTANT_NAME,
+  workspace = "Safety",
+  extraContext = "",
+  promptOptions = DEFAULT_QUICK_PROMPTS,
+  welcomeText = "Safety Team is ready.",
+  placeholder = "Ask Safety AI",
+  className = ""
+}) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [messages, setMessages] = useState([welcomeMessage]);
+  const [messages, setMessages] = useState(() => [createWelcomeMessage(assistantName, welcomeText)]);
   const [attachment, setAttachment] = useState(null);
   const [attachmentError, setAttachmentError] = useState("");
   const logRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const context = useMemo(() => {
-    if (!user) return "";
-    return [`User: ${user.full_name} (${user.email})`, "Workspace: Safety"].join("\n");
-  }, [user]);
+    const lines = [];
+    if (user) {
+      lines.push(`User: ${user.full_name} (${user.email})`);
+    }
+    lines.push(`Workspace: ${workspace}`);
+    if (extraContext.trim()) {
+      lines.push(extraContext.trim());
+    }
+    return lines.join("\n");
+  }, [extraContext, user, workspace]);
+
+  useEffect(() => {
+    setMessages([createWelcomeMessage(assistantName, welcomeText)]);
+  }, [assistantName, welcomeText]);
 
   useEffect(() => {
     if (!logRef.current) return;
@@ -135,7 +160,7 @@ export default function UnitedLaneChat({ token, user }) {
         ...nextMessages,
         {
           role: "assistant",
-          assistantName: data.assistant_name || DEFAULT_ASSISTANT_NAME,
+          assistantName: data.assistant_name || assistantName,
           text: data.message
         }
       ]);
@@ -144,7 +169,7 @@ export default function UnitedLaneChat({ token, user }) {
         ...nextMessages,
         {
           role: "assistant",
-          assistantName: DEFAULT_ASSISTANT_NAME,
+          assistantName,
           text: error.message || "Safety Team could not answer right now."
         }
       ]);
@@ -159,20 +184,20 @@ export default function UnitedLaneChat({ token, user }) {
   }
 
   return (
-    <section className="panel unitedlane-ai-workspace">
+    <section className={`panel unitedlane-ai-workspace ${className}`.trim()}>
       <div className="panel-head unitedlane-ai-head">
         <div>
-          <h2>Safety AI</h2>
+          <h2>{title}</h2>
           <span>{sending ? "Working..." : "Ready"}</span>
         </div>
         <div className="unitedlane-ai-status">
           <span>{sending ? "Thinking" : "Online"}</span>
-          <strong>{DEFAULT_ASSISTANT_NAME}</strong>
+          <strong>{assistantName}</strong>
         </div>
       </div>
 
       <section className="unitedlane-ai-promptbar">
-        {quickPrompts.map((prompt) => (
+        {promptOptions.map((prompt) => (
           <button key={prompt} type="button" className="unitedlane-ai-chip" onClick={() => submitMessage(prompt)} disabled={sending}>
             {prompt}
           </button>
@@ -184,7 +209,7 @@ export default function UnitedLaneChat({ token, user }) {
           <div className="unitedlane-ai-log" ref={logRef}>
             {messages.map((message, index) => (
               <article key={`${message.role}-${index}`} className={`unitedlane-ai-bubble unitedlane-ai-bubble-${message.role}`}>
-                <strong>{message.role === "assistant" ? (message.assistantName || DEFAULT_ASSISTANT_NAME) : "You"}</strong>
+                <strong>{message.role === "assistant" ? (message.assistantName || assistantName) : "You"}</strong>
                 {message.imageUrl ? <img className="unitedlane-ai-bubble-image" src={message.imageUrl} alt={message.imageName || "Uploaded attachment"} /> : null}
                 {message.imageName ? <span className="unitedlane-ai-bubble-meta">{message.imageName}</span> : null}
                 <p>{message.text}</p>
@@ -212,7 +237,7 @@ export default function UnitedLaneChat({ token, user }) {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask Safety AI"
+              placeholder={placeholder}
               rows={4}
             />
             <div className="unitedlane-ai-formbar">
