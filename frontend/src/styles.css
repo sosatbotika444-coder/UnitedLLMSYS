@@ -8278,3 +8278,927 @@ body.theme-dark .safety-service-note {
     min-height: inherit;
   }
 }
+
+/* Commercial 2D product system override */
+:root {
+  --bg: #f6f8f7;
+  --bg-strong: #eef3ef;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-muted: #f2f6f3;
+  --text: #18211b;
+  --muted: #69756d;
+  --muted-strong: #4c5a51;
+  --line: #dce6df;
+  --brand: #087f5b;
+  --brand-strong: #066746;
+  --blue: #237184;
+  --danger: #b42318;
+  --amber: #a86612;
+  --radius: 8px;
+  --radius-lg: 8px;
+  --shadow: none;
+  --shadow-soft: none;
+  font-family: "Aptos", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text);
+  background: var(--bg) !important;
+}
+
+body.theme-dark {
+  --bg: #101411;
+  --bg-strong: #151b17;
+  --surface: #171d18;
+  --surface-solid: #171d18;
+  --surface-muted: #202820;
+  --text: #eef4ef;
+  --muted: #a5b1a9;
+  --muted-strong: #c3ccc5;
+  --line: #344139;
+  --brand: #35b979;
+  --brand-strong: #4ed08d;
+  --blue: #54a6a8;
+  --danger: #ff8a80;
+  --amber: #f0b65b;
+}
+
+body.theme-blue {
+  --bg: #f5f8f6;
+  --bg-strong: #edf4f0;
+  --surface: #ffffff;
+  --surface-solid: #ffffff;
+  --surface-muted: #eff5f2;
+  --text: #17231d;
+  --muted: #627169;
+  --muted-strong: #46574e;
+  --line: #d7e4dd;
+  --brand: #0b7667;
+  --brand-strong: #075e52;
+  --blue: #286f83;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  letter-spacing: 0 !important;
+  text-shadow: none !important;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.site-page-shell,
+.site-workspace-shell,
+.workspace-app-shell,
+.auth-shell,
+.dashboard-shell,
+.site-auth-shell,
+.workspace-main-shell {
+  background: var(--bg) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+}
+
+.site-header,
+.site-header-frame,
+.site-header-inner,
+.workspace-sidebar-shell,
+.auth-panel,
+.panel,
+.workspace-tool-surface,
+.workspace-table-panel,
+.loads-control-card,
+.settings-panel-card,
+.route-panel-brand-mode,
+.unitedlane-ai-workspace,
+.site-dialog,
+[class*="-card"] {
+  background: var(--surface) !important;
+  background-image: none !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+
+.panel,
+.auth-panel,
+.site-dialog,
+.workspace-tool-surface,
+.workspace-table-panel,
+.loads-control-card,
+.settings-panel-card,
+.route-panel-brand-mode,
+.unitedlane-ai-workspace,
+[class*="-card"] {
+  border-radius: 8px !important;
+}
+
+.workspace-hero-card,
+.route-brand-hero,
+.safety-hero-card,
+.auth-showcase,
+.workspace-banner-card,
+.workspace-meta-hero,
+.command-card-main {
+  background: var(--surface) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.auth-shell::before,
+.auth-shell::after,
+.auth-showcase-orbit,
+.workspace-hero-card::after,
+.route-brand-hero::after,
+.safety-roadmap-card::after,
+.workspace-banner-accent {
+  display: none !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  text-wrap: pretty;
+}
+
+.workspace-main-heading h1,
+.auth-showcase-copy h1,
+.workspace-hero-copy h2,
+.route-brand-copy h2 {
+  font-size: 38px !important;
+  line-height: 1.1 !important;
+  margin: 6px 0 8px !important;
+  color: var(--text) !important;
+}
+
+.auth-panel-head h2,
+.panel-head h2,
+.sheet-panel-head h2,
+.loads-control-card h2,
+.command-card h2,
+.safety-hero-card h2,
+.site-dialog h2 {
+  font-size: 22px !important;
+  line-height: 1.18 !important;
+  color: var(--text) !important;
+}
+
+.workspace-main-heading p,
+.auth-panel-head p,
+.panel-head span,
+.sheet-panel-head span,
+.command-card p,
+.workspace-hero-card p,
+.route-brand-copy p,
+.site-dialog p,
+[class*="-card"] small,
+[class*="-card"] p {
+  color: var(--muted) !important;
+}
+
+button,
+.primary-button,
+.primary-button-brand,
+.secondary-button,
+.delete-button,
+.map-link,
+.fuel-source-link,
+.workspace-table-create,
+.header-action-button,
+.site-nav-button,
+.site-dialog-close,
+.workspace-sidebar-create,
+.workspace-sidebar-link,
+.workspace-inline-tab,
+.tabs button,
+.area-selector-card,
+.theme-option-card,
+.safety-service-result-card,
+.safety-vehicle-card {
+  min-height: 40px !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transform: none !important;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease !important;
+  white-space: nowrap;
+}
+
+.primary-button,
+.primary-button-brand,
+.workspace-table-create,
+.header-action-button,
+.map-link,
+.workspace-sidebar-create {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--brand) !important;
+  padding: 0 14px !important;
+  font-weight: 700 !important;
+}
+
+.secondary-button,
+.fuel-source-link,
+.site-nav-button,
+.workspace-inline-tab,
+.tabs button {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line) !important;
+  padding: 0 14px !important;
+  font-weight: 700 !important;
+}
+
+.delete-button {
+  background: var(--surface) !important;
+  color: var(--danger) !important;
+  border: 1px solid rgba(180, 35, 24, 0.38) !important;
+  padding: 0 12px !important;
+}
+
+button:hover,
+.primary-button:hover,
+.primary-button-brand:hover,
+.secondary-button:hover,
+.delete-button:hover,
+.map-link:hover,
+.fuel-source-link:hover,
+.workspace-sidebar-create:hover,
+.workspace-sidebar-link:hover,
+.workspace-inline-tab:hover,
+.site-nav-button:hover,
+.area-selector-card:hover,
+.theme-option-card:hover,
+.safety-service-result-card:hover,
+.safety-vehicle-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.primary-button:hover,
+.primary-button-brand:hover,
+.workspace-table-create:hover,
+.header-action-button:hover,
+.map-link:hover,
+.workspace-sidebar-create:hover {
+  background: var(--brand-strong) !important;
+  border-color: var(--brand-strong) !important;
+}
+
+.secondary-button:hover,
+.fuel-source-link:hover,
+.site-nav-button:hover,
+.workspace-inline-tab:hover,
+.tabs button:hover {
+  background: var(--surface-muted) !important;
+  border-color: #cbd9d1 !important;
+}
+
+button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled,
+.delete-button:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+}
+
+.area-selector-card,
+.theme-option-card,
+.safety-service-result-card,
+.safety-vehicle-card,
+.workspace-sidebar-link,
+.command-card,
+.load-preview-card,
+.route-option-card,
+.fuel-stop-card,
+.motive-watch-card,
+.motive-command-card {
+  white-space: normal !important;
+}
+
+.header-action-button,
+.workspace-table-create,
+.route-map-expand-button {
+  align-self: start !important;
+  width: auto !important;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.site-header-frame,
+.site-header-inner {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.site-header-inner {
+  min-height: 64px;
+  padding: 0 24px !important;
+}
+
+.site-header-divider {
+  display: none !important;
+}
+
+.site-brand {
+  min-height: 44px !important;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+.site-brand-mark-svg,
+.workspace-sidebar-logo-mark,
+.united-lane-mark {
+  display: block;
+}
+
+.site-nav {
+  gap: 8px !important;
+  flex-wrap: wrap;
+}
+
+.site-nav-button-active,
+.site-nav-button.active,
+.workspace-inline-tab.active,
+.tabs button.active,
+.workspace-sidebar-link.active,
+.area-selector-card.active,
+.theme-option-card.active {
+  background: var(--surface-muted) !important;
+  border-color: var(--brand) !important;
+  color: var(--brand-strong) !important;
+  box-shadow: inset 3px 0 0 var(--brand) !important;
+}
+
+.workspace-app-shell {
+  grid-template-columns: 260px minmax(0, 1fr) !important;
+  min-height: calc(100vh - 64px) !important;
+}
+
+.workspace-sidebar-shell {
+  position: sticky !important;
+  top: 64px !important;
+  height: calc(100vh - 64px) !important;
+  gap: 16px !important;
+  padding: 18px !important;
+  border-right: 1px solid var(--line) !important;
+  backdrop-filter: none !important;
+}
+
+.workspace-sidebar-logo,
+.workspace-sidebar-link-icon,
+.site-brand-mark-svg,
+.theme-option-swatch {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.workspace-sidebar-brand,
+.workspace-sidebar-link,
+.workspace-sidebar-footer-card,
+.workspace-sidebar-account-card {
+  min-width: 0;
+}
+
+.workspace-sidebar-link {
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  padding: 8px 10px !important;
+  text-align: left;
+}
+
+.workspace-sidebar-link-icon {
+  width: 34px !important;
+  height: 34px !important;
+  background: var(--surface-muted) !important;
+  color: var(--muted-strong) !important;
+}
+
+.workspace-sidebar-link-copy strong,
+.workspace-sidebar-link-copy small,
+.workspace-sidebar-brand-copy strong,
+.workspace-sidebar-brand-copy span,
+.workspace-sidebar-brand-copy small,
+.workspace-sidebar-account-card strong,
+.workspace-sidebar-account-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-sidebar-create {
+  min-height: 44px !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.workspace-sidebar-create strong {
+  width: auto !important;
+  height: auto !important;
+  display: inline !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: 16px !important;
+}
+
+.workspace-main-shell {
+  min-width: 0;
+  padding: 24px !important;
+}
+
+.workspace-main-header,
+.panel-head,
+.sheet-panel-head,
+.workspace-table-toolbar,
+.loads-control-card,
+.route-map-toolbar {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  flex-wrap: wrap;
+}
+
+.workspace-main-meta,
+.loads-control-actions,
+.workspace-table-toolbar-actions,
+.motive-panel-actions,
+.safety-action-list,
+.unitedlane-ai-form-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap;
+}
+
+.workspace-main-usercard,
+.workspace-sidebar-footer-card,
+.settings-summary-list div,
+.safety-filter-summary,
+.panel-filter-summary,
+.motive-map-location-card,
+.safety-service-note {
+  background: var(--surface-muted) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.metric-grid,
+.metric-grid.compact,
+.workspace-summary-cards,
+.services-summary-grid,
+.motive-summary-grid,
+.motive-summary-grid-wide,
+.safety-fleet-metrics,
+.safety-automation-metrics,
+.route-options-grid,
+.route-options-grid-brand,
+.fuel-stop-grid,
+.fuel-stop-grid-expanded,
+.motive-detail-card-grid,
+.safety-detail-card-grid,
+.theme-option-grid,
+.service-card-grid,
+.auth-department-grid,
+.load-preview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.metric-card,
+.service-summary-card,
+.motive-summary-card,
+.safety-stat-card,
+.motive-detail-card,
+.safety-detail-bullet,
+.safety-automation-summary-card,
+.route-option-card,
+.route-option-card-brand,
+.fuel-stop-card,
+.fuel-stop-card-brand,
+.load-preview-card,
+.command-card,
+.theme-option-card,
+.area-selector-card,
+.safety-vehicle-card,
+.safety-service-result-card,
+.safety-document-card,
+.motive-watch-card,
+.motive-command-card,
+.smart-fuel-stop-card,
+.cheap-route-stop-card {
+  min-height: auto !important;
+  padding: 16px !important;
+  background: var(--surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.metric-card,
+.motive-summary-card,
+.safety-stat-card,
+.service-summary-card {
+  border-left: 3px solid var(--brand) !important;
+}
+
+.metric-card-amber,
+.safety-stat-card-warning,
+.safety-stat-card-alert,
+.motive-summary-card.drivers {
+  border-left-color: var(--amber) !important;
+}
+
+.metric-card-violet,
+.metric-card-blue,
+.safety-stat-card-info,
+.motive-summary-card.live,
+.service-summary-card.ready {
+  border-left-color: var(--blue) !important;
+}
+
+.metric-card-dark,
+.safety-stat-card-critical,
+.service-summary-card.locked {
+  border-left-color: var(--danger) !important;
+}
+
+.metric-card strong,
+.service-summary-card strong,
+.motive-summary-card strong,
+.safety-stat-card strong {
+  font-size: 28px !important;
+  line-height: 1.1 !important;
+  color: var(--text) !important;
+}
+
+.workspace-inline-tabs,
+.motive-filter-tabs,
+.motive-map-tabs,
+.tabs,
+.safety-workspace-tabs,
+.safety-chip-row,
+.fuel-stop-chip-row {
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.workspace-inline-tab,
+.tabs button,
+.safety-chip,
+.network-chip,
+.brand-pill,
+.source-pill,
+.route-option-id,
+.status-select,
+.motive-status-pill,
+.load-preview-status,
+.fuel-stop-link,
+.smart-fuel-map-link {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.brand-pill,
+.source-pill,
+.network-chip,
+.safety-chip,
+.motive-status-pill,
+.load-preview-status,
+.route-option-id {
+  background: var(--surface-muted) !important;
+  color: var(--muted-strong) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.auth-shell {
+  min-height: calc(100vh - 64px) !important;
+  padding: 32px 16px !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.auth-panel,
+.auth-panel-compact {
+  width: min(460px, 100%) !important;
+  padding: 24px !important;
+}
+
+.auth-lock-note {
+  color: var(--muted) !important;
+}
+
+.auth-form,
+.route-builder,
+.fuel-filter-grid,
+.safety-filter-grid,
+.inline-filter-grid,
+.panel-filter-grid {
+  gap: 12px !important;
+}
+
+.auth-form label,
+.route-builder label,
+.safety-filter-grid label,
+.inline-filter-grid label,
+.panel-filter-grid label,
+.workspace-table-search {
+  color: var(--muted-strong) !important;
+  font-weight: 700 !important;
+}
+
+input,
+select,
+textarea,
+.auth-form input,
+.route-builder input,
+.route-builder select,
+.fuel-filter-grid input,
+.fuel-filter-grid select,
+.safety-filter-grid input,
+.safety-filter-grid select,
+.inline-filter-grid input,
+.inline-filter-grid select,
+.workspace-table-search input,
+.unitedlane-ai-form textarea {
+  min-height: 40px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.auth-form input:focus,
+.route-builder input:focus,
+.route-builder select:focus,
+.fuel-filter-grid input:focus,
+.fuel-filter-grid select:focus,
+.safety-filter-grid input:focus,
+.safety-filter-grid select:focus,
+.workspace-table-search input:focus,
+.unitedlane-ai-form textarea:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 2px rgba(8, 127, 91, 0.14) !important;
+}
+
+.sheet-frame,
+.sheet-scroll,
+.dispatch-sheet,
+.workspace-table-panel {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.dispatch-sheet {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.dispatch-sheet th {
+  background: var(--surface-muted) !important;
+  color: var(--muted-strong) !important;
+  border-bottom: 1px solid var(--line) !important;
+  font-weight: 800 !important;
+}
+
+.dispatch-sheet td {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.dispatch-sheet tbody tr:hover td {
+  background: var(--surface-muted) !important;
+}
+
+.status-done,
+.fuel-strong,
+.price-below-target {
+  background: rgba(8, 127, 91, 0.12) !important;
+  color: var(--brand-strong) !important;
+}
+
+.status-delayed,
+.fuel-watch {
+  background: rgba(168, 102, 18, 0.14) !important;
+  color: var(--amber) !important;
+}
+
+.status-review,
+.fuel-low,
+.price-above-target {
+  background: rgba(180, 35, 24, 0.12) !important;
+  color: var(--danger) !important;
+}
+
+.status-live,
+.fuel-good,
+.price-unknown-target {
+  background: rgba(35, 113, 132, 0.12) !important;
+  color: var(--blue) !important;
+}
+
+.route-map-stage,
+.route-map-stage-brand,
+.route-map-stage-fullscreen,
+.live-route-map,
+.motive-fleet-map-shell,
+.safety-service-map-shell,
+.safety-service-map-canvas,
+.motive-fleet-map,
+.unitedlane-ai-log {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.motive-map-marker,
+.safety-service-map-marker,
+.marker-start,
+.marker-end,
+.marker-fuel-best,
+.marker-fuel,
+.marker-fuel-independent {
+  width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transform: none !important;
+  background-image: none !important;
+}
+
+.motive-map-marker-moving,
+.safety-service-map-marker-vehicle,
+.marker-start {
+  background: var(--brand) !important;
+}
+
+.motive-map-marker-stopped,
+.safety-service-map-marker-official,
+.marker-fuel-best,
+.marker-fuel {
+  background: var(--blue) !important;
+}
+
+.motive-map-marker-stale,
+.safety-service-map-marker-emergency,
+.marker-end {
+  background: var(--danger) !important;
+}
+
+.safety-service-map-marker-poi,
+.marker-fuel-independent {
+  background: var(--amber) !important;
+}
+
+.motive-map-marker.selected,
+.safety-service-map-marker.selected {
+  outline: 2px solid var(--text) !important;
+  outline-offset: 2px !important;
+  transform: none !important;
+}
+
+.maplibregl-popup-content,
+.route-stop-hover-popup .maplibregl-popup-content {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  border: 1px solid var(--line) !important;
+  color: var(--text) !important;
+}
+
+.unitedlane-ai-bubble-assistant,
+.unitedlane-ai-bubble-user,
+.site-dialog-detail,
+.safety-empty-state,
+.empty-route-card,
+.module-loader {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.unitedlane-ai-bubble-user {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+}
+
+.notice {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.notice.success {
+  background: rgba(8, 127, 91, 0.1) !important;
+  color: var(--brand-strong) !important;
+  border-color: rgba(8, 127, 91, 0.28) !important;
+}
+
+.notice.error {
+  background: rgba(180, 35, 24, 0.1) !important;
+  color: var(--danger) !important;
+  border-color: rgba(180, 35, 24, 0.28) !important;
+}
+
+.notice.info {
+  background: rgba(35, 113, 132, 0.1) !important;
+  color: var(--blue) !important;
+  border-color: rgba(35, 113, 132, 0.28) !important;
+}
+
+@media (max-width: 1180px) {
+  .workspace-app-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-sidebar-shell {
+    position: relative !important;
+    top: auto !important;
+    height: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+
+  .workspace-sidebar-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .workspace-main-header,
+  .loads-control-card,
+  .workspace-table-toolbar,
+  .panel-head,
+  .route-map-toolbar {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    font-size: 14px;
+  }
+
+  .site-header-inner,
+  .workspace-main-shell,
+  .workspace-sidebar-shell {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .workspace-main-heading h1,
+  .auth-showcase-copy h1,
+  .workspace-hero-copy h2,
+  .route-brand-copy h2 {
+    font-size: 30px !important;
+  }
+
+  .workspace-sidebar-nav,
+  .auth-department-grid,
+  .metric-grid,
+  .motive-summary-grid,
+  .safety-fleet-metrics,
+  .safety-automation-metrics,
+  .theme-option-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .delete-button,
+  .workspace-table-create,
+  .header-action-button,
+  .site-nav-button {
+    width: 100% !important;
+  }
+
+  .site-nav {
+    width: 100%;
+  }
+}
