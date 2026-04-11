@@ -66,6 +66,86 @@ class SafetyDocumentResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+
+class SafetyInvestigationBase(BaseModel):
+    title: str = Field(default="New safety investigation", max_length=255)
+    type: str = Field(default="Accident", max_length=80)
+    status: str = Field(default="Intake", max_length=80)
+    severity: str = Field(default="Elevated", max_length=80)
+    owner: str = Field(default="Safety", max_length=255)
+    dueDate: str = Field(default="", max_length=32)
+    vehicleId: str = Field(default="", max_length=128)
+    facts: str = Field(default="", max_length=30000)
+    evidence: str = Field(default="", max_length=30000)
+    questions: str = Field(default="", max_length=30000)
+    actionPlan: str = Field(default="", max_length=30000)
+    outcome: str = Field(default="", max_length=30000)
+
+
+class SafetyInvestigationCreate(SafetyInvestigationBase):
+    pass
+
+
+class SafetyInvestigationUpdate(SafetyInvestigationBase):
+    pass
+
+
+class SafetyInvestigationResponse(SafetyInvestigationBase):
+    id: int
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
+class SafetyBriefChecklistItem(BaseModel):
+    id: str = Field(default="", max_length=128)
+    label: str = Field(default="", max_length=500)
+    done: bool = False
+
+
+class SafetyBriefActionItem(BaseModel):
+    id: str = Field(default="", max_length=128)
+    source: str = Field(default="Manual", max_length=80)
+    title: str = Field(default="", max_length=1000)
+    queueId: str = Field(default="", max_length=80)
+    queueLabel: str = Field(default="", max_length=120)
+    driverName: str = Field(default="", max_length=255)
+    contact: str = Field(default="", max_length=255)
+    truckNumber: str = Field(default="", max_length=120)
+    riskLevel: str = Field(default="", max_length=80)
+    riskScore: str | int | float = ""
+    status: str = Field(default="Open", max_length=80)
+    owner: str = Field(default="Safety", max_length=255)
+    dueDate: str = Field(default="Today", max_length=80)
+    notes: str = Field(default="", max_length=12000)
+    summary: str = Field(default="", max_length=12000)
+    recommendedAction: str = Field(default="", max_length=12000)
+
+
+class SafetyShiftBriefBase(BaseModel):
+    title: str = Field(default="Shift Brief", max_length=255)
+    shift: str = Field(default="Day Shift", max_length=120)
+    status: str = Field(default="Open", max_length=80)
+    owner: str = Field(default="Safety", max_length=255)
+    handoffNote: str = Field(default="", max_length=30000)
+    checklist: list[SafetyBriefChecklistItem] = Field(default_factory=list)
+    actions: list[SafetyBriefActionItem] = Field(default_factory=list)
+    snapshotAt: str = Field(default="", max_length=80)
+
+
+class SafetyShiftBriefCreate(SafetyShiftBriefBase):
+    pass
+
+
+class SafetyShiftBriefUpdate(SafetyShiftBriefBase):
+    pass
+
+
+class SafetyShiftBriefResponse(SafetyShiftBriefBase):
+    id: int
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
 class LoadBase(BaseModel):
     driver: str = Field(default="", max_length=255)
     truck: str = Field(default="", max_length=64)

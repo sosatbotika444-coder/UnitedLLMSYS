@@ -41,6 +41,45 @@ class SafetyDocument(Base):
     excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+
+
+class SafetyInvestigationCase(Base):
+    __tablename__ = "safety_investigation_cases"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), default="New safety investigation", nullable=False)
+    case_type: Mapped[str] = mapped_column(String(80), default="Accident", index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(80), default="Intake", index=True, nullable=False)
+    severity: Mapped[str] = mapped_column(String(80), default="Elevated", index=True, nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), default="Safety", index=True, nullable=False)
+    due_date: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    vehicle_id: Mapped[str] = mapped_column(String(128), default="", index=True, nullable=False)
+    facts: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    evidence: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    questions: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    action_plan: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    outcome: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class SafetyShiftBrief(Base):
+    __tablename__ = "safety_shift_briefs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), default="Shift Brief", nullable=False)
+    shift: Mapped[str] = mapped_column(String(120), default="Day Shift", nullable=False)
+    status: Mapped[str] = mapped_column(String(80), default="Open", index=True, nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), default="Safety", index=True, nullable=False)
+    handoff_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    checklist: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    actions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    snapshot_at: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 class Load(Base):
     __tablename__ = "loads"
 

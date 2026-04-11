@@ -43,8 +43,6 @@ const shiftBriefChecklist = [
   "Check stale telemetry, compliance dates, and document follow-ups.",
   "Leave a concise handoff note for the next safety user."
 ];
-const SAFETY_INVESTIGATION_STORAGE_KEY = "unitedlane_safety_investigations_v1";
-const SAFETY_SHIFT_BRIEF_STORAGE_KEY = "unitedlane_safety_shift_briefs_v1";
 const actionStatusOptions = ["Open", "In Progress", "Blocked", "Done"];
 const shiftStatusOptions = ["Open", "Handoff Ready", "Archived"];
 const managementOwnerOptions = ["Safety", "Dispatch", "Maintenance", "Driver Manager", "Compliance"];
@@ -62,98 +60,40 @@ function makeManagementId(prefix) {
   return `${prefix}-${randomPart}`;
 }
 
-function getUserStorageKey(baseKey, user) {
-  const identity = user?.email || user?.id || user?.full_name || "local";
-  return `${baseKey}:${String(identity).replace(/[^a-z0-9_.@-]/gi, "_")}`;
-}
-
-function loadStoredList(key, fallback = []) {
-  if (typeof window === "undefined" || !window.localStorage) return fallback;
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) || "[]");
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
+function fileNameFromDisposition(headerValue, fallback = "safety_export.xlsx") {
+  if (!headerValue) return fallback;
+  const encodedMatch = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1]);
+    } catch {
+      return encodedMatch[1];
+    }
   }
+  const basicMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] || fallback;
 }
 
-function saveStoredList(key, items) {
-  if (typeof window === "undefined" || !window.localStorage) return;
+async function downloadApiFile(path, token = "", fallbackFileName = "safety_export.xlsx") {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
 
-  try {
-    window.localStorage.setItem(key, JSON.stringify(items));
-  } catch {
-    // Local persistence is best effort when browser storage is unavailable.
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Download failed");
   }
-}
 
-function useStoredList(storageKey, fallback = []) {
-  const [stored, setStored] = useState(() => ({
-    key: storageKey,
-    items: loadStoredList(storageKey, fallback)
-  }));
-
-  useEffect(() => {
-    setStored({ key: storageKey, items: loadStoredList(storageKey, fallback) });
-  }, [storageKey]);
-
-  const setItems = useCallback((updater) => {
-    setStored((current) => {
-      const nextItems = typeof updater === "function" ? updater(current.items) : updater;
-      const safeItems = Array.isArray(nextItems) ? nextItems : [];
-      saveStoredList(current.key, safeItems);
-      return { key: current.key, items: safeItems };
-    });
-  }, []);
-
-  return [stored.items, setItems];
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[char]));
-}
-
-function downloadTextFile(fileName, content, mimeType) {
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-
-  const blob = new Blob([content], { type: mimeType });
+  const blob = await response.blob();
   const downloadUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = downloadUrl;
-  link.download = fileName;
+  link.download = fileNameFromDisposition(response.headers.get("Content-Disposition"), fallbackFileName);
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
 }
-
-function fileDateStamp() {
-  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-}
-
-function exportRowsToExcel(rows, fileName, sheetName = "Safety Export") {
-  const safeRows = Array.isArray(rows) && rows.length ? rows : [{ Message: "No rows available" }];
-  const columns = Array.from(
-    safeRows.reduce((columnSet, row) => {
-      Object.keys(row || {}).forEach((key) => columnSet.add(key));
-      return columnSet;
-    }, new Set())
-  );
-  const headerHtml = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
-  const rowHtml = safeRows
-    .map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(row?.[column])}</td>`).join("")}</tr>`)
-    .join("");
-  const html = `\ufeff<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}th,td{border:1px solid #ccd3df;padding:6px 8px;text-align:left;vertical-align:top}th{background:#eef3f8;font-weight:700}</style></head><body><h2>${escapeHtml(sheetName)}</h2><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table></body></html>`;
-  downloadTextFile(fileName.endsWith(".xls") ? fileName : `${fileName}.xls`, html, "application/vnd.ms-excel;charset=utf-8");
-}
-
 function createInvestigationDraft(vehicle = null, user = null) {
   const now = new Date().toISOString();
   return {
@@ -1016,13 +956,40 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
 
 function SafetyInvestigationPanel({ token, user, data, loading, refreshing, error, onRefresh }) {
   const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
-  const storageKey = useMemo(() => getUserStorageKey(SAFETY_INVESTIGATION_STORAGE_KEY, user), [user]);
-  const [cases, setCases] = useStoredList(storageKey);
+  const [cases, setCases] = useState([]);
+  const [casesLoading, setCasesLoading] = useState(false);
+  const [caseSaving, setCaseSaving] = useState(false);
+  const [caseExporting, setCaseExporting] = useState(false);
+  const [caseError, setCaseError] = useState("");
   const [activeCaseId, setActiveCaseId] = useState("");
   const [caseSearch, setCaseSearch] = useState("");
   const [caseStatusFilter, setCaseStatusFilter] = useState("All");
   const [caseMessage, setCaseMessage] = useState("");
   const [draft, setDraft] = useState(() => createInvestigationDraft(null, user));
+
+  const loadCases = useCallback(async () => {
+    if (!token) {
+      setCases([]);
+      setCasesLoading(false);
+      return;
+    }
+
+    setCasesLoading(true);
+    setCaseError("");
+
+    try {
+      const items = await apiRequest("/safety/investigations", {}, token);
+      setCases(Array.isArray(items) ? items.map((item) => ({ ...item, vehicleId: item.vehicleId ? String(item.vehicleId) : "" })) : []);
+    } catch (loadError) {
+      setCaseError(loadError.message || "Cases could not be loaded.");
+    } finally {
+      setCasesLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadCases();
+  }, [loadCases]);
 
   useEffect(() => {
     if (!vehicles.length) {
@@ -1048,9 +1015,6 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
 
   const selectedVehicle = vehicleById.get(String(draft.vehicleId)) || null;
   const riskyPeopleRows = useMemo(() => buildRiskyPeopleRows(data, "Investigations"), [data]);
-  const factCount = splitManagementLines(draft.facts).length;
-  const evidenceCount = splitManagementLines(draft.evidence).length;
-  const questionCount = splitManagementLines(draft.questions).length;
   const openCaseCount = cases.filter((caseItem) => caseItem.status !== "Closed").length;
   const criticalCaseCount = cases.filter((caseItem) => caseItem.severity === "Critical" || caseItem.severity === "High").length;
 
@@ -1109,104 +1073,142 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
 
   function updateDraft(field, value) {
     setCaseMessage("");
+    setCaseError("");
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
   function startNewCase() {
     setCaseMessage("");
+    setCaseError("");
     setActiveCaseId("");
     setDraft(createInvestigationDraft(vehicles[0] || null, user));
   }
 
-  function saveCase(draftOverride = draft) {
-    const now = new Date().toISOString();
-    const nextCase = {
-      ...draftOverride,
-      id: draftOverride.id || makeManagementId("case"),
-      title: draftOverride.title.trim() || "Untitled safety investigation",
-      owner: draftOverride.owner.trim() || user?.full_name || "Safety",
-      createdAt: draftOverride.createdAt || now,
-      updatedAt: now
+  function casePayload(caseDraft) {
+    return {
+      title: caseDraft.title.trim() || "Untitled safety investigation",
+      type: caseDraft.type || "Accident",
+      status: caseDraft.status || "Intake",
+      severity: caseDraft.severity || "Elevated",
+      owner: caseDraft.owner.trim() || user?.full_name || "Safety",
+      dueDate: caseDraft.dueDate || "",
+      vehicleId: caseDraft.vehicleId ? String(caseDraft.vehicleId) : "",
+      facts: caseDraft.facts || "",
+      evidence: caseDraft.evidence || "",
+      questions: caseDraft.questions || "",
+      actionPlan: caseDraft.actionPlan || "",
+      outcome: caseDraft.outcome || ""
     };
+  }
 
-    setCases((current) => {
-      const exists = current.some((caseItem) => caseItem.id === nextCase.id);
-      return exists
-        ? current.map((caseItem) => (caseItem.id === nextCase.id ? nextCase : caseItem))
-        : [nextCase, ...current];
-    });
-    setDraft(nextCase);
-    setActiveCaseId(nextCase.id);
-    setCaseMessage("Case saved on this device.");
+  async function saveCase(draftOverride = draft) {
+    if (!token || caseSaving) return null;
+
+    setCaseSaving(true);
+    setCaseError("");
+    setCaseMessage("");
+
+    try {
+      const hasId = Boolean(draftOverride.id);
+      const saved = await apiRequest(
+        hasId ? `/safety/investigations/${draftOverride.id}` : "/safety/investigations",
+        {
+          method: hasId ? "PUT" : "POST",
+          body: JSON.stringify(casePayload(draftOverride))
+        },
+        token
+      );
+      const normalized = { ...saved, vehicleId: saved.vehicleId ? String(saved.vehicleId) : "" };
+      setCases((current) => {
+        const exists = current.some((caseItem) => caseItem.id === normalized.id);
+        return exists
+          ? current.map((caseItem) => (caseItem.id === normalized.id ? normalized : caseItem))
+          : [normalized, ...current];
+      });
+      setDraft({ ...createInvestigationDraft(null, user), ...normalized });
+      setActiveCaseId(normalized.id);
+      setCaseMessage("Case saved to database.");
+      return normalized;
+    } catch (saveError) {
+      setCaseError(saveError.message || "Case could not be saved.");
+      return null;
+    } finally {
+      setCaseSaving(false);
+    }
   }
 
   function loadCase(caseItem) {
     setCaseMessage("");
+    setCaseError("");
     setActiveCaseId(caseItem.id);
     setDraft({ ...createInvestigationDraft(null, user), ...caseItem, vehicleId: caseItem.vehicleId ? String(caseItem.vehicleId) : "" });
   }
 
-  function duplicateCase() {
+  async function duplicateCase() {
     const now = new Date().toISOString();
-    const duplicatedCase = {
+    await saveCase({
       ...draft,
-      id: makeManagementId("case"),
+      id: "",
       title: `${draft.title || "Investigation"} copy`,
       status: "Intake",
       createdAt: now,
       updatedAt: now
-    };
-    setCases((current) => [duplicatedCase, ...current]);
-    setDraft(duplicatedCase);
-    setActiveCaseId(duplicatedCase.id);
-    setCaseMessage("Case duplicated.");
+    });
   }
 
-  function deleteCase(caseId = draft.id) {
+  async function deleteCase(caseId = draft.id) {
     if (!caseId) {
       startNewCase();
       return;
     }
 
-    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this investigation case from this device?");
+    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this investigation case from the database?");
     if (!shouldDelete) return;
 
-    setCases((current) => current.filter((caseItem) => caseItem.id !== caseId));
-    startNewCase();
-    setCaseMessage("Case deleted from this device.");
+    setCaseSaving(true);
+    setCaseError("");
+    setCaseMessage("");
+
+    try {
+      await apiRequest(`/safety/investigations/${caseId}`, { method: "DELETE" }, token);
+      setCases((current) => current.filter((caseItem) => caseItem.id !== caseId));
+      startNewCase();
+      setCaseMessage("Case deleted from database.");
+    } catch (deleteError) {
+      setCaseError(deleteError.message || "Case could not be deleted.");
+    } finally {
+      setCaseSaving(false);
+    }
   }
 
-  function closeCase() {
-    saveCase({ ...draft, status: "Closed" });
+  async function closeCase() {
+    await saveCase({ ...draft, status: "Closed" });
   }
 
-  function exportCasesExcel() {
-    const caseRows = cases.map((caseItem) => {
-      const caseVehicle = vehicleById.get(String(caseItem.vehicleId)) || null;
-      return {
-        "Case ID": caseItem.id,
-        Title: caseItem.title,
-        Type: caseItem.type,
-        Status: caseItem.status,
-        Severity: caseItem.severity,
-        Owner: caseItem.owner || "",
-        "Due Date": caseItem.dueDate || "",
-        Truck: caseVehicle?.number || "",
-        Driver: caseVehicle?.driver_name || "",
-        Facts: caseItem.facts || "",
-        Evidence: caseItem.evidence || "",
-        Questions: caseItem.questions || "",
-        "Action Plan": caseItem.actionPlan || "",
-        Outcome: caseItem.outcome || "",
-        Created: formatDateTime(caseItem.createdAt),
-        Updated: formatDateTime(caseItem.updatedAt)
-      };
-    });
-    exportRowsToExcel(caseRows, `safety_investigations_${fileDateStamp()}.xls`, "Safety Investigations");
+  async function exportCasesExcel() {
+    if (!token || caseExporting) return;
+    setCaseExporting(true);
+    setCaseError("");
+    try {
+      await downloadApiFile("/safety/investigations/export", token, "safety_investigations.xlsx");
+    } catch (exportError) {
+      setCaseError(exportError.message || "Cases export failed.");
+    } finally {
+      setCaseExporting(false);
+    }
   }
 
-  function exportRiskyPeopleExcel() {
-    exportRowsToExcel(riskyPeopleRows, `safety_risky_people_${fileDateStamp()}.xls`, "Risky People");
+  async function exportRiskyPeopleExcel() {
+    if (!token || caseExporting) return;
+    setCaseExporting(true);
+    setCaseError("");
+    try {
+      await downloadApiFile("/safety/risky-people/export", token, "safety_risky_people.xlsx");
+    } catch (exportError) {
+      setCaseError(exportError.message || "Risky people export failed.");
+    } finally {
+      setCaseExporting(false);
+    }
   }
 
   return (
@@ -1215,13 +1217,13 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         <div className="panel-head safety-management-head">
           <div>
             <h2>Investigation Desk</h2>
-            <span>Manage cases, save local history, export risk, and investigate with AI.</span>
+            <span>Manage cases in the database, export risk, and investigate with AI.</span>
           </div>
           <div className="safety-management-actions">
-            <button className="secondary-button" type="button" onClick={startNewCase}>New Case</button>
-            <button className="primary-button" type="button" onClick={() => saveCase()}>Save Case</button>
-            <button className="secondary-button" type="button" onClick={exportCasesExcel}>Export Cases Excel</button>
-            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel}>Export Risky People Excel</button>
+            <button className="secondary-button" type="button" onClick={startNewCase} disabled={caseSaving}>New Case</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save Case"}</button>
+            <button className="secondary-button" type="button" onClick={exportCasesExcel} disabled={caseExporting || !token}>{caseExporting ? "Exporting..." : "Export Cases Excel"}</button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={caseExporting || !token}>Export Risky People Excel</button>
             <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
               {refreshing ? "Refreshing..." : "Refresh Fleet"}
             </button>
@@ -1229,12 +1231,13 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         </div>
 
         {caseMessage ? <div className="notice success inline-notice">{caseMessage}</div> : null}
+        {caseError ? <div className="notice error inline-notice">{caseError}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-investigation-metrics">
           <SafetyStatCard label="Saved Cases" value={formatCount(cases.length)} detail={`${formatCount(openCaseCount)} open`} tone="neutral" />
           <SafetyStatCard label="High Severity" value={formatCount(criticalCaseCount)} detail="High or critical cases" tone="critical" />
-          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for Excel export" tone="warning" />
+          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for backend Excel export" tone="warning" />
           <SafetyStatCard label="Current Packet" value={draft.status} detail={`${draft.type} | ${draft.severity}`} tone={draft.severity === "Critical" ? "critical" : "info"} />
         </div>
       </section>
@@ -1244,7 +1247,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           <div className="panel-head compact-panel-head">
             <div>
               <h2>Case Registry</h2>
-              <span>{formatCount(filteredCases.length)} case(s) visible</span>
+              <span>{casesLoading ? "Loading cases..." : `${formatCount(filteredCases.length)} case(s) visible`}</span>
             </div>
           </div>
 
@@ -1281,7 +1284,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
                   <em>Updated {formatDateTime(caseItem.updatedAt)}</em>
                 </button>
               );
-            }) : <div className="safety-empty-state small">No saved cases yet. Save the current packet to start the registry.</div>}
+            }) : <div className="safety-empty-state small">{casesLoading ? "Loading saved cases..." : "No saved cases yet. Save the current packet to start the registry."}</div>}
           </div>
         </section>
 
@@ -1360,10 +1363,10 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           </datalist>
 
           <div className="safety-management-actions case-actions">
-            <button className="primary-button" type="button" onClick={() => saveCase()}>Save</button>
-            <button className="secondary-button" type="button" onClick={duplicateCase}>Duplicate</button>
-            <button className="secondary-button" type="button" onClick={closeCase}>Close Case</button>
-            <button className="delete-button" type="button" onClick={() => deleteCase()} disabled={!draft.id}>Delete</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save"}</button>
+            <button className="secondary-button" type="button" onClick={duplicateCase} disabled={caseSaving || !token}>Duplicate</button>
+            <button className="secondary-button" type="button" onClick={closeCase} disabled={caseSaving || !token}>Close Case</button>
+            <button className="delete-button" type="button" onClick={() => deleteCase()} disabled={!draft.id || caseSaving || !token}>Delete</button>
           </div>
 
           <section className="safety-investigation-context-card">
@@ -1389,18 +1392,45 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
   );
 }
 
-function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefresh }) {
+function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, onRefresh }) {
   const metrics = data?.metrics || {};
   const queues = data?.queues || EMPTY_SAFETY_LIST;
   const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
-  const storageKey = useMemo(() => getUserStorageKey(SAFETY_SHIFT_BRIEF_STORAGE_KEY, user), [user]);
-  const [briefs, setBriefs] = useStoredList(storageKey);
+  const [briefs, setBriefs] = useState([]);
+  const [briefsLoading, setBriefsLoading] = useState(false);
+  const [briefSaving, setBriefSaving] = useState(false);
+  const [briefExporting, setBriefExporting] = useState(false);
+  const [briefError, setBriefError] = useState("");
   const [activeBriefId, setActiveBriefId] = useState("");
   const [briefSearch, setBriefSearch] = useState("");
   const [actionSearch, setActionSearch] = useState("");
   const [actionStatusFilter, setActionStatusFilter] = useState("All");
   const [manualActionTitle, setManualActionTitle] = useState("");
   const [briefMessage, setBriefMessage] = useState("");
+
+  const loadBriefs = useCallback(async () => {
+    if (!token) {
+      setBriefs([]);
+      setBriefsLoading(false);
+      return;
+    }
+
+    setBriefsLoading(true);
+    setBriefError("");
+
+    try {
+      const items = await apiRequest("/safety/shift-briefs", {}, token);
+      setBriefs(Array.isArray(items) ? items : []);
+    } catch (loadError) {
+      setBriefError(loadError.message || "Shift briefs could not be loaded.");
+    } finally {
+      setBriefsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadBriefs();
+  }, [loadBriefs]);
 
   const vehicleById = useMemo(() => {
     return new Map(vehicles.map((vehicle) => [String(vehicle.id), vehicle]));
@@ -1465,11 +1495,13 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
 
   function updateBrief(field, value) {
     setBriefMessage("");
+    setBriefError("");
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
   function updateChecklistItem(itemId, done) {
     setBriefMessage("");
+    setBriefError("");
     setDraft((current) => ({
       ...current,
       checklist: (current.checklist || checklist).map((item) => (item.id === itemId ? { ...item, done } : item))
@@ -1478,6 +1510,7 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
 
   function updateAction(actionId, patch) {
     setBriefMessage("");
+    setBriefError("");
     setDraft((current) => ({
       ...current,
       actions: (current.actions || []).map((action) => (action.id === actionId ? { ...action, ...patch } : action))
@@ -1521,37 +1554,62 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
 
   function startNewBrief() {
     setBriefMessage("");
+    setBriefError("");
     setActiveBriefId("");
     setDraft(createShiftBriefDraft(user, liveActions));
   }
 
-  function saveBrief(draftOverride = draft) {
-    const now = new Date().toISOString();
-    const nextBrief = {
-      ...draftOverride,
-      id: draftOverride.id || makeManagementId("brief"),
-      title: draftOverride.title.trim() || `Shift Brief ${formatDate(now)}`,
-      owner: draftOverride.owner.trim() || user?.full_name || "Safety",
-      checklist,
-      actions,
-      createdAt: draftOverride.createdAt || now,
-      updatedAt: now,
-      snapshotAt: data?.fetched_at || draftOverride.snapshotAt || now
+  function briefPayload(briefDraft) {
+    return {
+      title: briefDraft.title.trim() || `Shift Brief ${formatDate(new Date().toISOString())}`,
+      shift: briefDraft.shift.trim() || "Day Shift",
+      status: briefDraft.status || "Open",
+      owner: briefDraft.owner.trim() || user?.full_name || "Safety",
+      handoffNote: briefDraft.handoffNote || "",
+      checklist: briefDraft.checklist?.length ? briefDraft.checklist : checklist,
+      actions: briefDraft.actions || actions,
+      snapshotAt: data?.fetched_at || briefDraft.snapshotAt || new Date().toISOString()
     };
+  }
 
-    setBriefs((current) => {
-      const exists = current.some((brief) => brief.id === nextBrief.id);
-      return exists
-        ? current.map((brief) => (brief.id === nextBrief.id ? nextBrief : brief))
-        : [nextBrief, ...current];
-    });
-    setDraft(nextBrief);
-    setActiveBriefId(nextBrief.id);
-    setBriefMessage("Shift brief saved on this device.");
+  async function saveBrief(draftOverride = draft) {
+    if (!token || briefSaving) return null;
+
+    setBriefSaving(true);
+    setBriefError("");
+    setBriefMessage("");
+
+    try {
+      const hasId = Boolean(draftOverride.id);
+      const saved = await apiRequest(
+        hasId ? `/safety/shift-briefs/${draftOverride.id}` : "/safety/shift-briefs",
+        {
+          method: hasId ? "PUT" : "POST",
+          body: JSON.stringify(briefPayload(draftOverride))
+        },
+        token
+      );
+      setBriefs((current) => {
+        const exists = current.some((brief) => brief.id === saved.id);
+        return exists
+          ? current.map((brief) => (brief.id === saved.id ? saved : brief))
+          : [saved, ...current];
+      });
+      setDraft({ ...createShiftBriefDraft(user, []), ...saved, actions: saved.actions || [], checklist: saved.checklist || [] });
+      setActiveBriefId(saved.id);
+      setBriefMessage("Shift brief saved to database.");
+      return saved;
+    } catch (saveError) {
+      setBriefError(saveError.message || "Shift brief could not be saved.");
+      return null;
+    } finally {
+      setBriefSaving(false);
+    }
   }
 
   function loadBrief(brief) {
     setBriefMessage("");
+    setBriefError("");
     setActiveBriefId(brief.id);
     setDraft({
       ...createShiftBriefDraft(user, []),
@@ -1561,72 +1619,76 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
     });
   }
 
-  function duplicateBrief() {
+  async function duplicateBrief() {
     const now = new Date().toISOString();
-    const duplicatedBrief = {
+    await saveBrief({
       ...draft,
-      id: makeManagementId("brief"),
+      id: "",
       title: `${draft.title || "Shift Brief"} copy`,
       status: "Open",
       createdAt: now,
       updatedAt: now
-    };
-    setBriefs((current) => [duplicatedBrief, ...current]);
-    setDraft(duplicatedBrief);
-    setActiveBriefId(duplicatedBrief.id);
-    setBriefMessage("Shift brief duplicated.");
+    });
   }
 
-  function archiveBrief() {
-    saveBrief({ ...draft, status: "Archived" });
+  async function archiveBrief() {
+    await saveBrief({ ...draft, status: "Archived" });
   }
 
-  function deleteBrief(briefId = draft.id) {
+  async function deleteBrief(briefId = draft.id) {
     if (!briefId) {
       startNewBrief();
       return;
     }
 
-    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this shift brief from this device?");
+    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this shift brief from the database?");
     if (!shouldDelete) return;
 
-    setBriefs((current) => current.filter((brief) => brief.id !== briefId));
-    startNewBrief();
-    setBriefMessage("Shift brief deleted from this device.");
+    setBriefSaving(true);
+    setBriefError("");
+    setBriefMessage("");
+
+    try {
+      await apiRequest(`/safety/shift-briefs/${briefId}`, { method: "DELETE" }, token);
+      setBriefs((current) => current.filter((brief) => brief.id !== briefId));
+      startNewBrief();
+      setBriefMessage("Shift brief deleted from database.");
+    } catch (deleteError) {
+      setBriefError(deleteError.message || "Shift brief could not be deleted.");
+    } finally {
+      setBriefSaving(false);
+    }
   }
 
-  function exportBriefExcel() {
-    const summaryRows = [
-      { Category: "Brief", Item: "Title", Status: draft.status, Owner: draft.owner, Detail: draft.title, Notes: draft.handoffNote || "" },
-      { Category: "Brief", Item: "Shift", Status: draft.status, Owner: draft.owner, Detail: draft.shift, Notes: `Snapshot ${formatDateTime(draft.snapshotAt)}` }
-    ];
-    const checklistRows = checklist.map((item, index) => ({
-      Category: "Checklist",
-      Item: `${index + 1}. ${item.label}`,
-      Status: item.done ? "Done" : "Open",
-      Owner: draft.owner,
-      Detail: "First action",
-      Notes: ""
-    }));
-    const actionRows = actions.map((action) => ({
-      Category: "Action",
-      Item: action.title,
-      Status: action.status,
-      Owner: action.owner,
-      "Due Date": action.dueDate,
-      Driver: action.driverName,
-      Truck: action.truckNumber,
-      Queue: action.queueLabel,
-      "Risk Level": action.riskLevel,
-      "Risk Score": action.riskScore,
-      Detail: action.recommendedAction || action.summary,
-      Notes: action.notes
-    }));
-    exportRowsToExcel([...summaryRows, ...checklistRows, ...actionRows], `safety_shift_brief_${fileDateStamp()}.xls`, "Shift Brief Management");
+  async function exportBriefExcel() {
+    if (!token || briefExporting) return;
+
+    setBriefExporting(true);
+    setBriefError("");
+
+    try {
+      const saved = await saveBrief();
+      if (saved?.id) {
+        await downloadApiFile(`/safety/shift-briefs/${saved.id}/export`, token, `safety_shift_brief_${saved.id}.xlsx`);
+      }
+    } catch (exportError) {
+      setBriefError(exportError.message || "Shift brief export failed.");
+    } finally {
+      setBriefExporting(false);
+    }
   }
 
-  function exportRiskyPeopleExcel() {
-    exportRowsToExcel(riskyPeopleRows, `shift_brief_risky_people_${fileDateStamp()}.xls`, "Risky People");
+  async function exportRiskyPeopleExcel() {
+    if (!token || briefExporting) return;
+    setBriefExporting(true);
+    setBriefError("");
+    try {
+      await downloadApiFile("/safety/risky-people/export", token, "safety_risky_people.xlsx");
+    } catch (exportError) {
+      setBriefError(exportError.message || "Risky people export failed.");
+    } finally {
+      setBriefExporting(false);
+    }
   }
 
   return (
@@ -1635,13 +1697,13 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
         <div className="panel-head safety-management-head">
           <div>
             <h2>Shift Brief</h2>
-            <span>Manage handoff, checklist, live safety actions, saved brief history, and Excel exports.</span>
+            <span>Manage handoff, checklist, live safety actions, saved brief history, and backend Excel exports.</span>
           </div>
           <div className="safety-management-actions">
-            <button className="secondary-button" type="button" onClick={startNewBrief}>New Brief</button>
-            <button className="primary-button" type="button" onClick={() => saveBrief()}>Save Brief</button>
-            <button className="secondary-button" type="button" onClick={exportBriefExcel}>Export Brief Excel</button>
-            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel}>Export Risky People Excel</button>
+            <button className="secondary-button" type="button" onClick={startNewBrief} disabled={briefSaving}>New Brief</button>
+            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>{briefSaving ? "Saving..." : "Save Brief"}</button>
+            <button className="secondary-button" type="button" onClick={exportBriefExcel} disabled={briefSaving || briefExporting || !token}>{briefExporting ? "Exporting..." : "Export Brief Excel"}</button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={briefExporting || !token}>Export Risky People Excel</button>
             <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
               {refreshing ? "Refreshing..." : "Refresh Brief"}
             </button>
@@ -1649,13 +1711,14 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
         </div>
 
         {briefMessage ? <div className="notice success inline-notice">{briefMessage}</div> : null}
+        {briefError ? <div className="notice error inline-notice">{briefError}</div> : null}
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-automation-metrics safety-brief-metrics">
           <SafetyStatCard label="Saved Briefs" value={formatCount(briefs.length)} detail={`${formatCount(openActionCount)} open actions`} tone="neutral" />
           <SafetyStatCard label="Checklist" value={`${formatCount(doneChecklistCount)}/${formatCount(checklist.length)}`} detail="First actions complete" tone="info" />
           <SafetyStatCard label="Action Board" value={formatCount(actions.length)} detail={`${formatCount(doneActionCount)} done`} tone="warning" />
-          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for Excel export" tone="critical" />
+          <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for backend Excel export" tone="critical" />
         </div>
       </section>
 
@@ -1696,17 +1759,17 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
           </div>
 
           <div className="safety-management-actions case-actions">
-            <button className="primary-button" type="button" onClick={() => saveBrief()}>Save</button>
-            <button className="secondary-button" type="button" onClick={duplicateBrief}>Duplicate</button>
-            <button className="secondary-button" type="button" onClick={archiveBrief}>Archive</button>
-            <button className="delete-button" type="button" onClick={() => deleteBrief()} disabled={!draft.id}>Delete</button>
+            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>{briefSaving ? "Saving..." : "Save"}</button>
+            <button className="secondary-button" type="button" onClick={duplicateBrief} disabled={briefSaving || !token}>Duplicate</button>
+            <button className="secondary-button" type="button" onClick={archiveBrief} disabled={briefSaving || !token}>Archive</button>
+            <button className="delete-button" type="button" onClick={() => deleteBrief()} disabled={!draft.id || briefSaving || !token}>Delete</button>
           </div>
 
           <div className="safety-brief-history-block">
             <div className="panel-head compact-panel-head">
               <div>
                 <h2>Saved Briefs</h2>
-                <span>{formatCount(filteredBriefs.length)} visible</span>
+                <span>{briefsLoading ? "Loading history..." : `${formatCount(filteredBriefs.length)} visible`}</span>
               </div>
             </div>
             <label className="safety-management-search-field">
@@ -1729,7 +1792,7 @@ function SafetyShiftBriefPanel({ data, user, loading, refreshing, error, onRefre
                   <p>{brief.handoffNote || "No handoff note yet."}</p>
                   <em>Updated {formatDateTime(brief.updatedAt)}</em>
                 </button>
-              )) : <div className="safety-empty-state small">No saved shift briefs yet.</div>}
+              )) : <div className="safety-empty-state small">{briefsLoading ? "Loading saved shift briefs..." : "No saved shift briefs yet."}</div>}
             </div>
           </div>
         </section>
@@ -1911,7 +1974,7 @@ export default function SafetyWorkspace({ token, user }) {
       </section>
 
       <section hidden={activeTab !== "brief"}>
-        <SafetyShiftBriefPanel data={fleetData} user={user} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+        <SafetyShiftBriefPanel token={token} data={fleetData} user={user} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
       </section>
 
       {activeTab === "services" ? (
