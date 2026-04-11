@@ -18,7 +18,7 @@ function markerLabel(item) {
 function servicePopup(item) {
   return [
     `<strong>${item.name || "Service"}</strong>`,
-    item.brand ? `${item.brand}${item.location_type ? ` · ${item.location_type}` : ""}` : item.location_type || null,
+    item.brand ? `${item.brand}${item.location_type ? ` - ${item.location_type}` : ""}` : item.location_type || null,
     item.address || null,
     item.phone ? `Phone: ${item.phone}` : null,
     item.highway ? `Highway: ${item.highway}` : null,
@@ -57,6 +57,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
   const popupRef = useRef(null);
   const [mapError, setMapError] = useState("");
 
+  const hasCenterVehicle = hasCoordinates(centerVehicle);
   const plottedItems = useMemo(() => (items || []).filter((item) => hasCoordinates(item)), [items]);
 
   useEffect(() => {
@@ -86,8 +87,8 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
         language: "en-US",
         mapLibre: {
           container: containerRef.current,
-          center: centerVehicle && hasCoordinates(centerVehicle) ? [centerVehicle.lon, centerVehicle.lat] : [-96, 39],
-          zoom: centerVehicle && hasCoordinates(centerVehicle) ? 9 : 3,
+          center: hasCenterVehicle ? [centerVehicle.lon, centerVehicle.lat] : [-96, 39],
+          zoom: hasCenterVehicle ? 9 : 3,
         },
       });
       setMapError("");
@@ -111,7 +112,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
       }
       mapRef.current = null;
     };
-  }, []);
+  }, [centerVehicle, hasCenterVehicle]);
 
   useEffect(() => {
     const mapLibreMap = mapRef.current?.mapLibreMap;
@@ -170,9 +171,14 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     return <div className="empty-route-card">Service map failed: {mapError}</div>;
   }
 
-  if (!centerVehicle || !hasCoordinates(centerVehicle)) {
-    return <div className="empty-route-card">Select a truck with live coordinates to open the service map.</div>;
-  }
-
-  return <div ref={containerRef} className="safety-service-map-canvas" />;
+  return (
+    <div className="safety-service-map-shell">
+      <div ref={containerRef} className="safety-service-map-canvas" />
+      {!hasCenterVehicle ? (
+        <div className="safety-map-overlay">Select a truck with live coordinates to center the service map.</div>
+      ) : !plottedItems.length ? (
+        <div className="safety-map-overlay">No visible service points matched the current filters.</div>
+      ) : null}
+    </div>
+  );
 }

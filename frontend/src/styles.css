@@ -5873,10 +5873,19 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
   color: #64748b;
 }
 
-.motive-fleet-map {
+.motive-fleet-map-shell {
+  position: relative;
+  width: 100%;
   min-height: 420px;
   border-radius: 18px;
   overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.motive-fleet-map {
+  width: 100%;
+  min-height: inherit;
+  height: 100%;
 }
 
 .motive-map-tabs {
@@ -8054,10 +8063,38 @@ body.theme-dark .safety-automation-queue-watch {
 
 .safety-service-tools-stack {
   gap: 18px;
+  min-width: 0;
+}
+
+.safety-service-tools-stack .safety-fleet-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.safety-service-tools-stack .panel,
+.safety-service-layout,
+.safety-service-sidebar,
+.safety-service-filter-grid label {
+  min-width: 0;
+}
+
+.safety-filter-panel .panel-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.safety-filter-panel .panel-head > div {
+  min-width: 0;
 }
 
 .safety-service-filter-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  min-width: 0;
+}
+
+.safety-service-filter-grid input,
+.safety-service-filter-grid select {
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .safety-service-note {
@@ -8086,12 +8123,44 @@ body.theme-dark .safety-automation-queue-watch {
   border-radius: 24px !important;
 }
 
-.safety-service-map-canvas {
+.safety-service-map-shell {
+  position: relative;
   width: 100%;
   min-height: 520px;
   border-radius: 22px;
   overflow: hidden;
   border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.safety-service-map-canvas {
+  width: 100%;
+  min-height: inherit;
+  height: 100%;
+}
+
+.motive-map-overlay,
+.safety-map-overlay {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--muted-strong);
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+body.theme-dark .motive-map-overlay,
+body.theme-dark .safety-map-overlay {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.88);
+  color: #cbd5e1;
 }
 
 .safety-link-button {
@@ -8201,7 +8270,11 @@ body.theme-dark .safety-service-note {
     grid-template-columns: 1fr;
   }
 
-  .safety-service-map-canvas {
+  .safety-service-map-shell {
     min-height: 360px;
+  }
+
+  .safety-service-map-canvas {
+    min-height: inherit;
   }
 }

@@ -189,9 +189,12 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
     return <div className="empty-route-card">Fleet map failed: {mapError}</div>;
   }
 
-  if (!plottedVehicles.length) {
-    return <div className="empty-route-card">No Motive vehicles with live coordinates yet.</div>;
-  }
-
-  return <div ref={containerRef} className="motive-fleet-map" />;
+  return (
+    <div className="motive-fleet-map-shell">
+      <div ref={containerRef} className="motive-fleet-map" />
+      {!plottedVehicles.length ? (
+        <div className="motive-map-overlay">No Motive vehicles with live coordinates yet.</div>
+      ) : null}
+    </div>
+  );
 }
