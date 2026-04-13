@@ -65,14 +65,14 @@ function ServicePill({ children, tone = "default" }) {
   return <span className={`safety-chip safety-service-pill safety-service-pill-${tone}`}>{children}</span>;
 }
 
-export default function SafetyServiceTools({ token, mode = "service", active = false }) {
+export default function SafetyServiceTools({ token, mode = "service", active = false, fixedVehicleId = "", lockedVehicle = false }) {
   const isEmergency = mode === "emergency";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [vehicleId, setVehicleId] = useState("");
+  const [vehicleId, setVehicleId] = useState(() => fixedVehicleId ? String(fixedVehicleId) : "");
   const [radius, setRadius] = useState("80");
   const [categoryId, setCategoryId] = useState("all");
   const [scenarioId, setScenarioId] = useState("mechanical");
@@ -94,7 +94,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
       }
       setError("");
 
-      const nextVehicleId = overrides.vehicleId ?? vehicleId;
+      const nextVehicleId = fixedVehicleId ? String(fixedVehicleId) : (overrides.vehicleId ?? vehicleId);
       const nextRadius = overrides.radius ?? radius;
       const nextCategoryId = overrides.categoryId ?? categoryId;
       const nextScenarioId = overrides.scenarioId ?? scenarioId;
@@ -125,7 +125,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
         }
       }
     },
-    [categoryId, isEmergency, mode, radius, scenarioId, token, vehicleId]
+    [categoryId, fixedVehicleId, isEmergency, mode, radius, scenarioId, token, vehicleId]
   );
 
   useEffect(() => {
@@ -136,13 +136,17 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
   }, [active, loadData]);
 
   useEffect(() => {
+    if (fixedVehicleId) {
+      setVehicleId(String(fixedVehicleId));
+      return;
+    }
     if (!data?.selected_vehicle_id) {
       return;
     }
     if (!vehicleId) {
       setVehicleId(String(data.selected_vehicle_id));
     }
-  }, [data?.selected_vehicle_id, vehicleId]);
+  }, [data?.selected_vehicle_id, fixedVehicleId, vehicleId]);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -224,6 +228,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
             Truck
             <select
               value={vehicleId}
+              disabled={lockedVehicle}
               onChange={(event) => {
                 const nextVehicleId = event.target.value;
                 setVehicleId(nextVehicleId);
@@ -328,7 +333,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
                 <div className="panel-head compact-panel-head">
                   <div>
                     <h2>{selectedItem.name}</h2>
-                    <span>{selectedItem.brand}{selectedItem.location_type ? ` · ${selectedItem.location_type}` : ""}</span>
+                    <span>{selectedItem.brand}{selectedItem.location_type ? ` - ${selectedItem.location_type}` : ""}</span>
                   </div>
                   <ServicePill tone={selectedItem.kind === "poi" ? "poi" : selectedItem.emergency_ready ? "emergency" : "official"}>
                     {selectedItem.kind === "poi" ? "Live POI" : selectedItem.official_match ? "Official" : "Service"}
@@ -393,7 +398,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
                     <div className="safety-vehicle-head compact">
                       <div>
                         <strong>{item.name}</strong>
-                        <span>{item.brand}{item.location_type ? ` · ${item.location_type}` : ""}</span>
+                        <span>{item.brand}{item.location_type ? ` - ${item.location_type}` : ""}</span>
                       </div>
                       <strong>{formatDistance(item.distance_miles)}</strong>
                     </div>

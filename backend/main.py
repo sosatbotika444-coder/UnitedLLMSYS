@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.database import Base, engine, ensure_runtime_schema
 from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
 from app.routes.auth import router as auth_router
+from app.routes.driver import router as driver_router
 from app.routes.loads import router as loads_router
 from app.routes.motive import router as motive_router
 from app.routes.navigation import router as navigation_router
@@ -45,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(driver_router, prefix="/api")
 app.include_router(loads_router, prefix="/api")
 app.include_router(navigation_router, prefix="/api")
 app.include_router(motive_router, prefix="/api")

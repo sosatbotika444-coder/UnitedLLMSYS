@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_user_department
 from app.config import get_settings
 from app.database import get_db
+from app.driver_identity import parse_driver_vehicle_id
 from app.models import SafetyDocument, SafetyInvestigationCase, SafetyNote, SafetyShiftBrief, User
 from app.motive import MotiveClient
 from app.safety_documents import SafetyDocumentError, analyze_uploaded_safety_document
@@ -433,8 +434,14 @@ def get_safety_services(
     category_id: str = Query(default="all"),
     scenario_id: str = Query(default="mechanical"),
     refresh: bool = Query(default=False, description="Force a fresh Motive fetch before building the service map."),
-    current_user: User = Depends(require_user_department("safety")),
+    current_user: User = Depends(require_user_department("safety", "driver")),
 ):
+    if current_user.department == "driver":
+        driver_vehicle_id = parse_driver_vehicle_id(current_user.email)
+        if driver_vehicle_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Driver profile is not linked to a Motive vehicle")
+        vehicle_id = driver_vehicle_id
+
     snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
     return build_service_map_snapshot(
         snapshot,

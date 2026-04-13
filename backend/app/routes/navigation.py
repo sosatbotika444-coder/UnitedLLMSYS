@@ -1408,13 +1408,13 @@ def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, 
 def location_suggestions(
     q: str = Query(min_length=2, max_length=255),
     limit: int = Query(default=6, ge=1, le=8),
-    current_user: User = Depends(require_user_department("fuel")),
+    current_user: User = Depends(require_user_department("fuel", "driver")),
 ):
     return LocationSuggestionResponse(query=q, suggestions=search_location_suggestions(q, limit=limit))
 
 
 @router.get("/tomtom-capabilities", response_model=TomTomCapabilityCatalog)
-def tomtom_capabilities(current_user: User = Depends(require_user_department("fuel"))):
+def tomtom_capabilities(current_user: User = Depends(require_user_department("fuel", "driver"))):
     live = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Live")
     ready = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Ready")
     requires_access = sum(1 for item in TOMTOM_CAPABILITIES if item.status == "Requires Access")
@@ -1422,7 +1422,7 @@ def tomtom_capabilities(current_user: User = Depends(require_user_department("fu
 
 
 @router.post("/route-assistant", response_model=RouteAssistantResponse)
-def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(require_user_department("fuel")), db: Session = Depends(get_db)):
+def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(require_user_department("fuel", "driver")), db: Session = Depends(get_db)):
     if not settings.tomtom_api_key:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="TOMTOM_API_KEY is missing on the backend")
 

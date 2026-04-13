@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import DriverAuth from "./DriverAuth";
+import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
@@ -14,7 +16,8 @@ const PRODUCT_KEY = "unitedlane_active_product";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
   { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking" },
-  { id: "safety", label: "Safety", detail: "Fleet, services, AI" }
+  { id: "safety", label: "Safety", detail: "Fleet, services, AI" },
+  { id: "driver", label: "Driver", detail: "My truck, fuel, service" }
 ];
 const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
@@ -329,6 +332,7 @@ export default function App() {
   const activeDepartment = user?.department || selectedDepartment;
   const selectedDepartmentMeta = getDepartmentMeta(activeDepartment);
   const isFuelService = activeDepartment === "fuel";
+  const isDriverWorkspace = activeDepartment === "driver";
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
   const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id] || workspaceCopy.command;
   const activeSiteNav = sitePanel || (!user || !isFuelService || activeWorkspace === "command" ? "home" : "");
@@ -347,6 +351,17 @@ export default function App() {
     );
   }
 
+  function handleAuthenticated(data, successMessage = "Signed in.") {
+    localStorage.setItem(TOKEN_KEY, data.access_token);
+    setToken(data.access_token);
+    setUser(data.user);
+    setSelectedDepartment(data.user.department);
+    setRegisterForm(emptyRegister);
+    setLoginForm(emptyLogin);
+    setMessage(successMessage);
+    setError("");
+  }
+
   async function submitAuth(path, payload) {
     setLoading(true);
     setError("");
@@ -358,13 +373,7 @@ export default function App() {
         body: JSON.stringify({ ...payload, department: selectedDepartment })
       });
 
-      localStorage.setItem(TOKEN_KEY, data.access_token);
-      setToken(data.access_token);
-      setUser(data.user);
-      setSelectedDepartment(data.user.department);
-      setRegisterForm(emptyRegister);
-      setLoginForm(emptyLogin);
-      setMessage(path === "/auth/register" ? "Account created." : "Signed in.");
+      handleAuthenticated(data, path === "/auth/register" ? "Account created." : "Signed in.");
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -510,7 +519,16 @@ export default function App() {
                   </button>
                 </div>
 
-                {mode === "login" ? (
+                {selectedDepartment === "driver" ? (
+                  <DriverAuth
+                    mode={mode}
+                    loading={loading}
+                    onBusyChange={setLoading}
+                    onAuthenticated={handleAuthenticated}
+                    onError={setError}
+                    onMessage={setMessage}
+                  />
+                ) : mode === "login" ? (
                   <form
                     className="auth-form"
                     onSubmit={(event) => {
@@ -596,6 +614,75 @@ export default function App() {
     );
   }
 
+  if (isDriverWorkspace) {
+    return (
+      <div className="site-page-shell">
+        <SiteHeader
+          onHome={handleHomeNavigation}
+          onAbout={() => openSitePanel("about")}
+          onPrivacy={() => openSitePanel("privacy")}
+          activeItem={activeSiteNav}
+        />
+
+        <main className="workspace-app-shell site-workspace-shell workspace-app-shell-driver">
+          <aside className="workspace-sidebar-shell">
+            <div className="workspace-sidebar-brand">
+              <div className="workspace-sidebar-logo">
+                <UnitedLaneMark className="workspace-sidebar-logo-mark" />
+              </div>
+              <div className="workspace-sidebar-brand-copy">
+                <strong>United Lane LLC</strong>
+                <span>Driver</span>
+                <small>Motive truck workspace</small>
+              </div>
+            </div>
+
+            <article className="workspace-sidebar-account-card">
+              <span>Driver</span>
+              <strong>{user.full_name}</strong>
+              <small>Fuel, service, emergency</small>
+              <em>Driver access</em>
+            </article>
+
+            <div className="workspace-sidebar-footer">
+              <div className="workspace-sidebar-footer-card">
+                <span>{currentDate}</span>
+                <strong>Driver ready</strong>
+                <small>Truck route and safety support</small>
+              </div>
+              <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
+                Logout
+              </button>
+            </div>
+          </aside>
+
+          <section className="workspace-main-shell">
+            <header className="workspace-main-header">
+              <div className="workspace-main-heading">
+                <span className="workspace-main-kicker">Driver</span>
+                <h1>Driver Workspace</h1>
+                <p>Your truck, fuel route, service centers, and emergency support.</p>
+              </div>
+
+              <div className="workspace-main-meta">
+                <div className="workspace-main-usercard">
+                  <span>Driver</span>
+                  <strong>{user.full_name}</strong>
+                </div>
+              </div>
+            </header>
+
+            {message ? <div className="notice success inline-notice">{message}</div> : null}
+            {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+            <DriverWorkspace token={token} user={user} />
+          </section>
+        </main>
+
+        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
+      </div>
+    );
+  }
   if (!isFuelService) {
     return (
       <div className="site-page-shell">

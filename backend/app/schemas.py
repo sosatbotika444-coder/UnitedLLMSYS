@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
-DepartmentName = Literal["fuel", "safety"]
+DepartmentName = Literal["fuel", "safety", "driver"]
 
 
 class UserCreate(BaseModel):
@@ -32,6 +32,40 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class DriverVehicleMatch(BaseModel):
+    vehicleId: int
+    driverName: str = ""
+    truckNumber: str = ""
+    vehicleLabel: str = ""
+    locationLabel: str = ""
+    fuelLevelPercent: float | None = None
+    status: str = ""
+    matched: str = ""
+
+
+class DriverAuthBase(BaseModel):
+    fullName: str = Field(min_length=2, max_length=255)
+    password: str = Field(min_length=6, max_length=128)
+    vehicleId: int = Field(ge=1)
+
+
+class DriverRegister(DriverAuthBase):
+    pass
+
+
+class DriverLogin(DriverAuthBase):
+    pass
+
+
+class DriverProfile(BaseModel):
+    vehicleId: int
+    driverName: str = ""
+    truckNumber: str = ""
+    match: DriverVehicleMatch
+    vehicle: dict[str, Any] = Field(default_factory=dict)
+    fleetSnapshot: dict[str, Any] = Field(default_factory=dict)
 
 
 class SafetyNoteUpdate(BaseModel):

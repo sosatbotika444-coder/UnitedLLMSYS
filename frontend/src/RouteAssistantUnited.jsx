@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatPriceTarget,
   getAutoDieselPrice,
@@ -439,7 +439,7 @@ function StopCard({ stop, compact = false, priceTarget = null }) {
   );
 }
 
-export default function RouteAssistant({ token, active = true, loadRows = [] }) {
+export default function RouteAssistant({ token, active = true, loadRows = [], fleetSnapshotOverride = null, fixedVehicleId = "", lockedVehicle = false, driverMode = false }) {
   const [routeForm, setRouteForm] = useState({
     origin: "Chicago, IL",
     destination: "Dallas, TX",
@@ -456,7 +456,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   const [fleetSnapshot, setFleetSnapshot] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetError, setFleetError] = useState("");
-  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState(() => fixedVehicleId ? String(fixedVehicleId) : "");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
@@ -643,6 +643,12 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
   }, [active, activeLocationQuery, locationFieldFocus, token]);
 
   useEffect(() => {
+    if (fleetSnapshotOverride) {
+      setFleetError("");
+      setFleetLoading(false);
+      return undefined;
+    }
+
     if (!token || !active || fleetSnapshot) {
       return undefined;
     }
@@ -672,12 +678,20 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     return () => {
       ignore = true;
     };
-  }, [active, fleetSnapshot, token]);
+  }, [active, fleetSnapshot, fleetSnapshotOverride, token]);
+
+  const effectiveFleetSnapshot = fleetSnapshotOverride || fleetSnapshot;
+
+  useEffect(() => {
+    if (fixedVehicleId) {
+      setSelectedVehicleId(String(fixedVehicleId));
+    }
+  }, [fixedVehicleId]);
 
   const fleetVehicles = useMemo(() => {
-    const vehicles = [...(fleetSnapshot?.vehicles || [])];
+    const vehicles = [...(effectiveFleetSnapshot?.vehicles || [])];
     return vehicles.sort((left, right) => vehicleLabel(left).localeCompare(vehicleLabel(right), undefined, { numeric: true, sensitivity: "base" }));
-  }, [fleetSnapshot]);
+  }, [effectiveFleetSnapshot]);
 
   useEffect(() => {
     if (!fleetVehicles.length) {
@@ -691,9 +705,10 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
       return;
     }
 
-    const defaultVehicle = fleetVehicles.find((vehicle) => vehicleDriver(vehicle)) || fleetVehicles[0];
+    const fixedVehicle = fixedVehicleId ? fleetVehicles.find((vehicle) => String(vehicle.id) === String(fixedVehicleId)) : null;
+    const defaultVehicle = fixedVehicle || fleetVehicles.find((vehicle) => vehicleDriver(vehicle)) || fleetVehicles[0];
     setSelectedVehicleId(String(defaultVehicle.id));
-  }, [fleetVehicles, selectedVehicleId]);
+  }, [fixedVehicleId, fleetVehicles, selectedVehicleId]);
 
   const selectedVehicle = useMemo(() => {
     if (!fleetVehicles.length) return null;
@@ -725,6 +740,19 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     })),
     [visibleDriverVehicles]
   );
+
+  useEffect(() => {
+    if (!driverMode || !selectedVehicleLocation) {
+      return;
+    }
+
+    setRouteForm((current) => {
+      if (current.origin && current.origin !== "Chicago, IL") {
+        return current;
+      }
+      return { ...current, origin: selectedVehicleLocation };
+    });
+  }, [driverMode, selectedVehicleLocation]);
 
   useEffect(() => {
     const nextCurrentFuelGallons = selectedVehiclePreset.currentFuelGallons.toFixed(1);
@@ -905,29 +933,31 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
     <section className="panel route-panel route-panel-brand-mode">
       <div className="route-vehicle-bridge">
         <div className="route-vehicle-bridge-copy">
-          <strong>Truck preset routing</strong>
-          <span>Select a truck or driver, enter only A and B, and the system fills live fuel plus a fixed 200 gallon tank capacity automatically.</span>
+          <strong>{driverMode ? "Driver fuel routing" : "Truck preset routing"}</strong>
+          <span>{driverMode ? "Your truck is locked from Motive. Enter point B and the system uses live fuel plus a fixed 200 gallon tank capacity." : "Select a truck or driver, enter only A and B, and the system fills live fuel plus a fixed 200 gallon tank capacity automatically."}</span>
         </div>
         <div className="route-vehicle-bridge-status">
-          <strong>{fleetLoading ? "Syncing Motive fleet..." : `${fleetVehicles.length} trucks ready`}</strong>
+          <strong>{fleetLoading ? "Syncing Motive fleet..." : driverMode ? "Driver truck ready" : `${fleetVehicles.length} trucks ready`}</strong>
           <span>{selectedVehicle ? `${vehicleLabel(selectedVehicle)} | ${vehicleDriverName(selectedVehicle)}` : "Choose a Motive truck to auto-fill route fuel inputs."}</span>
         </div>
       </div>
 
       <div className="route-builder route-builder-expanded route-builder-brand-mode route-builder-smart">
-        <label className="route-builder-search">
-          Search truck or driver
-          <input
-            type="text"
-            value={vehicleSearch}
-            onChange={(event) => setVehicleSearch(event.target.value)}
-            placeholder="Truck, driver, VIN, plate, city"
-          />
-          <small>{filteredFleetVehicles.length} match{filteredFleetVehicles.length === 1 ? "" : "es"}</small>
-        </label>
+        {!lockedVehicle ? (
+          <label className="route-builder-search">
+            Search truck or driver
+            <input
+              type="text"
+              value={vehicleSearch}
+              onChange={(event) => setVehicleSearch(event.target.value)}
+              placeholder="Truck, driver, VIN, plate, city"
+            />
+            <small>{filteredFleetVehicles.length} match{filteredFleetVehicles.length === 1 ? "" : "es"}</small>
+          </label>
+        ) : null}
         <label>
           Truck
-          <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={fleetLoading || !visibleTruckVehicles.length}>
+          <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={lockedVehicle || fleetLoading || !visibleTruckVehicles.length}>
             {visibleTruckVehicles.length ? (
               visibleTruckVehicles.map((vehicle) => (
                 <option key={`truck-${vehicle.id}`} value={vehicle.id}>
@@ -939,23 +969,25 @@ export default function RouteAssistant({ token, active = true, loadRows = [] }) 
             )}
           </select>
         </label>
-        <label>
-          Driver
-          <select value={selectedVehicleDriver ? String(selectedVehicle?.id || "") : ""} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={fleetLoading || !driverVehicleOptions.length}>
-            {driverVehicleOptions.length ? (
-              <>
-                {!selectedVehicleDriver ? <option value="">Unassigned</option> : null}
-                {driverVehicleOptions.map((option) => (
-                  <option key={`driver-${option.id}`} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </>
-            ) : (
-              <option value="">No assigned drivers match search</option>
-            )}
-          </select>
-        </label>
+        {!lockedVehicle ? (
+          <label>
+            Driver
+            <select value={selectedVehicleDriver ? String(selectedVehicle?.id || "") : ""} onChange={(event) => setSelectedVehicleId(event.target.value)} disabled={fleetLoading || !driverVehicleOptions.length}>
+              {driverVehicleOptions.length ? (
+                <>
+                  {!selectedVehicleDriver ? <option value="">Unassigned</option> : null}
+                  {driverVehicleOptions.map((option) => (
+                    <option key={`driver-${option.id}`} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </>
+              ) : (
+                <option value="">No assigned drivers match search</option>
+              )}
+            </select>
+          </label>
+        ) : null}
         <label className="route-location-field">
           Origin (A)
           <div className="route-location-input-wrap">
