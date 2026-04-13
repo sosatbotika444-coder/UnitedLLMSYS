@@ -30,7 +30,7 @@ async function apiRequest(path, options = {}, token = '') {
 }
 
 function matchLabel(match) {
-  return [match?.driverName, match?.truckNumber].filter(Boolean).join(' | ') || 'Motive driver';
+  return [match?.truckNumber, match?.driverName].filter(Boolean).join(' | ') || 'Motive truck';
 }
 
 function fuelLabel(value) {
@@ -39,21 +39,21 @@ function fuelLabel(value) {
 }
 
 export default function DriverAuth({ mode = 'login', loading = false, onBusyChange, onAuthenticated, onError, onMessage }) {
-  const [fullName, setFullName] = useState('');
+  const [truckNumber, setTruckNumber] = useState('');
   const [password, setPassword] = useState('');
   const [matches, setMatches] = useState([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState('');
 
-  const trimmedName = fullName.trim();
+  const trimmedTruckNumber = truckNumber.trim();
   const selectedMatch = useMemo(
     () => matches.find((match) => String(match.vehicleId) === String(selectedVehicleId)) || null,
     [matches, selectedVehicleId]
   );
 
   useEffect(() => {
-    if (trimmedName.length < 2) {
+    if (trimmedTruckNumber.length < 1) {
       setMatches([]);
       setSelectedVehicleId('');
       setMatchError('');
@@ -66,7 +66,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       setMatchLoading(true);
       setMatchError('');
       try {
-        const data = await apiRequest(`/driver/matches?q=${encodeURIComponent(trimmedName)}`);
+        const data = await apiRequest(`/driver/matches?q=${encodeURIComponent(trimmedTruckNumber)}`);
         if (ignore) return;
         setMatches(data || []);
         if ((data || []).length === 1) {
@@ -85,13 +85,13 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
           setMatchLoading(false);
         }
       }
-    }, 450);
+    }, 350);
 
     return () => {
       ignore = true;
       window.clearTimeout(timer);
     };
-  }, [selectedVehicleId, trimmedName]);
+  }, [selectedVehicleId, trimmedTruckNumber]);
 
   async function submitDriverAuth(event) {
     event.preventDefault();
@@ -99,7 +99,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
     onMessage?.('');
 
     if (!selectedMatch) {
-      onError?.('Select your Motive driver and truck match first.');
+      onError?.('Select your Motive truck first.');
       return;
     }
 
@@ -108,7 +108,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       const data = await apiRequest(`/driver/${mode === 'register' ? 'register' : 'login'}`, {
         method: 'POST',
         body: JSON.stringify({
-          fullName: selectedMatch.driverName || trimmedName,
+          truckNumber: trimmedTruckNumber,
           password,
           vehicleId: selectedMatch.vehicleId
         })
@@ -124,20 +124,20 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
   return (
     <form className='auth-form driver-auth-form' onSubmit={submitDriverAuth}>
       <label>
-        Driver Name
+        Truck Number
         <input
           type='text'
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-          placeholder='Start typing your Motive name'
+          value={truckNumber}
+          onChange={(event) => setTruckNumber(event.target.value)}
+          placeholder='Truck number from Motive'
           required
         />
       </label>
 
       <div className='driver-match-panel'>
         <div className='driver-match-panel-head'>
-          <strong>Motive match</strong>
-          <span>{matchLoading ? 'Searching...' : matches.length ? `${matches.length} found` : 'Type at least 2 letters'}</span>
+          <strong>Motive truck match</strong>
+          <span>{matchLoading ? 'Searching...' : matches.length ? `${matches.length} found` : 'Type truck number'}</span>
         </div>
         {matchError ? <div className='notice error inline-notice'>{matchError}</div> : null}
         <div className='driver-match-list'>
@@ -150,11 +150,11 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
             >
               <strong>{matchLabel(match)}</strong>
               <span>{match.locationLabel || 'Location unavailable'}</span>
-              <small>{fuelLabel(match.fuelLevelPercent)} | {match.matched || 'Motive profile'}</small>
+              <small>{fuelLabel(match.fuelLevelPercent)} | {match.matched || 'Motive truck profile'}</small>
             </button>
           ))}
-          {!matchLoading && trimmedName.length >= 2 && !matches.length && !matchError ? (
-            <div className='driver-match-empty'>No Motive match yet.</div>
+          {!matchLoading && trimmedTruckNumber.length >= 1 && !matches.length && !matchError ? (
+            <div className='driver-match-empty'>No Motive truck match yet.</div>
           ) : null}
         </div>
       </div>

@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -6,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth import create_access_token, hash_password, require_user_department, verify_password
 from app.config import get_settings
 from app.database import get_db
-from app.driver_identity import make_driver_email, normalize_driver_name, parse_driver_vehicle_id
+from app.driver_identity import make_driver_email, parse_driver_vehicle_id
 from app.models import User
 from app.motive import MotiveClient
 from app.schemas import DriverLogin, DriverProfile, DriverRegister, DriverVehicleMatch, TokenResponse
@@ -25,15 +27,69 @@ def _driver_name(vehicle: dict) -> str:
     driver = _vehicle_driver(vehicle) or {}
     return str(driver.get("full_name") or "").strip()
 
-def _names_match(requested_name: str, motive_name: str) -> bool:
-    requested = normalize_driver_name(requested_name)
-    motive = normalize_driver_name(motive_name)
-    return bool(requested and motive and requested == motive)
 
+def _compact_truck_value(value: object) -> str:
+    return re.sub(r"[^0-9a-zA-Z]+", "", str(value or "").strip().casefold())
 
 
 def _vehicle_label(vehicle: dict) -> str:
     return str(vehicle.get("number") or vehicle.get("vin") or f"Truck {vehicle.get('id')}").strip()
+
+
+def _add_identifier(identifiers: list[str], value: object) -> None:
+    normalized = _compact_truck_value(value)
+    if normalized and normalized not in identifiers:
+        identifiers.append(normalized)
+    if normalized.isdigit():
+        stripped = normalized.lstrip("0")
+        if stripped and stripped not in identifiers:
+            identifiers.append(stripped)
+
+
+def _truck_identifier_variants(value: object) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    variants = [text]
+    before_driver_name = text.split("/", 1)[0]
+    variants.append(before_driver_name)
+    variants.extend(re.split(r"[\s/#-]+", before_driver_name))
+    variants.extend(re.findall(r"\d+", before_driver_name))
+    return variants
+
+
+def _truck_identifiers(vehicle: dict) -> list[str]:
+    values = [
+        vehicle.get("number"),
+        _vehicle_label(vehicle),
+        vehicle.get("id"),
+        vehicle.get("vin"),
+        vehicle.get("license_plate_number"),
+        vehicle.get("license_plate_state"),
+    ]
+    identifiers: list[str] = []
+    for value in values:
+        for variant in _truck_identifier_variants(value):
+            _add_identifier(identifiers, variant)
+    return identifiers
+
+
+def _truck_match(vehicle: dict, query: str) -> tuple[int, str] | None:
+    term = _compact_truck_value(query)
+    if not term:
+        return None
+
+    identifiers = _truck_identifiers(vehicle)
+    if not identifiers:
+        return None
+    if term in identifiers:
+        return 0, "Exact truck match"
+    if any(item.startswith(term) for item in identifiers):
+        return 1, "Truck number starts with this"
+    if any(term in item for item in identifiers):
+        return 2, "Truck number, VIN, or plate contains this"
+    return None
 
 
 def _location_label(vehicle: dict) -> str:
@@ -61,7 +117,7 @@ def _fuel_percent(vehicle: dict) -> float | None:
 def _vehicle_match(vehicle: dict, matched: str = "") -> DriverVehicleMatch:
     return DriverVehicleMatch(
         vehicleId=int(vehicle.get("id") or 0),
-        driverName=_driver_name(vehicle) or "Unassigned",
+        driverName=_driver_name(vehicle) or "Motive driver",
         truckNumber=_vehicle_label(vehicle),
         vehicleLabel=_vehicle_label(vehicle),
         locationLabel=_location_label(vehicle),
@@ -76,6 +132,16 @@ def _find_vehicle(snapshot: dict, vehicle_id: int) -> dict | None:
         if str(vehicle.get("id")) == str(vehicle_id):
             return vehicle
     return None
+
+
+def _validate_truck_selection(vehicle: dict, truck_number: str) -> None:
+    if _truck_match(vehicle, truck_number):
+        return
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Motive truck does not match this truck number")
+
+
+def _driver_profile_name(vehicle: dict, fallback: str) -> str:
+    return _driver_name(vehicle) or fallback or _vehicle_label(vehicle)
 
 
 def _filtered_snapshot(snapshot: dict, vehicle: dict) -> dict:
@@ -102,31 +168,19 @@ def _filtered_snapshot(snapshot: dict, vehicle: dict) -> dict:
 
 @router.get("/matches", response_model=list[DriverVehicleMatch])
 def driver_matches(
-    q: str = Query(min_length=2, max_length=255),
+    q: str = Query(min_length=1, max_length=255),
     limit: int = Query(default=6, ge=1, le=10),
 ):
     snapshot = motive_client.fetch_snapshot(force_refresh=False)
-    term = normalize_driver_name(q)
     matches: list[tuple[int, DriverVehicleMatch]] = []
     for vehicle in snapshot.get("vehicles") or []:
-        driver_name = _driver_name(vehicle)
-        truck_number = _vehicle_label(vehicle)
-        haystack = normalize_driver_name(f"{driver_name} {truck_number}")
-        if not driver_name or term not in haystack:
+        match = _truck_match(vehicle, q)
+        if not match:
             continue
-        normalized_driver = normalize_driver_name(driver_name)
-        if normalized_driver == term:
-            score = 0
-            matched = "Exact driver match"
-        elif normalized_driver.startswith(term):
-            score = 1
-            matched = "Driver starts with this name"
-        else:
-            score = 2
-            matched = "Driver or truck contains this text"
+        score, matched = match
         matches.append((score, _vehicle_match(vehicle, matched)))
 
-    matches.sort(key=lambda item: (item[0], item[1].driverName, item[1].truckNumber))
+    matches.sort(key=lambda item: (item[0], item[1].truckNumber, item[1].driverName))
     return [item for _, item in matches[:limit]]
 
 
@@ -136,20 +190,16 @@ def register_driver(payload: DriverRegister, db: Session = Depends(get_db)):
     vehicle = _find_vehicle(snapshot, payload.vehicleId)
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Motive vehicle not found")
+    _validate_truck_selection(vehicle, payload.truckNumber)
 
     email = make_driver_email(payload.vehicleId)
     existing_user = db.scalar(select(User).where(User.email == email))
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Driver profile already exists. Please sign in.")
 
-    motive_name = _driver_name(vehicle)
-    requested_name = payload.fullName.strip()
-    if motive_name and not _names_match(requested_name, motive_name):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Motive driver does not match this name")
-
     user = User(
         email=email,
-        full_name=motive_name or requested_name,
+        full_name=_driver_profile_name(vehicle, _vehicle_label(vehicle)),
         department="driver",
         hashed_password=hash_password(payload.password),
     )
@@ -167,13 +217,22 @@ def register_driver(payload: DriverRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login_driver(payload: DriverLogin, db: Session = Depends(get_db)):
+    snapshot = motive_client.fetch_snapshot(force_refresh=False)
+    vehicle = _find_vehicle(snapshot, payload.vehicleId)
+    if not vehicle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Motive vehicle not found")
+    _validate_truck_selection(vehicle, payload.truckNumber)
+
     email = make_driver_email(payload.vehicleId)
     user = db.scalar(select(User).where(User.email == email, User.department == "driver"))
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid driver name, truck, or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid truck number or password")
 
-    if normalize_driver_name(payload.fullName) and normalize_driver_name(payload.fullName) != normalize_driver_name(user.full_name):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This password belongs to a different driver profile")
+    motive_name = _driver_name(vehicle)
+    if motive_name and user.full_name != motive_name:
+        user.full_name = motive_name
+        db.commit()
+        db.refresh(user)
 
     return TokenResponse(access_token=create_access_token(user.id), user=user)
 
@@ -191,7 +250,7 @@ def driver_profile(current_user: User = Depends(require_user_department("driver"
 
     return DriverProfile(
         vehicleId=vehicle_id,
-        driverName=current_user.full_name,
+        driverName=_driver_profile_name(vehicle, current_user.full_name),
         truckNumber=_vehicle_label(vehicle),
         match=_vehicle_match(vehicle, "Linked driver profile"),
         vehicle=vehicle,

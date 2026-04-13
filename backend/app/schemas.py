@@ -46,7 +46,7 @@ class DriverVehicleMatch(BaseModel):
 
 
 class DriverAuthBase(BaseModel):
-    fullName: str = Field(min_length=2, max_length=255)
+    truckNumber: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     vehicleId: int = Field(ge=1)
 
