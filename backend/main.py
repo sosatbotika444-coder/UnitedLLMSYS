@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import Base, engine, ensure_runtime_schema
+from app.motive import motive_snapshot_runtime_status, start_motive_snapshot_refresh_worker, stop_motive_snapshot_refresh_worker
 from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
 from app.routes.auth import router as auth_router
 from app.routes.driver import router as driver_router
@@ -24,9 +25,11 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_runtime_schema()
     start_live_price_refresh_workers()
+    start_motive_snapshot_refresh_worker(settings)
     try:
         yield
     finally:
+        stop_motive_snapshot_refresh_worker()
         stop_live_price_refresh_workers()
 
 
@@ -66,4 +69,5 @@ def health_check():
         "compression": "gzip",
         "motive_configured": bool(settings.motive_api_key or settings.motive_access_token),
         "live_price_background_refresh": live_price_runtime_status(),
+        "motive_snapshot_cache": motive_snapshot_runtime_status(),
     }

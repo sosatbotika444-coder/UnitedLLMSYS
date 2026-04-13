@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     motive_metric_units: bool = False
     motive_user_id: int | None = None
     motive_snapshot_ttl_seconds: int = 45
+    motive_snapshot_stale_ttl_seconds: int = 86400
+    motive_snapshot_disk_cache_enabled: bool = True
+    motive_snapshot_cache_file: str = ""
+    motive_background_refresh_enabled: bool = True
+    motive_background_refresh_interval_seconds: int = 60
     motive_vehicle_history_days: int = 2
     live_price_background_refresh_enabled: bool = True
     live_price_cache_ttl_seconds: int = 900

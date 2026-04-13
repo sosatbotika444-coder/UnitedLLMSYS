@@ -5,6 +5,7 @@ import re
 import ssl
 import threading
 import time
+from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
@@ -34,7 +35,20 @@ TOKEN_STATE: dict[str, object] = {
     "expires_at": None,
 }
 SNAPSHOT_LOCK = threading.Condition()
-SNAPSHOT_CACHE: dict[str, object] = {"snapshot": None, "expires_at": 0.0, "building": False}
+SNAPSHOT_CACHE: dict[str, object] = {
+    "snapshot": None,
+    "expires_at": 0.0,
+    "building": False,
+    "loaded_disk": False,
+    "last_error": "",
+    "last_refresh_started_at": 0.0,
+    "last_refresh_finished_at": "",
+}
+SNAPSHOT_CACHE_PATH = Path(__file__).resolve().parent / "data" / "motive_snapshot_cache.json"
+SNAPSHOT_REFRESH_MIN_INTERVAL_SECONDS = 15
+SNAPSHOT_WORKER_STOP = threading.Event()
+SNAPSHOT_WORKER_LOCK = threading.Lock()
+SNAPSHOT_WORKER_THREAD: threading.Thread | None = None
 DETAIL_LOCK = threading.Condition()
 DETAIL_CACHE: dict[int, dict[str, object]] = {}
 DETAIL_BUILDING: set[int] = set()
@@ -163,6 +177,162 @@ def age_minutes(value: object) -> float | None:
     return max(0.0, round((datetime.now(timezone.utc) - parsed).total_seconds() / 60, 1))
 
 
+def _snapshot_cache_path(settings: Settings) -> Path:
+    configured_path = clean_text(getattr(settings, "motive_snapshot_cache_file", ""))
+    if configured_path:
+        path = Path(configured_path)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        return path
+    return SNAPSHOT_CACHE_PATH
+
+
+def _snapshot_age_seconds(snapshot: dict | None) -> float | None:
+    if not snapshot:
+        return None
+    parsed = parse_datetime(snapshot.get("fetched_at"))
+    if not parsed:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - parsed).total_seconds())
+
+
+def _snapshot_expires_at(snapshot: dict | None, ttl_seconds: int) -> float:
+    parsed = parse_datetime((snapshot or {}).get("fetched_at"))
+    if parsed:
+        return parsed.timestamp() + ttl_seconds
+    return time.time()
+
+
+def _snapshot_is_usable(snapshot: object) -> bool:
+    return isinstance(snapshot, dict) and isinstance(snapshot.get("vehicles"), list)
+
+
+def _exception_summary(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return format_http_error("Motive refresh failed", detail, exc.status_code)
+    return f"Motive refresh failed: {exc}"
+
+
+def _decorate_snapshot(snapshot: dict, status_label: str, refreshing: bool, last_error: str = "") -> dict:
+    decorated = snapshot.copy()
+    cache = dict(decorated.get("cache") or {})
+    age_seconds = _snapshot_age_seconds(snapshot)
+    cache.update({
+        "status": status_label,
+        "refreshing": bool(refreshing),
+        "served_at": iso_now(),
+        "fetched_at": snapshot.get("fetched_at") or "",
+        "age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+        "last_error": last_error or "",
+    })
+    decorated["cache"] = cache
+
+    warnings = list(decorated.get("warnings") or [])
+    if status_label in {"stale", "disk", "refreshing"} and refreshing:
+        warnings.insert(0, "Showing cached Motive data while a fresh fleet refresh runs in the background.")
+    elif status_label in {"stale", "disk"}:
+        warnings.insert(0, "Showing cached Motive data.")
+    if last_error:
+        warnings.insert(0, last_error)
+    decorated["warnings"] = list(dict.fromkeys(warnings))
+    return decorated
+
+
+def _warming_snapshot(message: str, refreshing: bool = True, last_error: str = "") -> dict:
+    warnings = [message]
+    if last_error:
+        warnings.insert(0, last_error)
+    return {
+        "configured": True,
+        "auth_mode": "warming",
+        "fetched_at": "",
+        "company": None,
+        "windows": {},
+        "metrics": {
+            "total_vehicles": 0,
+            "located_vehicles": 0,
+            "moving_vehicles": 0,
+            "stopped_vehicles": 0,
+            "online_vehicles": 0,
+            "stale_vehicles": 0,
+            "vehicles_with_driver": 0,
+            "active_drivers": 0,
+            "low_fuel_vehicles": 0,
+            "active_fault_codes": 0,
+            "vehicles_with_faults": 0,
+            "ifta_miles_30d": 0,
+        },
+        "datasets": {},
+        "drivers": [],
+        "vehicles": [],
+        "recent_activity": {},
+        "warnings": warnings,
+        "cache": {
+            "status": "warming",
+            "refreshing": bool(refreshing),
+            "served_at": iso_now(),
+            "fetched_at": "",
+            "age_seconds": None,
+            "last_error": last_error or "",
+        },
+    }
+
+
+def _load_snapshot_from_disk(settings: Settings) -> dict | None:
+    if not getattr(settings, "motive_snapshot_disk_cache_enabled", True):
+        return None
+    path = _snapshot_cache_path(settings)
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            snapshot = json.load(handle)
+    except Exception:
+        return None
+    if not _snapshot_is_usable(snapshot):
+        return None
+    stale_ttl_seconds = max(0, int(getattr(settings, "motive_snapshot_stale_ttl_seconds", 86400) or 0))
+    age_seconds = _snapshot_age_seconds(snapshot)
+    if stale_ttl_seconds and age_seconds is not None and age_seconds > stale_ttl_seconds:
+        return None
+    return snapshot
+
+
+def _write_snapshot_to_disk(settings: Settings, snapshot: dict) -> None:
+    if not getattr(settings, "motive_snapshot_disk_cache_enabled", True):
+        return
+    if not _snapshot_is_usable(snapshot):
+        return
+    path = _snapshot_cache_path(settings)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(snapshot, handle, ensure_ascii=False, separators=(",", ":"))
+        tmp_path.replace(path)
+    except Exception:
+        return
+
+
+def motive_snapshot_runtime_status() -> dict:
+    with SNAPSHOT_LOCK:
+        snapshot = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
+        age_seconds = _snapshot_age_seconds(snapshot)
+        return {
+            "cached": bool(snapshot),
+            "building": bool(SNAPSHOT_CACHE.get("building")),
+            "loaded_disk": bool(SNAPSHOT_CACHE.get("loaded_disk")),
+            "worker_running": bool(SNAPSHOT_WORKER_THREAD and SNAPSHOT_WORKER_THREAD.is_alive()),
+            "fetched_at": snapshot.get("fetched_at") if snapshot else "",
+            "age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+            "expires_at": float(SNAPSHOT_CACHE.get("expires_at") or 0.0),
+            "last_error": str(SNAPSHOT_CACHE.get("last_error") or ""),
+            "last_refresh_started_at": float(SNAPSHOT_CACHE.get("last_refresh_started_at") or 0.0),
+            "last_refresh_finished_at": str(SNAPSHOT_CACHE.get("last_refresh_finished_at") or ""),
+        }
+
+
 def duration_to_seconds(value: object) -> int:
     if value in (None, ""):
         return 0
@@ -249,7 +419,73 @@ class MotiveClient:
             "auth_mode": self.auth_mode,
         }
 
-    def fetch_snapshot(self, force_refresh: bool = False) -> dict:
+    def _hydrate_snapshot_cache(self, ttl_seconds: int) -> None:
+        should_load_disk = False
+        with SNAPSHOT_LOCK:
+            if not SNAPSHOT_CACHE.get("loaded_disk"):
+                SNAPSHOT_CACHE["loaded_disk"] = True
+                should_load_disk = SNAPSHOT_CACHE.get("snapshot") is None
+
+        if not should_load_disk:
+            return
+
+        snapshot = _load_snapshot_from_disk(self.settings)
+        if not snapshot:
+            return
+
+        with SNAPSHOT_LOCK:
+            if SNAPSHOT_CACHE.get("snapshot") is None:
+                SNAPSHOT_CACHE["snapshot"] = snapshot
+                SNAPSHOT_CACHE["expires_at"] = _snapshot_expires_at(snapshot, ttl_seconds)
+
+    def _build_and_store_snapshot(self, ttl_seconds: int) -> dict:
+        try:
+            snapshot = self._build_snapshot()
+        except Exception as exc:
+            with SNAPSHOT_LOCK:
+                SNAPSHOT_CACHE["building"] = False
+                SNAPSHOT_CACHE["last_error"] = _exception_summary(exc)
+                SNAPSHOT_CACHE["last_refresh_finished_at"] = iso_now()
+                SNAPSHOT_LOCK.notify_all()
+            raise
+
+        _write_snapshot_to_disk(self.settings, snapshot)
+        with SNAPSHOT_LOCK:
+            SNAPSHOT_CACHE["snapshot"] = snapshot
+            SNAPSHOT_CACHE["expires_at"] = time.time() + ttl_seconds
+            SNAPSHOT_CACHE["building"] = False
+            SNAPSHOT_CACHE["last_error"] = ""
+            SNAPSHOT_CACHE["last_refresh_finished_at"] = iso_now()
+            SNAPSHOT_LOCK.notify_all()
+        return snapshot
+
+    def _refresh_snapshot_in_background(self, ttl_seconds: int) -> None:
+        try:
+            self._build_and_store_snapshot(ttl_seconds)
+        except Exception:
+            return
+
+    def _start_background_snapshot_refresh(self, ttl_seconds: int, force_refresh: bool = False) -> None:
+        with SNAPSHOT_LOCK:
+            now = time.time()
+            if SNAPSHOT_CACHE.get("building"):
+                return
+            last_started_at = float(SNAPSHOT_CACHE.get("last_refresh_started_at") or 0.0)
+            if not force_refresh and now - last_started_at < SNAPSHOT_REFRESH_MIN_INTERVAL_SECONDS:
+                return
+            SNAPSHOT_CACHE["building"] = True
+            SNAPSHOT_CACHE["last_refresh_started_at"] = now
+            SNAPSHOT_CACHE["last_refresh_finished_at"] = ""
+
+        thread = threading.Thread(
+            target=self._refresh_snapshot_in_background,
+            args=(ttl_seconds,),
+            name="motive-snapshot-refresh",
+            daemon=True,
+        )
+        thread.start()
+
+    def fetch_snapshot(self, force_refresh: bool = False, allow_stale: bool = True) -> dict:
         if not self.is_configured:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -257,36 +493,51 @@ class MotiveClient:
             )
 
         ttl_seconds = max(10, int(self.settings.motive_snapshot_ttl_seconds or 45))
+        self._hydrate_snapshot_cache(ttl_seconds)
+
+        if allow_stale:
+            with SNAPSHOT_LOCK:
+                now = time.time()
+                cached = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
+                expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
+                refreshing = bool(SNAPSHOT_CACHE.get("building"))
+                last_error = str(SNAPSHOT_CACHE.get("last_error") or "")
+                if cached and not force_refresh and now < expires_at:
+                    return _decorate_snapshot(cached, "fresh", refreshing, last_error)
+
+            if cached:
+                self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh)
+                with SNAPSHOT_LOCK:
+                    refreshing = bool(SNAPSHOT_CACHE.get("building"))
+                    last_error = str(SNAPSHOT_CACHE.get("last_error") or "")
+                return _decorate_snapshot(cached, "refreshing" if force_refresh else "stale", refreshing, last_error)
+
+            self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh)
+            with SNAPSHOT_LOCK:
+                last_error = str(SNAPSHOT_CACHE.get("last_error") or "")
+                refreshing = bool(SNAPSHOT_CACHE.get("building"))
+            return _warming_snapshot("Motive fleet is warming up. Fresh data is loading in the background.", refreshing=refreshing, last_error=last_error)
+
         with SNAPSHOT_LOCK:
             now = time.time()
-            cached = SNAPSHOT_CACHE.get("snapshot")
+            cached = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
             expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
             if not force_refresh and cached and now < expires_at:
-                return cached
+                return _decorate_snapshot(cached, "fresh", bool(SNAPSHOT_CACHE.get("building")), str(SNAPSHOT_CACHE.get("last_error") or ""))
 
             while SNAPSHOT_CACHE.get("building"):
                 SNAPSHOT_LOCK.wait(timeout=5)
-                cached = SNAPSHOT_CACHE.get("snapshot")
+                cached = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
                 expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
-                if cached and time.time() < expires_at:
-                    return cached
+                if not force_refresh and cached and time.time() < expires_at:
+                    return _decorate_snapshot(cached, "fresh", bool(SNAPSHOT_CACHE.get("building")), str(SNAPSHOT_CACHE.get("last_error") or ""))
 
             SNAPSHOT_CACHE["building"] = True
+            SNAPSHOT_CACHE["last_refresh_started_at"] = time.time()
+            SNAPSHOT_CACHE["last_refresh_finished_at"] = ""
 
-        try:
-            snapshot = self._build_snapshot()
-        except Exception:
-            with SNAPSHOT_LOCK:
-                SNAPSHOT_CACHE["building"] = False
-                SNAPSHOT_LOCK.notify_all()
-            raise
-
-        with SNAPSHOT_LOCK:
-            SNAPSHOT_CACHE["snapshot"] = snapshot
-            SNAPSHOT_CACHE["expires_at"] = time.time() + ttl_seconds
-            SNAPSHOT_CACHE["building"] = False
-            SNAPSHOT_LOCK.notify_all()
-        return snapshot
+        snapshot = self._build_and_store_snapshot(ttl_seconds)
+        return _decorate_snapshot(snapshot, "fresh", False, "")
 
     def fetch_vehicle_detail(self, vehicle_id: int, force_refresh: bool = False) -> dict:
         if not self.is_configured:
@@ -1286,3 +1537,40 @@ class MotiveClient:
             return first_text(payload.get("detail"), payload.get("error"), payload.get("message"), payload.get("error_message"))
         return raw.strip()[:300]
 
+
+
+def _motive_snapshot_refresh_loop(settings: Settings) -> None:
+    client = MotiveClient(settings)
+    if not client.is_configured:
+        return
+
+    client.fetch_snapshot(force_refresh=False, allow_stale=True)
+    interval_seconds = max(15, int(getattr(settings, "motive_background_refresh_interval_seconds", 60) or 60))
+    while not SNAPSHOT_WORKER_STOP.wait(interval_seconds):
+        client.fetch_snapshot(force_refresh=True, allow_stale=True)
+
+
+def start_motive_snapshot_refresh_worker(settings: Settings) -> None:
+    global SNAPSHOT_WORKER_THREAD
+    if not getattr(settings, "motive_background_refresh_enabled", True):
+        return
+    with SNAPSHOT_WORKER_LOCK:
+        if SNAPSHOT_WORKER_THREAD and SNAPSHOT_WORKER_THREAD.is_alive():
+            return
+        SNAPSHOT_WORKER_STOP.clear()
+        SNAPSHOT_WORKER_THREAD = threading.Thread(
+            target=_motive_snapshot_refresh_loop,
+            args=(settings,),
+            name="motive-snapshot-worker",
+            daemon=True,
+        )
+        SNAPSHOT_WORKER_THREAD.start()
+
+
+def stop_motive_snapshot_refresh_worker() -> None:
+    global SNAPSHOT_WORKER_THREAD
+    SNAPSHOT_WORKER_STOP.set()
+    with SNAPSHOT_WORKER_LOCK:
+        if SNAPSHOT_WORKER_THREAD and SNAPSHOT_WORKER_THREAD.is_alive():
+            SNAPSHOT_WORKER_THREAD.join(timeout=2)
+        SNAPSHOT_WORKER_THREAD = None

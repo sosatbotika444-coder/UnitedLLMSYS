@@ -24,3 +24,5 @@ for url in urls:
         print(resp.text[:3000])
     except Exception as e:
         print("ERROR:", url, e)
+
+    

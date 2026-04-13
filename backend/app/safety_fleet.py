@@ -579,6 +579,7 @@ def build_safety_fleet_snapshot(snapshot: dict) -> dict:
         "metrics": metrics,
         "vehicles": vehicles,
         "queues": queues,
+        "cache": snapshot.get("cache") or {},
         "algorithm": _build_algorithm_summary(metrics, queues, coverage),
         "filters": {
             "risk_levels": RISK_LEVELS,

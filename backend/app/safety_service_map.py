@@ -420,6 +420,7 @@ def build_service_map_snapshot(
             "metrics": {"total": 0, "official": 0, "with_phone": 0, "emergency_ready": 0},
             "filters": _service_filters(),
             "category_counts": [],
+            "cache": snapshot.get("cache") or {},
             "warnings": warnings + ["No Motive vehicles with live coordinates were available for service search."],
             "source_note": "Connect at least one truck with GPS to use Service Map.",
         }
@@ -448,6 +449,7 @@ def build_service_map_snapshot(
         "metrics": metrics,
         "filters": _service_filters(),
         "category_counts": _category_counts(items),
+        "cache": snapshot.get("cache") or {},
         "radius_miles": radius,
         "category_id": category_id,
         "scenario_id": scenario_id,

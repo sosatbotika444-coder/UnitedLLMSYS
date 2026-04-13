@@ -45,6 +45,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState('');
+  const [matchRetryTick, setMatchRetryTick] = useState(0);
 
   const trimmedTruckNumber = truckNumber.trim();
   const selectedMatch = useMemo(
@@ -58,6 +59,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       setSelectedVehicleId('');
       setMatchError('');
       setMatchLoading(false);
+      setMatchRetryTick(0);
       return undefined;
     }
 
@@ -91,7 +93,21 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       ignore = true;
       window.clearTimeout(timer);
     };
-  }, [selectedVehicleId, trimmedTruckNumber]);
+  }, [matchRetryTick, selectedVehicleId, trimmedTruckNumber]);
+
+  useEffect(() => {
+    setMatchRetryTick(0);
+  }, [trimmedTruckNumber]);
+
+  useEffect(() => {
+    if (trimmedTruckNumber.length < 1 || matches.length || matchError || matchLoading || matchRetryTick >= 8) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setMatchRetryTick((current) => current + 1);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [matchError, matchLoading, matchRetryTick, matches.length, trimmedTruckNumber]);
 
   async function submitDriverAuth(event) {
     event.preventDefault();
@@ -154,7 +170,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
             </button>
           ))}
           {!matchLoading && trimmedTruckNumber.length >= 1 && !matches.length && !matchError ? (
-            <div className='driver-match-empty'>No Motive truck match yet.</div>
+            <div className='driver-match-empty'>{matchRetryTick < 8 ? 'No Motive truck match yet. Searching again while fleet sync finishes.' : 'No Motive truck match yet.'}</div>
           ) : null}
         </div>
       </div>

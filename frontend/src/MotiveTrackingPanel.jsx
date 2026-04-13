@@ -169,11 +169,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   }, [token]);
 
   const loadSnapshot = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, quiet = false) => {
       if (!token) return;
       if (forceRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!quiet) {
         setLoading(true);
       }
       setError("");
@@ -261,6 +261,16 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => window.clearInterval(timer);
   }, [active, autoRefresh, integration?.configured, loadSnapshot, token]);
 
+  useEffect(() => {
+    if (!token || !integration?.configured || !active || !snapshot?.cache?.refreshing) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      loadSnapshot(false, true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [active, integration?.configured, loadSnapshot, snapshot?.cache?.refreshing, snapshot?.cache?.served_at, token]);
+
   const filteredVehicles = useMemo(() => {
     const vehicles = snapshot?.vehicles || [];
     const term = search.trim().toLowerCase();
@@ -339,6 +349,14 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
   const canFocusStreet = hasCoordinates(currentVehicle);
   const selectedLocationLabel = vehicleLocationTitle(currentVehicle);
+  const snapshotWarning = snapshot?.warnings?.[0] || "";
+  const cacheStatusText = snapshot?.cache?.refreshing
+    ? "Fresh Motive data is loading in the background."
+    : snapshot?.cache?.status === "stale"
+      ? "Showing cached Motive data."
+      : snapshot?.cache?.status === "warming"
+        ? "Fresh Motive data is loading."
+        : "";
 
   return (
     <section className="panel motive-panel">
@@ -366,6 +384,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
       {error ? <div className="notice error inline-notice">{error}</div> : null}
       {detailError ? <div className="notice error inline-notice">{detailError}</div> : null}
+      {snapshotWarning ? <div className="notice info inline-notice">{snapshotWarning}</div> : null}
 
       {!integration?.configured && !loading ? (
         <div className="motive-setup-card">
@@ -396,6 +415,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <h3>Fleet map</h3>
                   <span>
                     {snapshot.metrics.located_vehicles} vehicles with coordinates. Updated {formatTimestamp(snapshot.fetched_at)}.
+                    {cacheStatusText ? ` ${cacheStatusText}` : ""}
                     {mapView === "street" ? " Street focus keeps the selected truck at road level so street names stay readable." : " Select a truck to jump into street focus."}
                   </span>
                 </div>

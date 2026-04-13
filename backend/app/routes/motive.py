@@ -44,7 +44,7 @@ def motive_export(
     refresh: bool = Query(default=False, description="Force a fresh Motive fetch before creating the Excel export."),
     current_user: User = Depends(require_user_department("fuel")),
 ):
-    snapshot = client.fetch_snapshot(force_refresh=refresh)
+    snapshot = client.fetch_snapshot(force_refresh=refresh, allow_stale=not refresh)
     workbook_bytes = build_motive_snapshot_workbook(snapshot)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"motive_tracking_export_{timestamp}.xlsx"

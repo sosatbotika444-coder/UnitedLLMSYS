@@ -79,7 +79,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
   const [selectedItemId, setSelectedItemId] = useState("");
 
   const loadData = useCallback(
-    async (forceRefresh = false, overrides = {}) => {
+    async (forceRefresh = false, overrides = {}, quiet = false) => {
       if (!token) {
         setData(null);
         setLoading(false);
@@ -89,7 +89,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
 
       if (forceRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!quiet) {
         setLoading(true);
       }
       setError("");
@@ -120,7 +120,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
       } finally {
         if (forceRefresh) {
           setRefreshing(false);
-        } else {
+        } else if (!quiet) {
           setLoading(false);
         }
       }
@@ -134,6 +134,16 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
     }
     loadData(false);
   }, [active, loadData]);
+
+  useEffect(() => {
+    if (!active || !token || !data?.cache?.refreshing) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      loadData(false, {}, true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [active, data?.cache?.refreshing, data?.cache?.served_at, loadData, token]);
 
   useEffect(() => {
     if (fixedVehicleId) {
