@@ -42,14 +42,30 @@ function vehiclePopup(vehicle) {
     .join("<br/>");
 }
 
-function createMarkerElement(type, label, selected = false) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = `safety-service-map-marker safety-service-map-marker-${type}${selected ? " selected" : ""}`;
-  button.textContent = label;
-  return button;
+function vehicleMarkerTitle(vehicle) {
+  return [vehicle?.label || vehicle?.number || "Truck", vehicle?.driver_name || "No driver"].filter(Boolean).join(" | ");
 }
 
+function createMarkerElement(type, label, selected = false, title = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `safety-service-map-marker safety-service-map-marker-${type}${selected ? " selected" : ""}${title ? " labeled" : ""}`;
+
+  const badge = document.createElement("span");
+  badge.className = "safety-service-map-marker-badge";
+  badge.textContent = label;
+  button.append(badge);
+
+  if (title) {
+    const text = document.createElement("span");
+    text.className = "safety-service-map-marker-label";
+    text.textContent = title;
+    button.append(text);
+  }
+
+  button.setAttribute("aria-label", title || label);
+  return button;
+}
 export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedItemId, onSelect, active = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -139,7 +155,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     const bounds = new maplibregl.LngLatBounds();
 
     if (centerVehicle && hasCoordinates(centerVehicle)) {
-      const vehicleElement = createMarkerElement("vehicle", "TR", false);
+      const vehicleElement = createMarkerElement("vehicle", "TR", false, vehicleMarkerTitle(centerVehicle));
       vehicleElement.addEventListener("click", () => showPopup(centerVehicle.lon, centerVehicle.lat, vehiclePopup(centerVehicle)));
       markersRef.current.push(new maplibregl.Marker({ element: vehicleElement }).setLngLat([centerVehicle.lon, centerVehicle.lat]).addTo(mapLibreMap));
       bounds.extend([centerVehicle.lon, centerVehicle.lat]);

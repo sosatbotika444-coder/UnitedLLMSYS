@@ -1098,7 +1098,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
                   {mapFullscreen ? "Close full screen" : "Full screen"}
                 </button>
               </div>
-              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} priceTarget={activePriceTarget} /></Suspense>
+              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} priceTarget={activePriceTarget} startMarkerTitle={selectedVehicle ? `${vehicleLabel(selectedVehicle)} | ${vehicleDriverName(selectedVehicle)}` : routePlan.origin.label} endMarkerTitle={routePlan.destination.label || "Destination"} /></Suspense>
             </div>
 
             <aside className="route-side-panel">

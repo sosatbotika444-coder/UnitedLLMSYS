@@ -14,13 +14,24 @@ const CLUSTER_COUNT_LAYER_ID = "fuel-stop-cluster-count";
 const UNCLUSTERED_LAYER_ID = "fuel-stop-points";
 const PRICE_LABEL_LAYER_ID = "fuel-stop-price-labels";
 
-function createMarkerElement(className, label) {
+function createMarkerElement(className, label, title = "") {
   const el = document.createElement("div");
-  el.className = `tt-marker ${className}`;
-  el.textContent = label;
+  el.className = `tt-marker ${className}${title ? " tt-marker-labeled" : ""}`;
+
+  const badge = document.createElement("span");
+  badge.className = "tt-marker-badge";
+  badge.textContent = label;
+  el.append(badge);
+
+  if (title) {
+    const text = document.createElement("span");
+    text.className = "tt-marker-label";
+    text.textContent = title;
+    el.append(text);
+  }
+
   return el;
 }
-
 function formatMoney(value) {
   return value !== null && value !== undefined ? `$${Number(value).toFixed(3)}` : "N/A";
 }
@@ -64,7 +75,7 @@ function buildPriceLabel(stop, priceTarget) {
   return `Auto Diesel\n${autoDiesel}`;
 }
 
-export default function RouteMap({ plan, isFullscreen = false, active = true, priceTarget = null }) {
+export default function RouteMap({ plan, isFullscreen = false, active = true, priceTarget = null, startMarkerTitle = "", endMarkerTitle = "" }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -405,10 +416,10 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       bounds.extend([plan.destination.lon, plan.destination.lat]);
       mapLibreMap.fitBounds(bounds, { padding: 50, duration: 0 });
 
-      const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A") })
+      const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A", startMarkerTitle) })
         .setLngLat([plan.origin.lon, plan.origin.lat])
         .addTo(mapLibreMap);
-      const endMarker = new maplibregl.Marker({ element: createMarkerElement("marker-end", "B") })
+      const endMarker = new maplibregl.Marker({ element: createMarkerElement("marker-end", "B", endMarkerTitle) })
         .setLngLat([plan.destination.lon, plan.destination.lat])
         .addTo(mapLibreMap);
 
@@ -458,7 +469,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       }
       mapRef.current = null;
     };
-  }, [allStops, plan, priceTarget, strategyStopIds]);
+  }, [allStops, endMarkerTitle, plan, priceTarget, startMarkerTitle, strategyStopIds]);
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;

@@ -9819,3 +9819,90 @@ body.theme-dark .driver-profile-grid strong {
     grid-template-columns: 1fr;
   }
 }
+
+.tt-marker.tt-marker-labeled,
+.motive-map-driver-marker,
+.safety-service-map-marker.labeled {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 230px !important;
+  height: auto !important;
+  min-height: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 8px 4px 4px !important;
+  border-radius: 8px !important;
+  background: rgba(15, 23, 42, 0.94) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.26) !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  white-space: nowrap !important;
+}
+
+.tt-marker-badge,
+.motive-map-marker-badge,
+.safety-service-map-marker-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tt-marker-label,
+.motive-map-marker-label,
+.safety-service-map-marker-label {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.marker-start.tt-marker-labeled,
+.safety-service-map-marker-vehicle.labeled {
+  background: rgba(15, 118, 110, 0.96) !important;
+}
+
+.marker-end.tt-marker-labeled {
+  background: rgba(220, 38, 38, 0.96) !important;
+}
+
+.motive-map-marker-moving.motive-map-driver-marker {
+  background: rgba(15, 118, 110, 0.96) !important;
+}
+
+.motive-map-marker-stopped.motive-map-driver-marker {
+  background: rgba(37, 99, 235, 0.96) !important;
+}
+
+.motive-map-marker-stale.motive-map-driver-marker {
+  background: rgba(220, 38, 38, 0.96) !important;
+}
+
+.motive-map-driver-marker.selected,
+.safety-service-map-marker.labeled.selected {
+  outline: 2px solid #0f172a !important;
+  outline-offset: 2px !important;
+}
+
+@media (max-width: 620px) {
+  .tt-marker-label,
+  .motive-map-marker-label,
+  .safety-service-map-marker-label {
+    max-width: 120px;
+  }
+}

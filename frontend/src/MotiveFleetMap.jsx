@@ -15,14 +15,24 @@ function markerTone(vehicle) {
 
 function markerLabel(vehicle) {
   const number = vehicle.number || "?";
-  return number.length > 6 ? number.slice(0, 6) : number;
+  const truckCode = String(number).split("/")[0].trim() || String(number).trim();
+  return truckCode.length > 8 ? truckCode.slice(0, 8) : truckCode;
+}
+
+function driverName(vehicle) {
+  return vehicle.driver?.full_name || vehicle.permanent_driver?.full_name || "No driver";
+}
+
+function markerTitle(vehicle) {
+  const number = String(vehicle.number || "Truck").split("/")[0].trim() || vehicle.number || "Truck";
+  return `${number} | ${driverName(vehicle)}`;
 }
 
 function markerPopup(vehicle) {
   const location = vehicle.location || {};
   return [
     `<strong>${vehicle.number || "Vehicle"}</strong>`,
-    vehicle.driver?.full_name ? `Driver: ${vehicle.driver.full_name}` : null,
+    driverName(vehicle) ? `Driver: ${driverName(vehicle)}` : null,
     vehicle.make || vehicle.model ? `${vehicle.make || ""} ${vehicle.model || ""}`.trim() : null,
     vehicle.status ? `Status: ${vehicle.status}` : null,
     vehicle.vehicle_state ? `Engine: ${vehicle.vehicle_state}` : null,
@@ -48,9 +58,18 @@ function hasCoordinates(vehicle) {
 function createMarkerElement(vehicle, isSelected) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `motive-map-marker motive-map-marker-${markerTone(vehicle)} ${isSelected ? "selected" : ""}`.trim();
-  button.textContent = markerLabel(vehicle);
-  button.setAttribute("aria-label", vehicle.number || "vehicle marker");
+  button.className = `motive-map-marker motive-map-driver-marker motive-map-marker-${markerTone(vehicle)} ${isSelected ? "selected" : ""}`.trim();
+
+  const badge = document.createElement("span");
+  badge.className = "motive-map-marker-badge";
+  badge.textContent = markerLabel(vehicle);
+
+  const label = document.createElement("span");
+  label.className = "motive-map-marker-label";
+  label.textContent = markerTitle(vehicle);
+
+  button.append(badge, label);
+  button.setAttribute("aria-label", markerTitle(vehicle));
   return button;
 }
 
