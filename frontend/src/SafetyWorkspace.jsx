@@ -8,7 +8,7 @@ const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.g
 const safetyTabs = [
   { id: "fleet", label: "Fleet Safety" },
   { id: "automation", label: "Automation" },
-  { id: "investigations", label: "Investigations" },
+  { id: "investigations", label: "Incident Queue" },
   { id: "brief", label: "Shift Brief" },
   { id: "services", label: "Service Map" },
   { id: "emergency", label: "Emergency" },
@@ -32,7 +32,7 @@ const investigationTypes = ["Accident", "Near Miss", "Roadside Issue", "Driver C
 const investigationStatuses = ["Intake", "Investigating", "Waiting on Evidence", "Action Plan", "Closed"];
 const investigationSeverities = ["Routine", "Elevated", "High", "Critical"];
 const investigationPromptOptions = [
-  "Build an investigation plan from this case packet.",
+  "Build an investigation plan from this incident packet.",
   "Separate confirmed facts from assumptions and gaps.",
   "Draft the driver interview questions and next actions."
 ];
@@ -98,7 +98,10 @@ function createInvestigationDraft(vehicle = null, user = null) {
   const now = new Date().toISOString();
   return {
     id: "",
-    title: "New safety investigation",
+    createdBy: user?.full_name || "",
+    createdByEmail: user?.email || "",
+    createdByDepartment: user?.department || "",
+    title: "New safety incident",
     type: "Accident",
     status: "Intake",
     severity: "Elevated",
@@ -141,6 +144,9 @@ function createShiftBriefDraft(user = null, actions = []) {
   const now = new Date().toISOString();
   return {
     id: "",
+    createdBy: user?.full_name || "",
+    createdByEmail: user?.email || "",
+    createdByDepartment: user?.department || "",
     title: `Shift Brief ${formatDate(now)}`,
     shift: "Day Shift",
     status: "Open",
@@ -981,7 +987,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       const items = await apiRequest("/safety/investigations", {}, token);
       setCases(Array.isArray(items) ? items.map((item) => ({ ...item, vehicleId: item.vehicleId ? String(item.vehicleId) : "" })) : []);
     } catch (loadError) {
-      setCaseError(loadError.message || "Cases could not be loaded.");
+      setCaseError(loadError.message || "Incidents could not be loaded.");
     } finally {
       setCasesLoading(false);
     }
@@ -1014,7 +1020,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
   }, [vehicles]);
 
   const selectedVehicle = vehicleById.get(String(draft.vehicleId)) || null;
-  const riskyPeopleRows = useMemo(() => buildRiskyPeopleRows(data, "Investigations"), [data]);
+  const riskyPeopleRows = useMemo(() => buildRiskyPeopleRows(data, "Incident Queue"), [data]);
   const openCaseCount = cases.filter((caseItem) => caseItem.status !== "Closed").length;
   const criticalCaseCount = cases.filter((caseItem) => caseItem.severity === "Critical" || caseItem.severity === "High").length;
 
@@ -1028,6 +1034,9 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         caseItem.status,
         caseItem.severity,
         caseItem.owner,
+        caseItem.createdBy,
+        caseItem.createdByEmail,
+        caseItem.createdByDepartment,
         caseItem.facts,
         caseVehicle?.number,
         caseVehicle?.driver_name
@@ -1054,13 +1063,14 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       : "Truck: Not selected";
 
     return [
-      "Safety investigation workspace. Treat this as an internal case review.",
+      "Safety incident queue. Treat this as an internal case review.",
       "Separate confirmed facts, assumptions, missing evidence, driver interview questions, and next actions.",
-      `Case title: ${draft.title}`,
-      `Case type: ${draft.type}`,
+      `Incident title: ${draft.title}`,
+      `Incident type: ${draft.type}`,
       `Severity: ${draft.severity}`,
       `Status: ${draft.status}`,
       `Owner: ${draft.owner || "Unassigned"}`,
+      `Added by: ${draft.createdBy || "Unknown user"}`,
       `Due date: ${draft.dueDate || "Not set"}`,
       vehicleContext,
       `Known facts:\n${draft.facts}`,
@@ -1086,7 +1096,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
 
   function casePayload(caseDraft) {
     return {
-      title: caseDraft.title.trim() || "Untitled safety investigation",
+      title: caseDraft.title.trim() || "Untitled safety incident",
       type: caseDraft.type || "Accident",
       status: caseDraft.status || "Intake",
       severity: caseDraft.severity || "Elevated",
@@ -1127,10 +1137,10 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       });
       setDraft({ ...createInvestigationDraft(null, user), ...normalized });
       setActiveCaseId(normalized.id);
-      setCaseMessage("Case saved to database.");
+      setCaseMessage("Incident saved to database.");
       return normalized;
     } catch (saveError) {
-      setCaseError(saveError.message || "Case could not be saved.");
+      setCaseError(saveError.message || "Incident could not be saved.");
       return null;
     } finally {
       setCaseSaving(false);
@@ -1149,7 +1159,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
     await saveCase({
       ...draft,
       id: "",
-      title: `${draft.title || "Investigation"} copy`,
+      title: `${draft.title || "Incident"} copy`,
       status: "Intake",
       createdAt: now,
       updatedAt: now
@@ -1162,7 +1172,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       return;
     }
 
-    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this investigation case from the database?");
+    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this incident from the database?");
     if (!shouldDelete) return;
 
     setCaseSaving(true);
@@ -1173,9 +1183,9 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       await apiRequest(`/safety/investigations/${caseId}`, { method: "DELETE" }, token);
       setCases((current) => current.filter((caseItem) => caseItem.id !== caseId));
       startNewCase();
-      setCaseMessage("Case deleted from database.");
+      setCaseMessage("Incident deleted from database.");
     } catch (deleteError) {
-      setCaseError(deleteError.message || "Case could not be deleted.");
+      setCaseError(deleteError.message || "Incident could not be deleted.");
     } finally {
       setCaseSaving(false);
     }
@@ -1192,7 +1202,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
     try {
       await downloadApiFile("/safety/investigations/export", token, "safety_investigations.xlsx");
     } catch (exportError) {
-      setCaseError(exportError.message || "Cases export failed.");
+      setCaseError(exportError.message || "Incidents export failed.");
     } finally {
       setCaseExporting(false);
     }
@@ -1216,13 +1226,13 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       <section className="panel safety-investigation-hero">
         <div className="panel-head safety-management-head">
           <div>
-            <h2>Investigation Desk</h2>
-            <span>Manage cases in the database, export risk, and investigate with AI.</span>
+            <h2>Incident Queue</h2>
+            <span>Shared incident cases, accident follow-ups, tasks from other workers, archives, and exports.</span>
           </div>
           <div className="safety-management-actions">
-            <button className="secondary-button" type="button" onClick={startNewCase} disabled={caseSaving}>New Case</button>
-            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save Case"}</button>
-            <button className="secondary-button" type="button" onClick={exportCasesExcel} disabled={caseExporting || !token}>{caseExporting ? "Exporting..." : "Export Cases Excel"}</button>
+            <button className="secondary-button" type="button" onClick={startNewCase} disabled={caseSaving}>New Incident</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save Incident"}</button>
+            <button className="secondary-button" type="button" onClick={exportCasesExcel} disabled={caseExporting || !token}>{caseExporting ? "Exporting..." : "Export Incidents Excel"}</button>
             <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={caseExporting || !token}>Export Risky People Excel</button>
             <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
               {refreshing ? "Refreshing..." : "Refresh Fleet"}
@@ -1235,8 +1245,8 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-investigation-metrics">
-          <SafetyStatCard label="Saved Cases" value={formatCount(cases.length)} detail={`${formatCount(openCaseCount)} open`} tone="neutral" />
-          <SafetyStatCard label="High Severity" value={formatCount(criticalCaseCount)} detail="High or critical cases" tone="critical" />
+          <SafetyStatCard label="Team Incidents" value={formatCount(cases.length)} detail={`${formatCount(openCaseCount)} open`} tone="neutral" />
+          <SafetyStatCard label="High Severity" value={formatCount(criticalCaseCount)} detail="High or critical incidents" tone="critical" />
           <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for backend Excel export" tone="warning" />
           <SafetyStatCard label="Current Packet" value={draft.status} detail={`${draft.type} | ${draft.severity}`} tone={draft.severity === "Critical" ? "critical" : "info"} />
         </div>
@@ -1246,15 +1256,15 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         <section className="panel safety-management-registry-panel">
           <div className="panel-head compact-panel-head">
             <div>
-              <h2>Case Registry</h2>
-              <span>{casesLoading ? "Loading cases..." : `${formatCount(filteredCases.length)} case(s) visible`}</span>
+              <h2>Incident Registry</h2>
+              <span>{casesLoading ? "Loading incidents..." : `${formatCount(filteredCases.length)} incident(s) visible`}</span>
             </div>
           </div>
 
           <div className="safety-management-filter-grid compact">
             <label>
               Search
-              <input type="text" value={caseSearch} onChange={(event) => setCaseSearch(event.target.value)} placeholder="Title, owner, driver, truck" />
+              <input type="text" value={caseSearch} onChange={(event) => setCaseSearch(event.target.value)} placeholder="Title, owner, reporter, driver, truck" />
             </label>
             <label>
               Status
@@ -1280,25 +1290,26 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
                     <span>{caseItem.status}</span>
                   </div>
                   <small>{caseItem.type} | {caseItem.severity} | {caseVehicle?.number || "No truck"}</small>
+                  <small>Added by {caseItem.createdBy || "Unknown user"}{caseItem.createdByDepartment ? ` | ${caseItem.createdByDepartment}` : ""}</small>
                   <p>{splitManagementLines(caseItem.facts)[0] || "No facts added."}</p>
                   <em>Updated {formatDateTime(caseItem.updatedAt)}</em>
                 </button>
               );
-            }) : <div className="safety-empty-state small">{casesLoading ? "Loading saved cases..." : "No saved cases yet. Save the current packet to start the registry."}</div>}
+            }) : <div className="safety-empty-state small">{casesLoading ? "Loading saved incidents..." : "No incidents yet. Save the current packet or wait for worker reports to start the registry."}</div>}
           </div>
         </section>
 
         <section className="panel safety-investigation-case-panel">
           <div className="panel-head compact-panel-head">
             <div>
-              <h2>Case Packet</h2>
-              <span>{loading && !data ? "Loading fleet context..." : `${formatCount(vehicles.length)} truck(s) available`}</span>
+              <h2>Incident Packet</h2>
+              <span>{draft.id ? `Added by ${draft.createdBy || "Unknown user"}` : `${formatCount(vehicles.length)} truck(s) available`}</span>
             </div>
           </div>
 
           <div className="safety-investigation-form">
             <label>
-              Case Title
+              Incident Title
               <input type="text" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
             </label>
             <label>
@@ -1365,12 +1376,12 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           <div className="safety-management-actions case-actions">
             <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save"}</button>
             <button className="secondary-button" type="button" onClick={duplicateCase} disabled={caseSaving || !token}>Duplicate</button>
-            <button className="secondary-button" type="button" onClick={closeCase} disabled={caseSaving || !token}>Close Case</button>
+            <button className="secondary-button" type="button" onClick={closeCase} disabled={caseSaving || !token}>Close Incident</button>
             <button className="delete-button" type="button" onClick={() => deleteCase()} disabled={!draft.id || caseSaving || !token}>Delete</button>
           </div>
 
           <section className="safety-investigation-context-card">
-            <strong>AI case context</strong>
+            <strong>AI incident context</strong>
             <pre>{investigationContext}</pre>
           </section>
         </section>
@@ -1378,12 +1389,12 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
         <UnitedLaneChat
           token={token}
           user={user}
-          title="Investigation AI"
+          title="Incident AI"
           assistantName="Safety Investigator"
-          workspace="Safety Investigation"
+          workspace="Safety Incident"
           extraContext={investigationContext}
           promptOptions={investigationPromptOptions}
-          welcomeText="Safety Investigator is ready. Fill the case packet, then ask for a plan, interview questions, or missing evidence."
+          welcomeText="Safety Investigator is ready. Fill the incident packet, then ask for a plan, interview questions, or missing evidence."
           placeholder="Ask the investigator to build a timeline, identify gaps, draft interview questions, or write the corrective action plan."
           className="safety-investigation-ai-panel"
         />
@@ -1467,7 +1478,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
     const term = briefSearch.trim().toLowerCase();
     return briefs.filter((brief) => {
       if (!term) return true;
-      return [brief.title, brief.shift, brief.status, brief.owner, brief.handoffNote]
+      return [brief.title, brief.shift, brief.status, brief.owner, brief.createdBy, brief.createdByEmail, brief.createdByDepartment, brief.handoffNote]
         .join(" ")
         .toLowerCase()
         .includes(term);
@@ -1697,7 +1708,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
         <div className="panel-head safety-management-head">
           <div>
             <h2>Shift Brief</h2>
-            <span>Manage handoff, checklist, live safety actions, saved brief history, and backend Excel exports.</span>
+            <span>Manage handoff, checklist, live safety actions, shared brief history, and backend Excel exports.</span>
           </div>
           <div className="safety-management-actions">
             <button className="secondary-button" type="button" onClick={startNewBrief} disabled={briefSaving}>New Brief</button>
@@ -1715,7 +1726,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="safety-automation-metrics safety-brief-metrics">
-          <SafetyStatCard label="Saved Briefs" value={formatCount(briefs.length)} detail={`${formatCount(openActionCount)} open actions`} tone="neutral" />
+          <SafetyStatCard label="Team Briefs" value={formatCount(briefs.length)} detail={`${formatCount(openActionCount)} open actions`} tone="neutral" />
           <SafetyStatCard label="Checklist" value={`${formatCount(doneChecklistCount)}/${formatCount(checklist.length)}`} detail="First actions complete" tone="info" />
           <SafetyStatCard label="Action Board" value={formatCount(actions.length)} detail={`${formatCount(doneActionCount)} done`} tone="warning" />
           <SafetyStatCard label="Risky People" value={formatCount(riskyPeopleRows.length)} detail="Ready for backend Excel export" tone="critical" />
@@ -1768,13 +1779,13 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
           <div className="safety-brief-history-block">
             <div className="panel-head compact-panel-head">
               <div>
-                <h2>Saved Briefs</h2>
+                <h2>Shared Briefs</h2>
                 <span>{briefsLoading ? "Loading history..." : `${formatCount(filteredBriefs.length)} visible`}</span>
               </div>
             </div>
             <label className="safety-management-search-field">
               Search history
-              <input type="text" value={briefSearch} onChange={(event) => setBriefSearch(event.target.value)} placeholder="Shift, owner, note" />
+              <input type="text" value={briefSearch} onChange={(event) => setBriefSearch(event.target.value)} placeholder="Shift, owner, reporter, note" />
             </label>
             <div className="safety-management-list compact-list">
               {filteredBriefs.length ? filteredBriefs.map((brief) => (
@@ -1788,11 +1799,11 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
                     <strong>{brief.title}</strong>
                     <span>{brief.status}</span>
                   </div>
-                  <small>{brief.shift} | {brief.owner}</small>
+                  <small>{brief.shift} | {brief.owner} | Added by {brief.createdBy || "Unknown user"}</small>
                   <p>{brief.handoffNote || "No handoff note yet."}</p>
                   <em>Updated {formatDateTime(brief.updatedAt)}</em>
                 </button>
-              )) : <div className="safety-empty-state small">{briefsLoading ? "Loading saved shift briefs..." : "No saved shift briefs yet."}</div>}
+              )) : <div className="safety-empty-state small">{briefsLoading ? "Loading shared shift briefs..." : "No shared shift briefs yet."}</div>}
             </div>
           </div>
         </section>

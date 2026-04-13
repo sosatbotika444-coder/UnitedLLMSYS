@@ -93,6 +93,9 @@ class SafetyInvestigationUpdate(SafetyInvestigationBase):
 
 class SafetyInvestigationResponse(SafetyInvestigationBase):
     id: int
+    createdBy: str = ""
+    createdByEmail: str = ""
+    createdByDepartment: str = ""
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
 
@@ -143,6 +146,9 @@ class SafetyShiftBriefUpdate(SafetyShiftBriefBase):
 
 class SafetyShiftBriefResponse(SafetyShiftBriefBase):
     id: int
+    createdBy: str = ""
+    createdByEmail: str = ""
+    createdByDepartment: str = ""
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
 

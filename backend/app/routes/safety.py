@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import require_user_department
+from app.auth import get_current_user, require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.models import SafetyDocument, SafetyInvestigationCase, SafetyNote, SafetyShiftBrief, User
@@ -41,9 +41,27 @@ QUEUE_LABELS = {
 }
 
 
-def _investigation_response(case: SafetyInvestigationCase) -> SafetyInvestigationResponse:
+def _creator_payload(user: User | None) -> dict[str, str]:
+    if not user:
+        return {"createdBy": "Unknown user", "createdByEmail": "", "createdByDepartment": ""}
+    return {
+        "createdBy": user.full_name or user.email,
+        "createdByEmail": user.email,
+        "createdByDepartment": user.department,
+    }
+
+
+def _users_by_id(db: Session, user_ids: set[int]) -> dict[int, User]:
+    ids = {user_id for user_id in user_ids if user_id}
+    if not ids:
+        return {}
+    return {user.id: user for user in db.scalars(select(User).where(User.id.in_(ids))).all()}
+
+
+def _investigation_response(case: SafetyInvestigationCase, creator: User | None = None) -> SafetyInvestigationResponse:
     return SafetyInvestigationResponse(
         id=case.id,
+        **_creator_payload(creator),
         title=case.title,
         type=case.case_type,
         status=case.status,
@@ -76,9 +94,10 @@ def _apply_investigation_payload(case: SafetyInvestigationCase, payload: SafetyI
     case.outcome = payload.outcome
 
 
-def _shift_brief_response(brief: SafetyShiftBrief) -> SafetyShiftBriefResponse:
+def _shift_brief_response(brief: SafetyShiftBrief, creator: User | None = None) -> SafetyShiftBriefResponse:
     return SafetyShiftBriefResponse(
         id=brief.id,
+        **_creator_payload(creator),
         title=brief.title,
         shift=brief.shift,
         status=brief.status,
@@ -163,15 +182,21 @@ def _risk_export_rows(fleet_data: dict, source: str = "Safety") -> list[dict]:
     return sorted(rows, key=lambda row: row.get("Risk Score") or 0, reverse=True)
 
 
-def _case_export_rows(cases: list[SafetyInvestigationCase]) -> list[dict]:
-    return [
-        {
+def _case_export_rows(cases: list[SafetyInvestigationCase], users_by_id: dict[int, User] | None = None) -> list[dict]:
+    users_by_id = users_by_id or {}
+    rows = []
+    for case in cases:
+        creator = users_by_id.get(case.user_id)
+        rows.append({
             "Case ID": case.id,
             "Title": case.title,
             "Type": case.case_type,
             "Status": case.status,
             "Severity": case.severity,
             "Owner": case.owner,
+            "Created By": creator.full_name if creator else "Unknown user",
+            "Created By Email": creator.email if creator else "",
+            "Created By Department": creator.department if creator else "",
             "Due Date": case.due_date,
             "Vehicle ID": case.vehicle_id,
             "Facts": case.facts,
@@ -181,15 +206,16 @@ def _case_export_rows(cases: list[SafetyInvestigationCase]) -> list[dict]:
             "Outcome": case.outcome,
             "Created": case.created_at.isoformat() if case.created_at else "",
             "Updated": case.updated_at.isoformat() if case.updated_at else "",
-        }
-        for case in cases
-    ]
+        })
+    return rows
 
 
-def _brief_export_rows(brief: SafetyShiftBrief) -> list[dict]:
+def _brief_export_rows(brief: SafetyShiftBrief, creator: User | None = None) -> list[dict]:
+    creator_name = creator.full_name if creator else "Unknown user"
+    creator_email = creator.email if creator else ""
     rows = [
-        {"Category": "Brief", "Item": "Title", "Status": brief.status, "Owner": brief.owner, "Detail": brief.title, "Notes": brief.handoff_note},
-        {"Category": "Brief", "Item": "Shift", "Status": brief.status, "Owner": brief.owner, "Detail": brief.shift, "Notes": f"Snapshot {brief.snapshot_at}"},
+        {"Category": "Brief", "Item": "Title", "Status": brief.status, "Owner": brief.owner, "Created By": creator_name, "Created By Email": creator_email, "Detail": brief.title, "Notes": brief.handoff_note},
+        {"Category": "Brief", "Item": "Shift", "Status": brief.status, "Owner": brief.owner, "Created By": creator_name, "Created By Email": creator_email, "Detail": brief.shift, "Notes": f"Snapshot {brief.snapshot_at}"},
     ]
     for index, item in enumerate(brief.checklist or [], start=1):
         rows.append({
@@ -197,6 +223,8 @@ def _brief_export_rows(brief: SafetyShiftBrief) -> list[dict]:
             "Item": f"{index}. {item.get('label') or ''}",
             "Status": "Done" if item.get("done") else "Open",
             "Owner": brief.owner,
+            "Created By": creator_name,
+            "Created By Email": creator_email,
             "Detail": "First action",
             "Notes": "",
         })
@@ -206,6 +234,8 @@ def _brief_export_rows(brief: SafetyShiftBrief) -> list[dict]:
             "Item": action.get("title") or "",
             "Status": action.get("status") or "",
             "Owner": action.get("owner") or "",
+            "Created By": creator_name,
+            "Created By Email": creator_email,
             "Due Date": action.get("dueDate") or "",
             "Driver": action.get("driverName") or "",
             "Truck": action.get("truckNumber") or "",
@@ -277,37 +307,37 @@ def upload_safety_document(payload: SafetyDocumentUpload, current_user: User = D
 def list_safety_investigations(current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
     cases = db.scalars(
         select(SafetyInvestigationCase)
-        .where(SafetyInvestigationCase.user_id == current_user.id)
         .order_by(SafetyInvestigationCase.updated_at.desc(), SafetyInvestigationCase.id.desc())
     ).all()
-    return [_investigation_response(case) for case in cases]
+    users_by_id = _users_by_id(db, {case.user_id for case in cases})
+    return [_investigation_response(case, users_by_id.get(case.user_id)) for case in cases]
 
 
 @router.post("/investigations", response_model=SafetyInvestigationResponse, status_code=status.HTTP_201_CREATED)
-def create_safety_investigation(payload: SafetyInvestigationCreate, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
+def create_safety_investigation(payload: SafetyInvestigationCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = SafetyInvestigationCase(user_id=current_user.id)
     _apply_investigation_payload(case, payload)
     db.add(case)
     db.commit()
     db.refresh(case)
-    return _investigation_response(case)
+    return _investigation_response(case, current_user)
 
 
 @router.put("/investigations/{case_id}", response_model=SafetyInvestigationResponse)
 def update_safety_investigation(case_id: int, payload: SafetyInvestigationUpdate, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
-    case = db.scalar(select(SafetyInvestigationCase).where(SafetyInvestigationCase.id == case_id, SafetyInvestigationCase.user_id == current_user.id))
+    case = db.scalar(select(SafetyInvestigationCase).where(SafetyInvestigationCase.id == case_id))
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation case not found")
 
     _apply_investigation_payload(case, payload)
     db.commit()
     db.refresh(case)
-    return _investigation_response(case)
+    return _investigation_response(case, db.get(User, case.user_id))
 
 
 @router.delete("/investigations/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_safety_investigation(case_id: int, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
-    case = db.scalar(select(SafetyInvestigationCase).where(SafetyInvestigationCase.id == case_id, SafetyInvestigationCase.user_id == current_user.id))
+    case = db.scalar(select(SafetyInvestigationCase).where(SafetyInvestigationCase.id == case_id))
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Investigation case not found")
 
@@ -319,20 +349,20 @@ def delete_safety_investigation(case_id: int, current_user: User = Depends(requi
 def export_safety_investigations(current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
     cases = db.scalars(
         select(SafetyInvestigationCase)
-        .where(SafetyInvestigationCase.user_id == current_user.id)
         .order_by(SafetyInvestigationCase.updated_at.desc(), SafetyInvestigationCase.id.desc())
     ).all()
-    return _excel_response(_case_export_rows(cases), "safety_investigations.xlsx", "Investigations")
+    users_by_id = _users_by_id(db, {case.user_id for case in cases})
+    return _excel_response(_case_export_rows(cases, users_by_id), "safety_investigations.xlsx", "Investigations")
 
 
 @router.get("/shift-briefs", response_model=list[SafetyShiftBriefResponse])
 def list_safety_shift_briefs(current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
     briefs = db.scalars(
         select(SafetyShiftBrief)
-        .where(SafetyShiftBrief.user_id == current_user.id)
         .order_by(SafetyShiftBrief.updated_at.desc(), SafetyShiftBrief.id.desc())
     ).all()
-    return [_shift_brief_response(brief) for brief in briefs]
+    users_by_id = _users_by_id(db, {brief.user_id for brief in briefs})
+    return [_shift_brief_response(brief, users_by_id.get(brief.user_id)) for brief in briefs]
 
 
 @router.post("/shift-briefs", response_model=SafetyShiftBriefResponse, status_code=status.HTTP_201_CREATED)
@@ -342,24 +372,24 @@ def create_safety_shift_brief(payload: SafetyShiftBriefCreate, current_user: Use
     db.add(brief)
     db.commit()
     db.refresh(brief)
-    return _shift_brief_response(brief)
+    return _shift_brief_response(brief, current_user)
 
 
 @router.put("/shift-briefs/{brief_id}", response_model=SafetyShiftBriefResponse)
 def update_safety_shift_brief(brief_id: int, payload: SafetyShiftBriefUpdate, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
-    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id, SafetyShiftBrief.user_id == current_user.id))
+    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id))
     if not brief:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shift brief not found")
 
     _apply_shift_brief_payload(brief, payload)
     db.commit()
     db.refresh(brief)
-    return _shift_brief_response(brief)
+    return _shift_brief_response(brief, db.get(User, brief.user_id))
 
 
 @router.delete("/shift-briefs/{brief_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_safety_shift_brief(brief_id: int, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
-    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id, SafetyShiftBrief.user_id == current_user.id))
+    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id))
     if not brief:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shift brief not found")
 
@@ -369,11 +399,11 @@ def delete_safety_shift_brief(brief_id: int, current_user: User = Depends(requir
 
 @router.get("/shift-briefs/{brief_id}/export")
 def export_safety_shift_brief(brief_id: int, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
-    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id, SafetyShiftBrief.user_id == current_user.id))
+    brief = db.scalar(select(SafetyShiftBrief).where(SafetyShiftBrief.id == brief_id))
     if not brief:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shift brief not found")
 
-    return _excel_response(_brief_export_rows(brief), f"safety_shift_brief_{brief.id}.xlsx", "Shift Brief")
+    return _excel_response(_brief_export_rows(brief, db.get(User, brief.user_id)), f"safety_shift_brief_{brief.id}.xlsx", "Shift Brief")
 
 
 @router.get("/risky-people/export")
