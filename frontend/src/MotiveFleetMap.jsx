@@ -56,9 +56,10 @@ function hasCoordinates(vehicle) {
 }
 
 function createMarkerElement(vehicle, isSelected) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = `motive-map-marker motive-map-driver-marker motive-map-marker-${markerTone(vehicle)} ${isSelected ? "selected" : ""}`.trim();
+  const marker = document.createElement("div");
+  marker.className = `motive-map-marker motive-map-driver-marker motive-map-marker-${markerTone(vehicle)} ${isSelected ? "selected" : ""}`.trim();
+  marker.setAttribute("role", "button");
+  marker.tabIndex = 0;
 
   const badge = document.createElement("span");
   badge.className = "motive-map-marker-badge";
@@ -68,9 +69,15 @@ function createMarkerElement(vehicle, isSelected) {
   label.className = "motive-map-marker-label";
   label.textContent = markerTitle(vehicle);
 
-  button.append(badge, label);
-  button.setAttribute("aria-label", markerTitle(vehicle));
-  return button;
+  marker.append(badge, label);
+  marker.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      marker.click();
+    }
+  });
+  marker.setAttribute("aria-label", markerTitle(vehicle));
+  return marker;
 }
 
 export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, active = true, viewMode = "fleet" }) {

@@ -47,24 +47,31 @@ function vehicleMarkerTitle(vehicle) {
 }
 
 function createMarkerElement(type, label, selected = false, title = "") {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = `safety-service-map-marker safety-service-map-marker-${type}${selected ? " selected" : ""}${title ? " labeled" : ""}`;
+  const marker = document.createElement("div");
+  marker.className = `safety-service-map-marker safety-service-map-marker-${type}${selected ? " selected" : ""}${title ? " labeled" : ""}`;
+  marker.setAttribute("role", "button");
+  marker.tabIndex = 0;
 
   const badge = document.createElement("span");
   badge.className = "safety-service-map-marker-badge";
   badge.textContent = label;
-  button.append(badge);
+  marker.append(badge);
 
   if (title) {
     const text = document.createElement("span");
     text.className = "safety-service-map-marker-label";
     text.textContent = title;
-    button.append(text);
+    marker.append(text);
   }
 
-  button.setAttribute("aria-label", title || label);
-  return button;
+  marker.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      marker.click();
+    }
+  });
+  marker.setAttribute("aria-label", title || label);
+  return marker;
 }
 export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedItemId, onSelect, active = true }) {
   const containerRef = useRef(null);
