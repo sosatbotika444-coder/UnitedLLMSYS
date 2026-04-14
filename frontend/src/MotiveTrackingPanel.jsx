@@ -67,6 +67,21 @@ function metricValue(value) {
 function decimalValue(value) {
   return value === null || value === undefined ? "-" : Number(value).toFixed(1);
 }
+function formatDurationSeconds(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "Unknown";
+  const totalMinutes = Math.max(0, Math.floor(Number(value) / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function eldTone(vehicle) {
+  const status = vehicle?.eld_hours?.status;
+  if (status === "violation") return "stale";
+  if (status === "warning") return "moving";
+  if (status === "ok") return "stopped";
+  return "stale";
+}
 
 function formatTimestamp(value) {
   if (!value) return "Unknown";
@@ -347,6 +362,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
   const historyPoints = detail?.history?.points || [];
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
+  const currentEldHours = currentVehicle?.eld_hours || {};
+  const currentEldAvailable = currentEldHours.available_time || {};
   const canFocusStreet = hasCoordinates(currentVehicle);
   const selectedLocationLabel = vehicleLocationTitle(currentVehicle);
   const snapshotWarning = snapshot?.warnings?.[0] || "";
@@ -406,6 +423,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
             <article className="motive-summary-card moving"><span>Idle hours</span><strong>{decimalValue(snapshot.metrics.idle_hours_7d)}</strong><small>Last 7 days</small></article>
             <article className="motive-summary-card live"><span>Drive miles</span><strong>{metricValue(snapshot.metrics.driving_miles_7d)}</strong><small>Last 7 days</small></article>
             <article className="motive-summary-card drivers"><span>IFTA miles</span><strong>{metricValue(snapshot.metrics.ifta_miles_30d)}</strong><small>Last 30 days</small></article>
+            <article className="motive-summary-card moving"><span>HOS clocks</span><strong>{metricValue(snapshot.metrics.hos_driver_clocks)}</strong><small>Drivers with live HOS</small></article>
+            <article className="motive-summary-card drivers"><span>HOS warnings</span><strong>{metricValue(snapshot.metrics.hos_warning_units)}</strong><small>Warnings or violations</small></article>
           </div>
 
           <div className="motive-layout-grid">
@@ -455,6 +474,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <span>{currentVehicle?.vin || "Select a vehicle to inspect VIN, fuel, faults, and history."}</span>
                 </div>
                 {currentVehicle ? <span className={`motive-status-pill ${vehicleTone(currentVehicle)}`}>{vehicleTone(currentVehicle)}</span> : null}
+                {currentVehicle ? <span className={`motive-status-pill ${eldTone(currentVehicle)}`}>HOS {currentEldHours.status || "n/a"}</span> : null}
               </div>
 
               {currentVehicle ? (
@@ -468,12 +488,15 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <DetailCard label="Idle Time" value={`${decimalValue((currentVehicle.idle_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.idle_summary?.count)} idle events`} />
                     <DetailCard label="Drive Time" value={`${decimalValue((currentVehicle.driving_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.driving_summary?.distance_miles)} miles`} />
                     <DetailCard label="IFTA" value={`${metricValue(currentVehicle.ifta_summary?.distance_miles)} mi`} detail={`${metricValue(currentVehicle.ifta_summary?.count)} trips`} />
+                    <DetailCard label="Drive Left" value={formatDurationSeconds(currentEldAvailable.drive_seconds)} detail={currentEldHours.duty_status || "HOS drive clock"} />
+                    <DetailCard label="Shift Left" value={formatDurationSeconds(currentEldAvailable.shift_seconds)} detail="HOS shift clock" />
+                    <DetailCard label="Cycle Left" value={formatDurationSeconds(currentEldAvailable.cycle_seconds)} detail={currentEldHours.status || "HOS cycle clock"} />
                   </div>
 
                   <div className="motive-detail-list">
                     <div><span>Driver</span><strong>{currentVehicle.driver?.full_name || currentVehicle.permanent_driver?.full_name || "Unassigned"}</strong><small>{currentVehicle.driver?.email || currentVehicle.driver?.phone || currentVehicle.permanent_driver?.email || "No driver contact"}</small></div>
                     <div><span>Vehicle</span><strong>{[currentVehicle.year, currentVehicle.make, currentVehicle.model].filter(Boolean).join(" ") || "Unknown unit"}</strong><small>{currentVehicle.license_plate_number ? `${currentVehicle.license_plate_state || ""} ${currentVehicle.license_plate_number}`.trim() : "No plate"}</small></div>
-                    <div><span>ELD Device</span><strong>{currentVehicle.eld_device?.identifier || "Unavailable"}</strong><small>{currentVehicle.eld_device?.model || "No gateway model"}</small></div>
+                    <div><span>ELD / HOS</span><strong>{currentVehicle.eld_device?.identifier || currentEldHours.source || "Unavailable"}</strong><small>{currentEldHours.summary || currentVehicle.eld_device?.model || "No gateway model"}</small></div>
                     <div><span>Location</span><strong>{currentVehicle.location?.address || [currentVehicle.location?.city, currentVehicle.location?.state].filter(Boolean).join(", ") || "Unknown"}</strong><small>{formatCoordinates(currentVehicle.location)}</small></div>
                     <div><span>Last update</span><strong>{formatTimestamp(currentVehicle.location?.located_at)}</strong><small>{currentVehicle.location?.age_minutes !== null && currentVehicle.location?.age_minutes !== undefined ? `${currentVehicle.location.age_minutes} minutes ago` : "Age unavailable"}</small></div>
                     <div><span>Registration</span><strong>{currentVehicle.registration_expiry_date || "No expiry date"}</strong><small>{currentVehicle.status || currentVehicle.availability_status || "Status unavailable"}</small></div>
@@ -490,6 +513,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
             <PreviewBlock title="Safety Events" items={currentVehicle?.previews?.performance_events || []} emptyText="No recent coaching events." renderItem={(item) => <div key={`event-${item.id}`}><strong>{item.type || "Event"}</strong><small>{item.location || item.coaching_status || formatTimestamp(item.end_time)}</small></div>} />
             <PreviewBlock title="Driving Periods" items={currentVehicle?.previews?.driving_periods || []} emptyText="No recent drive periods." renderItem={(item) => <div key={`drive-${item.id}`}><strong>{item.origin || "Trip"}</strong><small>{item.destination || `${metricValue(item.distance_miles)} miles`}</small></div>} />
             <PreviewBlock title="IFTA Trips" items={currentVehicle?.previews?.ifta_trips || []} emptyText="No recent IFTA trips." renderItem={(item) => <div key={`ifta-${item.id}`}><strong>{item.jurisdiction || "Trip"}</strong><small>{metricValue(item.distance_miles)} miles on {item.date || "unknown date"}</small></div>} />
+            <PreviewBlock title="HOS Logs" items={currentVehicle?.previews?.hos_logs || []} emptyText="No recent HOS logs." renderItem={(item) => <div key={`hos-${item.id || item.date}`}><strong>{item.date || "HOS log"}</strong><small>{item.is_signed ? "Signed" : "Unsigned"} | {metricValue(item.violation_count)} violation(s)</small></div>} />
           </div>
 
           <section className="motive-history-panel">
@@ -535,7 +559,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 <span>Fuel</span>
                 <span>Faults</span>
                 <span>Utilization</span>
-                <span>Drive / IFTA</span>
+                <span>Drive / HOS</span>
                 <span>Updated</span>
               </div>
               {filteredVehicles.length ? (
@@ -545,7 +569,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <span><strong>{vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(vehicle.location.fuel_level_percent)}%` : "-"}</strong><small>{vehicle.fuel_type || "Fuel n/a"}</small></span>
                     <span><strong>{metricValue(vehicle.fault_summary?.active_count)}</strong><small>{metricValue(vehicle.fault_summary?.count)} total</small></span>
                     <span><strong>{vehicle.utilization_summary?.utilization_percentage !== null && vehicle.utilization_summary?.utilization_percentage !== undefined ? `${decimalValue(vehicle.utilization_summary.utilization_percentage)}%` : "-"}</strong><small>{decimalValue((vehicle.idle_summary?.duration_seconds || 0) / 3600)} idle h</small></span>
-                    <span><strong>{metricValue(vehicle.driving_summary?.distance_miles)} mi</strong><small>{metricValue(vehicle.ifta_summary?.distance_miles)} IFTA mi</small></span>
+                    <span><strong>{metricValue(vehicle.driving_summary?.distance_miles)} mi</strong><small>{formatDurationSeconds(vehicle.eld_hours?.available_time?.drive_seconds)} drive left</small></span>
                     <span><strong>{formatTimestamp(vehicle.location?.located_at)}</strong><small>{vehicle.is_stale ? "stale" : vehicle.is_moving ? "moving" : "stopped"}</small></span>
                   </button>
                 ))

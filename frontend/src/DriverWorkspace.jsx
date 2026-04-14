@@ -48,6 +48,28 @@ function vehicleFuel(vehicle, match) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return 'Not reported';
   return `${Number(value).toFixed(1)}%`;
 }
+function formatDurationSeconds(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'Unknown';
+  const totalMinutes = Math.max(0, Math.floor(Number(value) / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+}
+
+function eldStatus(vehicle) {
+  const eld = vehicle?.eld_hours || {};
+  if (eld.status && eld.status !== 'unavailable') return eld.status;
+  if (vehicle?.eld_device) return 'device only';
+  return 'Unavailable';
+}
+
+function eldTone(vehicle) {
+  const status = vehicle?.eld_hours?.status;
+  if (status === 'violation') return 'critical';
+  if (status === 'warning') return 'warning';
+  if (status === 'ok') return 'info';
+  return 'neutral';
+}
 
 function vehicleStatus(vehicle) {
   if (vehicle?.is_moving) return 'Moving';
@@ -112,6 +134,10 @@ export default function DriverWorkspace({ token, user }) {
   const truckNumber = profile?.truckNumber || match.truckNumber || 'Truck';
   const locationLabel = useMemo(() => vehicleLocation(vehicle), [vehicle]);
   const fuelLabel = vehicleFuel(vehicle, match);
+  const eldHours = vehicle?.eld_hours || {};
+  const eldAvailable = eldHours.available_time || {};
+  const driveLeft = formatDurationSeconds(eldAvailable.drive_seconds);
+  const shiftLeft = formatDurationSeconds(eldAvailable.shift_seconds);
   const fixedVehicleId = profile?.vehicleId ? String(profile.vehicleId) : '';
 
   if (loading) {
@@ -129,6 +155,9 @@ export default function DriverWorkspace({ token, user }) {
         <DriverMetric label='Fuel' value={fuelLabel} detail='Live Motive fuel' tone='warning' />
         <DriverMetric label='Status' value={vehicleStatus(vehicle)} detail='Current vehicle state' tone='dark' />
         <DriverMetric label='Location' value={locationLabel} detail='Route and service center' tone='neutral' />
+        <DriverMetric label='Drive Left' value={driveLeft} detail={eldHours.duty_status || 'HOS drive clock'} tone={eldTone(vehicle)} />
+        <DriverMetric label='Shift Left' value={shiftLeft} detail='HOS shift clock' tone={eldTone(vehicle)} />
+        <DriverMetric label='HOS' value={eldStatus(vehicle)} detail={eldHours.summary || 'Motive ELD clock'} tone={eldTone(vehicle)} />
       </section>
 
       <div className='workspace-inline-tabs driver-workspace-tabs'>
@@ -178,6 +207,11 @@ export default function DriverWorkspace({ token, user }) {
           <div><span>Fuel</span><strong>{fuelLabel}</strong></div>
           <div><span>Location</span><strong>{locationLabel}</strong></div>
           <div><span>Vehicle ID</span><strong>{fixedVehicleId || '-'}</strong></div>
+          <div><span>Duty Status</span><strong>{eldHours.duty_status || eldHours.last_hos_status?.status || 'Unknown'}</strong></div>
+          <div><span>Drive Left</span><strong>{driveLeft}</strong></div>
+          <div><span>Shift Left</span><strong>{shiftLeft}</strong></div>
+          <div><span>Cycle Left</span><strong>{formatDurationSeconds(eldAvailable.cycle_seconds)}</strong></div>
+          <div><span>Break</span><strong>{formatDurationSeconds(eldAvailable.break_seconds)}</strong></div>
           <div><span>Emergency</span><strong>Service map ready</strong></div>
         </div>
       </section>

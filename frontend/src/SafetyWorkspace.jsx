@@ -289,6 +289,13 @@ function formatAge(value) {
   return `${formatDecimal(value)} min`;
 }
 
+function formatDurationSeconds(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "Unknown";
+  const totalMinutes = Math.max(0, Math.floor(Number(value) / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
 function queueTone(queueId) {
   if (queueId === "critical") return "critical";
   if (queueId === "maintenance") return "maintenance";
@@ -617,7 +624,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
   const metrics = data?.metrics || {};
   const riskOptions = data?.filters?.risk_levels || ["All", "Critical", "High", "Medium", "Low"];
   const queueOptions = data?.filters?.queue_ids || ["All", "critical", "maintenance", "coaching", "compliance", "watch"];
-  const focusOptions = data?.filters?.focus_options || ["All", "Faults", "Coaching", "Compliance", "Stale", "Low Fuel"];
+  const focusOptions = data?.filters?.focus_options || ["All", "Faults", "Coaching", "Compliance", "Stale", "Low Fuel", "HOS"];
 
   const filteredVehicles = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -631,7 +638,8 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
         (focusFilter === "Coaching" && (vehicle.pending_events || 0) > 0) ||
         (focusFilter === "Compliance" && ((vehicle.queue_ids || []).includes("compliance") || (vehicle.unsafe_inspections || 0) > 0)) ||
         (focusFilter === "Stale" && vehicle.is_stale) ||
-        (focusFilter === "Low Fuel" && vehicle.fuel_level_percent !== null && vehicle.fuel_level_percent !== undefined && vehicle.fuel_level_percent <= 25);
+        (focusFilter === "Low Fuel" && vehicle.fuel_level_percent !== null && vehicle.fuel_level_percent !== undefined && vehicle.fuel_level_percent <= 25) ||
+        (focusFilter === "HOS" && ["warning", "violation"].includes(vehicle.eld_status));
       return matchesSearch && matchesRisk && matchesQueue && matchesFocus;
     });
   }, [focusFilter, queueFilter, riskFilter, search, vehicles]);
@@ -659,6 +667,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
         <SafetyStatCard label="Fault Units" value={formatCount(metrics.active_fault_units)} detail="Active faults" tone="warning" />
         <SafetyStatCard label="Coaching" value={formatCount(metrics.event_review_units)} detail="Pending events" tone="info" />
         <SafetyStatCard label="Avg Risk" value={formatDecimal(metrics.average_risk_score)} detail="0 to 100 score" tone="dark" />
+        <SafetyStatCard label="HOS" value={formatCount(metrics.hos_warning_units)} detail="Warnings or violations" tone="critical" />
       </section>
 
       <section className="panel safety-filter-panel">
@@ -750,6 +759,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
                       <div><span>Events</span><strong>{formatCount(vehicle.pending_events)}</strong></div>
                       <div><span>Fuel</span><strong>{vehicle.fuel_level_percent !== null && vehicle.fuel_level_percent !== undefined ? `${formatDecimal(vehicle.fuel_level_percent)}%` : "-"}</strong></div>
                       <div><span>Ping</span><strong>{formatAge(vehicle.age_minutes)}</strong></div>
+                      <div><span>HOS</span><strong>{formatDurationSeconds(vehicle.drive_remaining_seconds)}</strong></div>
                     </div>
 
                     {vehicle.tags?.length ? (
@@ -791,13 +801,15 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
                   <SafetyStatCard label="Pending Events" value={formatCount(selectedVehicle.pending_events)} detail="Need coaching review" tone="info" />
                   <SafetyStatCard label="Fuel" value={selectedVehicle.fuel_level_percent !== null && selectedVehicle.fuel_level_percent !== undefined ? `${formatDecimal(selectedVehicle.fuel_level_percent)}%` : "-"} detail={selectedVehicle.is_moving ? "Truck moving" : selectedVehicle.is_stale ? "Telemetry stale" : "Truck stopped"} tone="neutral" />
                   <SafetyStatCard label="Ping Age" value={formatAge(selectedVehicle.age_minutes)} detail={selectedVehicle.last_location_at ? formatDateTime(selectedVehicle.last_location_at) : "No live timestamp"} tone="dark" />
+                  <SafetyStatCard label="Drive Left" value={formatDurationSeconds(selectedVehicle.drive_remaining_seconds)} detail={selectedVehicle.eld_hours?.summary || selectedVehicle.eld_status || "HOS clock"} tone={selectedVehicle.eld_status === "violation" ? "critical" : selectedVehicle.eld_status === "warning" ? "warning" : "neutral"} />
                 </div>
 
                 <div className="safety-detail-list">
                   <div><span>Driver</span><strong>{selectedVehicle.driver_name}</strong><small>{selectedVehicle.driver_contact || "No mapped contact"}</small></div>
                   <div><span>Location</span><strong>{selectedVehicle.location_label}</strong><small>{selectedVehicle.status}</small></div>
-                  <div><span>VIN</span><strong>{selectedVehicle.vin || "Not available"}</strong><small>{selectedVehicle.eld_connected ? "ELD connected" : "No ELD summary"}</small></div>
+                  <div><span>VIN / ELD</span><strong>{selectedVehicle.vin || "Not available"}</strong><small>{selectedVehicle.eld_connected ? `ELD connected | ${selectedVehicle.eld_status || "HOS n/a"}` : selectedVehicle.eld_status || "No ELD summary"}</small></div>
                   <div><span>Registration</span><strong>{selectedVehicle.registration?.date || "Not tracked"}</strong><small>{selectedVehicle.registration?.label || "No registration status"}</small></div>
+                  <div><span>Shift / Cycle</span><strong>{formatDurationSeconds(selectedVehicle.shift_remaining_seconds)}</strong><small>{formatDurationSeconds(selectedVehicle.cycle_remaining_seconds)} cycle left</small></div>
                 </div>
 
                 <section className="safety-detail-section">

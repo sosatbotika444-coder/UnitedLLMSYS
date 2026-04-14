@@ -589,6 +589,26 @@ class MotiveClient:
             "vehicle_locations_v2": lambda: self._paginate("/v2/vehicle_locations", ("vehicles",), page_size=100),
             "vehicle_locations_v3": lambda: self._paginate("/v3/vehicle_locations", ("vehicles",), page_size=100),
             "eld_devices": lambda: self._paginate("/v1/eld_devices", ("eld_devices",), page_size=100),
+            "hos_available_time": lambda: self._paginate(
+                "/v1/available_time",
+                ("users", "drivers", "available_times", "available_time"),
+                page_size=100,
+                max_pages=8,
+            ),
+            "hos_summaries": lambda: self._paginate(
+                "/v1/hours_of_service",
+                ("hours_of_services", "hours_of_service", "users", "drivers"),
+                page_size=100,
+                extra_params=self._date_params(8),
+                max_pages=8,
+            ),
+            "hos_logs": lambda: self._paginate(
+                "/v1/logs",
+                ("logs",),
+                page_size=100,
+                extra_params={**self._date_params(8), "status": "all"},
+                max_pages=8,
+            ),
             "fault_codes": lambda: self._paginate("/v1/fault_codes", ("fault_codes",), page_size=100, max_pages=5),
             "vehicle_utilizations": lambda: self._paginate(
                 "/v2/vehicle_utilization",
@@ -695,9 +715,23 @@ class MotiveClient:
         inspection_records = [self._normalize_inspection_report(item) for item in unwrap_records(raw_results.get("inspection_reports") or [])]
         form_records = [self._normalize_form_entry(item) for item in unwrap_records(raw_results.get("form_entries") or [])]
         scorecard_records = [self._normalize_scorecard(item, users_by_id) for item in unwrap_records(raw_results.get("scorecard_summary") or [])]
+        hos_available_records = [self._normalize_hos_available_time(item, users_by_id) for item in unwrap_records(raw_results.get("hos_available_time") or [])]
+        hos_summary_records = [self._normalize_hos_summary(item, users_by_id) for item in unwrap_records(raw_results.get("hos_summaries") or [])]
+        hos_log_records = [self._normalize_hos_log(item, users_by_id) for item in unwrap_records(raw_results.get("hos_logs") or [])]
 
         company = self._normalize_company(company_items[0] if company_items else None)
         company_metric_units = bool(company.get("metric_units")) if company else bool(self.settings.motive_metric_units)
+
+        hos_available_by_driver_id = {item["driver_id"]: item for item in hos_available_records if item.get("driver_id") is not None}
+        hos_available_by_driver_name = {
+            self._driver_name_key(item.get("driver_name")): item
+            for item in hos_available_records
+            if self._driver_name_key(item.get("driver_name"))
+        }
+        hos_summaries_by_driver_id = self._group_by_driver(hos_summary_records)
+        hos_summaries_by_driver_name = self._group_by_driver_name(hos_summary_records)
+        hos_logs_by_driver_id = self._group_by_driver(hos_log_records)
+        hos_logs_by_driver_name = self._group_by_driver_name(hos_log_records)
 
         location_v2_by_id: dict[int, dict] = {}
         location_v3_by_id: dict[int, dict] = {}
@@ -767,6 +801,12 @@ class MotiveClient:
                 form_entries=sort_by_recent(forms_by_vehicle.get(vehicle_id, []), "submitted_at", "updated_at", "created_at"),
                 eld_device=eld_by_vehicle_id.get(vehicle_id),
                 scorecards_by_driver=scorecards_by_driver,
+                hos_available_by_driver_id=hos_available_by_driver_id,
+                hos_available_by_driver_name=hos_available_by_driver_name,
+                hos_summaries_by_driver_id=hos_summaries_by_driver_id,
+                hos_summaries_by_driver_name=hos_summaries_by_driver_name,
+                hos_logs_by_driver_id=hos_logs_by_driver_id,
+                hos_logs_by_driver_name=hos_logs_by_driver_name,
             )
             vehicles.append(vehicle_summary)
 
@@ -798,6 +838,8 @@ class MotiveClient:
                 scorecard_records,
                 key=lambda item: (item.get("score") is None, -(item.get("score") or 0), item.get("driver_name") or ""),
             )[:12],
+            "hos_logs": sort_by_recent(hos_log_records, "date", "end_date", "updated_at")[:12],
+            "hos_summaries": sort_by_recent(hos_summary_records, "date")[:12],
         }
 
         datasets = {
@@ -815,6 +857,9 @@ class MotiveClient:
             "form_entries": {"count": len(form_records), "available": not bool(errors.get("form_entries"))},
             "eld_devices": {"count": len(eld_records), "available": not bool(errors.get("eld_devices"))},
             "scorecard_summary": {"count": len(scorecard_records), "available": not bool(errors.get("scorecard_summary"))},
+            "hos_available_time": {"count": len(hos_available_records), "available": not bool(errors.get("hos_available_time"))},
+            "hos_summaries": {"count": len(hos_summary_records), "available": not bool(errors.get("hos_summaries"))},
+            "hos_logs": {"count": len(hos_log_records), "available": not bool(errors.get("hos_logs"))},
         }
 
         return {
@@ -965,6 +1010,310 @@ class MotiveClient:
             "model": first_text(item.get("model")),
             "vehicle_id": as_int(vehicle.get("id")),
             "vehicle_number": first_text(vehicle.get("number")),
+        }
+
+    def _driver_name_key(self, value: object) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+    def _driver_name_from_vehicle_number(self, *values: object) -> dict | None:
+        for value in values:
+            text = first_text(value)
+            if not text or "/" not in text:
+                continue
+            suffix = text.split("/", 1)[-1].strip(" -")
+            if suffix and not suffix.isdigit():
+                return {"id": None, "full_name": suffix}
+        return None
+
+    def _hos_seconds(self, source: dict, *keys: str) -> int | None:
+        if not isinstance(source, dict):
+            return None
+        for key in keys:
+            value = source.get(key)
+            if value in (None, ""):
+                continue
+            parsed = as_int(value)
+            if parsed is not None:
+                return max(0, parsed)
+            parsed_duration = duration_to_seconds(value)
+            if parsed_duration > 0 or str(value).strip() in {"0", "0.0"}:
+                return max(0, parsed_duration)
+        return None
+
+    def _duration_rows(self, values: object) -> list[dict]:
+        if not isinstance(values, list):
+            return []
+        rows: list[dict] = []
+        for raw in values:
+            item = unwrap_record(raw)
+            if not item:
+                continue
+            rows.append(
+                {
+                    "date": first_text(item.get("date"), item.get("day")),
+                    "duration_seconds": self._hos_seconds(item, "duration", "seconds", "duration_seconds"),
+                }
+            )
+        return rows
+
+    def _driver_from_hos_record(self, item: dict, users_by_id: dict[int, dict]) -> dict:
+        driver = unwrap_record(item.get("driver")) or unwrap_record(item.get("user")) or item
+        normalized = self._normalize_embedded_driver(driver, users_by_id) or {}
+        driver_id = normalized.get("id") or as_int(item.get("driver_id")) or as_int(item.get("user_id")) or as_int(driver.get("id"))
+        driver_name = first_text(
+            normalized.get("full_name"),
+            item.get("driver_name"),
+            item.get("driver_full_name"),
+            item.get("full_name"),
+            " ".join(part for part in [first_text(item.get("driver_first_name")), first_text(item.get("driver_last_name"))] if part).strip(),
+            driver.get("name"),
+            driver.get("full_name"),
+            " ".join(part for part in [first_text(driver.get("first_name")), first_text(driver.get("last_name"))] if part).strip(),
+            driver.get("email"),
+        )
+        merged = dict(normalized)
+        merged.update({"id": driver_id, "full_name": driver_name})
+        return merged
+
+    def _normalize_hos_available_time(self, raw: dict, users_by_id: dict[int, dict]) -> dict:
+        item = unwrap_record(raw)
+        user = unwrap_record(item.get("user")) or unwrap_record(item.get("driver")) or item
+        driver = self._driver_from_hos_record(item, users_by_id)
+        available = unwrap_record(item.get("available_time")) or unwrap_record(user.get("available_time"))
+        recap = unwrap_record(item.get("recap")) or unwrap_record(user.get("recap"))
+        last_status = unwrap_record(item.get("last_hos_status")) or unwrap_record(user.get("last_hos_status"))
+        last_cycle_reset = unwrap_record(item.get("last_cycle_reset")) or unwrap_record(user.get("last_cycle_reset"))
+        return {
+            "driver_id": driver.get("id"),
+            "driver_name": driver.get("full_name"),
+            "duty_status": first_text(item.get("duty_status"), user.get("duty_status"), last_status.get("status")),
+            "available_time": {
+                "drive_seconds": self._hos_seconds(available, "drive", "drive_seconds", "driving"),
+                "shift_seconds": self._hos_seconds(available, "shift", "shift_seconds"),
+                "cycle_seconds": self._hos_seconds(available, "cycle", "cycle_seconds"),
+                "break_seconds": self._hos_seconds(available, "break", "break_seconds"),
+            },
+            "recap": {
+                "seconds_available": self._hos_seconds(recap, "seconds_available"),
+                "seconds_tomorrow": self._hos_seconds(recap, "seconds_tomorrow"),
+                "on_duty_duration": self._duration_rows(recap.get("on_duty_duration")),
+                "driving_duration": self._duration_rows(recap.get("driving_duration")),
+            },
+            "last_hos_status": {
+                "status": first_text(last_status.get("status")),
+                "time": first_text(last_status.get("time"), last_status.get("start_time"), last_status.get("started_at")),
+            },
+            "last_cycle_reset": {
+                "type": first_text(last_cycle_reset.get("type")),
+                "start_time": first_text(last_cycle_reset.get("start_time")),
+                "end_time": first_text(last_cycle_reset.get("end_time")),
+            },
+            "source": "motive_available_time",
+        }
+
+    def _normalize_hos_summary(self, raw: dict, users_by_id: dict[int, dict]) -> dict:
+        item = unwrap_record(raw)
+        driver = self._driver_from_hos_record(item, users_by_id)
+        violations = [unwrap_record(value) for value in (item.get("hos_violations") or item.get("violations") or []) if isinstance(value, dict)]
+        form_errors = [unwrap_record(value) for value in (item.get("form_and_manner_errors") or item.get("form_errors") or []) if isinstance(value, dict)]
+        return {
+            "id": as_int(item.get("id")),
+            "driver_id": driver.get("id"),
+            "driver_name": driver.get("full_name"),
+            "date": first_text(item.get("date"), item.get("log_date")),
+            "duty_status": first_text(item.get("duty_status"), item.get("status")),
+            "off_duty_seconds": self._hos_seconds(item, "off_duty_duration", "off_duty_seconds"),
+            "on_duty_seconds": self._hos_seconds(item, "on_duty_duration", "on_duty_seconds"),
+            "sleeper_seconds": self._hos_seconds(item, "sleeper_duration", "sleeper_seconds"),
+            "driving_seconds": self._hos_seconds(item, "driving_duration", "driving_seconds"),
+            "waiting_seconds": self._hos_seconds(item, "waiting_duration", "waiting_seconds"),
+            "violation_count": len(violations) or as_int(item.get("violation_count")) or 0,
+            "form_error_count": len(form_errors) or as_int(item.get("form_error_count")) or 0,
+            "violations": [
+                {
+                    "type": first_text(value.get("type"), value.get("violation_type")),
+                    "start_time": first_text(value.get("start_time"), value.get("started_at")),
+                    "end_time": first_text(value.get("end_time"), value.get("ended_at")),
+                }
+                for value in violations[:6]
+            ],
+            "source": "motive_hours_of_service",
+        }
+
+    def _normalize_hos_log_event(self, raw: object) -> dict:
+        item = unwrap_record(raw)
+        return {
+            "id": as_int(item.get("id")),
+            "type": first_text(item.get("type"), item.get("event_type")),
+            "status": first_text(item.get("status")),
+            "start_time": first_text(item.get("start_time"), item.get("started_at"), item.get("time")),
+            "end_time": first_text(item.get("end_time"), item.get("ended_at")),
+            "duration_seconds": self._hos_seconds(item, "duration", "duration_seconds"),
+            "location": first_text(item.get("location"), item.get("location_name")),
+            "notes": first_text(item.get("notes"), item.get("annotation")),
+        }
+
+    def _normalize_hos_log(self, raw: dict, users_by_id: dict[int, dict]) -> dict:
+        item = unwrap_record(raw)
+        driver = self._driver_from_hos_record(item, users_by_id)
+        vehicles = [unwrap_record(value) for value in (item.get("vehicles") or []) if isinstance(value, dict)]
+        if not vehicles and item.get("vehicle"):
+            vehicles = [unwrap_record(item.get("vehicle"))]
+        violations = [unwrap_record(value) for value in (item.get("hos_violations") or item.get("violations") or []) if isinstance(value, dict)]
+        form_errors = [unwrap_record(value) for value in (item.get("form_and_manner_errors") or item.get("form_errors") or []) if isinstance(value, dict)]
+        events = [self._normalize_hos_log_event(value) for value in (item.get("events") or []) if isinstance(value, dict)]
+        signed_at = first_text(item.get("driver_signed_at"), item.get("signed_at"), item.get("certified_at"), item.get("driver_signature_at"))
+        return {
+            "id": as_int(item.get("id")),
+            "driver_id": driver.get("id"),
+            "driver_name": driver.get("full_name"),
+            "date": first_text(item.get("date"), item.get("log_date")),
+            "start_date": first_text(item.get("start_date"), item.get("start_time")),
+            "end_date": first_text(item.get("end_date"), item.get("end_time")),
+            "updated_at": first_text(item.get("updated_at")),
+            "signed_at": signed_at,
+            "is_signed": bool(signed_at or item.get("driver_signature_url")),
+            "cycle": first_text(item.get("cycle")),
+            "time_zone": first_text(item.get("time_zone")),
+            "eld_mode": first_text(item.get("eld_mode")),
+            "vehicle_numbers": first_text(item.get("vehicle_numbers"), ", ".join(str(value.get("number")) for value in vehicles if value.get("number"))),
+            "vehicle_ids": [as_int(value.get("id")) for value in vehicles if as_int(value.get("id")) is not None],
+            "total_miles": as_float(item.get("total_miles")),
+            "off_duty_seconds": self._hos_seconds(item, "off_duty_duration", "off_duty_seconds"),
+            "on_duty_seconds": self._hos_seconds(item, "on_duty_duration", "on_duty_seconds"),
+            "sleeper_seconds": self._hos_seconds(item, "sleeper_duration", "sleeper_seconds"),
+            "driving_seconds": self._hos_seconds(item, "driving_duration", "driving_seconds"),
+            "waiting_seconds": self._hos_seconds(item, "waiting_duration", "waiting_seconds"),
+            "violation_count": len(violations) or as_int(item.get("violation_count")) or 0,
+            "form_error_count": len(form_errors) or as_int(item.get("form_error_count")) or 0,
+            "event_count": len(events),
+            "events": events[:8],
+            "source": "motive_logs",
+        }
+
+    def _group_by_driver(self, items: list[dict]) -> dict[int, list[dict]]:
+        grouped: defaultdict[int, list[dict]] = defaultdict(list)
+        for item in items:
+            driver_id = as_int(item.get("driver_id"))
+            if driver_id is not None:
+                grouped[driver_id].append(item)
+        return dict(grouped)
+
+    def _group_by_driver_name(self, items: list[dict]) -> dict[str, list[dict]]:
+        grouped: defaultdict[str, list[dict]] = defaultdict(list)
+        for item in items:
+            key = self._driver_name_key(item.get("driver_name"))
+            if key:
+                grouped[key].append(item)
+        return dict(grouped)
+
+    def _match_driver_record(self, candidates: list[dict | None], by_id: dict[int, dict], by_name: dict[str, dict]) -> dict | None:
+        for candidate in candidates:
+            driver_id = as_int((candidate or {}).get("id"))
+            if driver_id is not None and driver_id in by_id:
+                return by_id[driver_id]
+        for candidate in candidates:
+            key = self._driver_name_key((candidate or {}).get("full_name"))
+            if key and key in by_name:
+                return by_name[key]
+        return None
+
+    def _match_driver_records(self, candidates: list[dict | None], by_id: dict[int, list[dict]], by_name: dict[str, list[dict]]) -> list[dict]:
+        matches: list[dict] = []
+        seen: set[tuple[object, object, object]] = set()
+        for candidate in candidates:
+            driver_id = as_int((candidate or {}).get("id"))
+            if driver_id is not None:
+                for item in by_id.get(driver_id, []):
+                    key = (item.get("source"), item.get("id"), item.get("date"))
+                    if key not in seen:
+                        seen.add(key)
+                        matches.append(item)
+        for candidate in candidates:
+            name_key = self._driver_name_key((candidate or {}).get("full_name"))
+            if not name_key:
+                continue
+            for item in by_name.get(name_key, []):
+                key = (item.get("source"), item.get("id"), item.get("date"))
+                if key not in seen:
+                    seen.add(key)
+                    matches.append(item)
+        return matches
+
+    def _format_hos_duration(self, seconds: object) -> str:
+        parsed = as_int(seconds)
+        if parsed is None:
+            return "unknown"
+        hours = parsed // 3600
+        minutes = (parsed % 3600) // 60
+        return f"{hours}h {minutes:02d}m"
+
+    def _build_eld_hours_summary(self, *, driver: dict | None, availability: dict | None, hos_summaries: list[dict], hos_logs: list[dict], eld_device: dict | None) -> dict:
+        latest_summary = hos_summaries[0] if hos_summaries else None
+        latest_log = hos_logs[0] if hos_logs else None
+        available_time = dict((availability or {}).get("available_time") or {})
+        if latest_summary:
+            available_time.setdefault("today_driving_seconds", latest_summary.get("driving_seconds"))
+            available_time.setdefault("today_on_duty_seconds", latest_summary.get("on_duty_seconds"))
+
+        source = "unavailable"
+        if availability:
+            source = "motive_available_time"
+        elif latest_summary:
+            source = "motive_hours_of_service"
+        elif latest_log:
+            source = "motive_logs"
+        elif eld_device:
+            source = "eld_device_only"
+
+        warning_messages: list[str] = []
+        violation_count = sum(item.get("violation_count") or 0 for item in hos_logs[:7]) + sum(item.get("violation_count") or 0 for item in hos_summaries[:7])
+        unsigned_log_count = sum(1 for item in hos_logs[:7] if not item.get("is_signed"))
+        for label, key in [("Drive", "drive_seconds"), ("Shift", "shift_seconds"), ("Cycle", "cycle_seconds")]:
+            seconds = available_time.get(key)
+            if isinstance(seconds, (int, float)):
+                if seconds <= 0:
+                    warning_messages.append(f"{label} clock is at zero.")
+                elif seconds <= 3600:
+                    warning_messages.append(f"{label} clock under 1 hour.")
+        if violation_count:
+            warning_messages.insert(0, f"{violation_count} recent HOS violation(s).")
+        if unsigned_log_count:
+            warning_messages.append(f"{unsigned_log_count} recent unsigned log(s).")
+
+        status_label = "unavailable"
+        if source not in {"unavailable", "eld_device_only"}:
+            status_label = "ok"
+            if violation_count or any(isinstance(available_time.get(key), (int, float)) and available_time.get(key) <= 0 for key in ("drive_seconds", "shift_seconds", "cycle_seconds")):
+                status_label = "violation"
+            elif warning_messages:
+                status_label = "warning"
+
+        if source == "eld_device_only":
+            summary = "ELD device mapped; HOS clock not returned."
+        elif status_label == "unavailable":
+            summary = "No live HOS clock returned."
+        elif warning_messages:
+            summary = warning_messages[0]
+        else:
+            summary = f"{self._format_hos_duration(available_time.get('drive_seconds'))} drive / {self._format_hos_duration(available_time.get('shift_seconds'))} shift left."
+
+        return {
+            "source": source,
+            "status": status_label,
+            "summary": summary,
+            "driver_id": (driver or {}).get("id") or (availability or {}).get("driver_id") or (latest_summary or {}).get("driver_id") or (latest_log or {}).get("driver_id"),
+            "driver_name": first_text((driver or {}).get("full_name"), (availability or {}).get("driver_name"), (latest_summary or {}).get("driver_name"), (latest_log or {}).get("driver_name")),
+            "duty_status": first_text((availability or {}).get("duty_status"), (latest_summary or {}).get("duty_status"), (driver or {}).get("duty_status")),
+            "available_time": available_time,
+            "recap": (availability or {}).get("recap") or {},
+            "last_hos_status": (availability or {}).get("last_hos_status") or {},
+            "last_cycle_reset": (availability or {}).get("last_cycle_reset") or {},
+            "latest_summary": latest_summary or {},
+            "latest_log": latest_log or {},
+            "recent_violation_count": violation_count,
+            "unsigned_log_count": unsigned_log_count,
+            "warnings": warning_messages[:6],
         }
 
     def _normalize_current_location(self, location_raw: object, vehicle_context: dict, metric_units: bool) -> dict | None:
@@ -1250,11 +1599,38 @@ class MotiveClient:
             "total_kilometers": as_float(item.get("total_kilometers")),
         }
 
-    def _build_vehicle_summary(self, *, vehicle_id: int, base: dict, current_v2: dict, current_location: dict | None, users_by_id: dict[int, dict], faults: list[dict], utilization: dict | None, idles: list[dict], driving_periods: list[dict], performance_events: list[dict], ifta_trips: list[dict], fuel_purchases: list[dict], inspection_reports: list[dict], form_entries: list[dict], eld_device: dict | None, scorecards_by_driver: dict[int, dict]) -> dict:
+    def _build_vehicle_summary(
+        self,
+        *,
+        vehicle_id: int,
+        base: dict,
+        current_v2: dict,
+        current_location: dict | None,
+        users_by_id: dict[int, dict],
+        faults: list[dict],
+        utilization: dict | None,
+        idles: list[dict],
+        driving_periods: list[dict],
+        performance_events: list[dict],
+        ifta_trips: list[dict],
+        fuel_purchases: list[dict],
+        inspection_reports: list[dict],
+        form_entries: list[dict],
+        eld_device: dict | None,
+        scorecards_by_driver: dict[int, dict],
+        hos_available_by_driver_id: dict[int, dict],
+        hos_available_by_driver_name: dict[str, dict],
+        hos_summaries_by_driver_id: dict[int, list[dict]],
+        hos_summaries_by_driver_name: dict[str, list[dict]],
+        hos_logs_by_driver_id: dict[int, list[dict]],
+        hos_logs_by_driver_name: dict[str, list[dict]],
+    ) -> dict:
         current_driver = self._normalize_embedded_driver(base.get("current_driver"), users_by_id)
         if not current_driver:
             current_driver = self._normalize_embedded_driver(current_v2.get("current_driver"), users_by_id)
         permanent_driver = self._normalize_embedded_driver(base.get("permanent_driver"), users_by_id)
+        driver_hint = self._driver_name_from_vehicle_number(base.get("number"), current_v2.get("number"))
+        driver_candidates = [current_driver, permanent_driver, driver_hint]
         availability_details = unwrap_record(base.get("availability_details"))
         metric_units = bool(base.get("metric_units"))
         merged_eld = eld_device or self._normalize_eld_device(base.get("eld_device")) or (current_location or {}).get("eld_device")
@@ -1263,6 +1639,16 @@ class MotiveClient:
             if candidate and candidate.get("id") in scorecards_by_driver:
                 driver_score = scorecards_by_driver[candidate["id"]]
                 break
+        hos_available = self._match_driver_record(driver_candidates, hos_available_by_driver_id, hos_available_by_driver_name)
+        hos_summaries = sort_by_recent(self._match_driver_records(driver_candidates, hos_summaries_by_driver_id, hos_summaries_by_driver_name), "date")
+        hos_logs = sort_by_recent(self._match_driver_records(driver_candidates, hos_logs_by_driver_id, hos_logs_by_driver_name), "date", "end_date", "updated_at")
+        eld_hours = self._build_eld_hours_summary(
+            driver=current_driver or permanent_driver or driver_hint,
+            availability=hos_available,
+            hos_summaries=hos_summaries,
+            hos_logs=hos_logs,
+            eld_device=merged_eld,
+        )
         fault_summary = {
             "count": len(faults),
             "active_count": sum(1 for item in faults if (item.get("status") or "").lower() not in {"resolved", "inactive", "closed"}),
@@ -1358,6 +1744,7 @@ class MotiveClient:
             "permanent_driver": permanent_driver,
             "driver_scorecard": driver_score,
             "eld_device": merged_eld,
+            "eld_hours": eld_hours,
             "location": current_location,
             "is_moving": bool(speed_mph is not None and speed_mph >= 5),
             "is_stale": bool(current_location is None or age is None or age > 30),
@@ -1379,6 +1766,7 @@ class MotiveClient:
                 "fuel_purchases": fuel_purchases[:3],
                 "inspection_reports": inspection_reports[:3],
                 "form_entries": form_entries[:3],
+                "hos_logs": hos_logs[:3],
             },
         }
     def _compute_metrics(self, *, company: dict | None, vehicles: list[dict], users: list[dict], faults: list[dict], performance_events: list[dict], idle_events: list[dict], driving_periods: list[dict], ifta_trips: list[dict], fuel_purchases: list[dict], inspections: list[dict], form_entries: list[dict], scorecards: list[dict]) -> dict:
@@ -1386,6 +1774,8 @@ class MotiveClient:
         moving_vehicles = [item for item in vehicles if item.get("is_moving")]
         stale_vehicles = [item for item in vehicles if item.get("is_stale")]
         low_fuel_vehicles = [item for item in vehicles if (item.get("location") or {}).get("fuel_level_percent") is not None and ((item.get("location") or {}).get("fuel_level_percent") or 0) <= 25]
+        hos_units = [item for item in vehicles if (item.get("eld_hours") or {}).get("source") not in {None, "", "unavailable", "eld_device_only"}]
+        hos_warning_units = [item for item in vehicles if (item.get("eld_hours") or {}).get("status") in {"warning", "violation"}]
         vehicles_with_faults = [item for item in vehicles if (item.get("fault_summary") or {}).get("active_count")]
         driver_scores = [item.get("score") for item in scorecards if item.get("score") is not None]
         avg_driver_score = round(sum(driver_scores) / len(driver_scores), 1) if driver_scores else None
@@ -1404,6 +1794,8 @@ class MotiveClient:
             "performance_events_7d": len(performance_events),
             "pending_review_events": sum(1 for item in performance_events if (item.get("coaching_status") or "").lower() == "pending_review"),
             "idle_events_7d": len(idle_events),
+            "hos_driver_clocks": len(hos_units),
+            "hos_warning_units": len(hos_warning_units),
             "idle_hours_7d": round(sum((item.get("duration_seconds") or 0) for item in idle_events) / 3600, 1),
             "driving_periods_7d": len(driving_periods),
             "driving_hours_7d": round(sum((item.get("duration_seconds") or 0) for item in driving_periods) / 3600, 1),
@@ -1446,6 +1838,8 @@ class MotiveClient:
         headers["X-Metric-Units"] = "true" if self.settings.motive_metric_units else "false"
         if self.settings.motive_user_id is not None:
             headers["X-User-Id"] = str(self.settings.motive_user_id)
+        if self.settings.motive_time_zone:
+            headers["X-Time-Zone"] = str(self.settings.motive_time_zone)
 
         payload_bytes = None
         if body is not None:

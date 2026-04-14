@@ -111,6 +111,8 @@ def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
         ("Inspections", _inspection_columns(), recent_activity.get("inspection_reports") or [], "No recent inspection reports in the current snapshot."),
         ("Forms", _form_columns(), recent_activity.get("form_entries") or [], "No recent form entries in the current snapshot."),
         ("Driver Scores", _driver_score_columns(), recent_activity.get("driver_scores") or [], "No driver score rows in the current snapshot."),
+        ("Recent HOS Logs", _hos_log_columns(), recent_activity.get("hos_logs") or [], "No recent HOS logs in the current snapshot."),
+        ("Recent HOS Summary", _hos_summary_columns(), recent_activity.get("hos_summaries") or [], "No recent HOS summary rows in the current snapshot."),
     ]
     for title, columns, rows, empty_message in activity_sheets:
         _write_table_sheet(workbook, title=title, columns=columns, rows=rows, empty_message=empty_message)
@@ -260,6 +262,11 @@ def _fleet_status_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec]:
         ("Duty Status", lambda row: roster(row).get("duty_status")),
         ("Vehicle Status", lambda row: row.get("status")),
         ("Availability", lambda row: row.get("availability_status")),
+        ("HOS Status", lambda row: _eld_status(row)),
+        ("HOS Summary", lambda row: _eld_summary(row)),
+        ("Drive Left Hours", lambda row: _eld_clock_hours(row, "drive_seconds")),
+        ("Shift Left Hours", lambda row: _eld_clock_hours(row, "shift_seconds")),
+        ("Cycle Left Hours", lambda row: _eld_clock_hours(row, "cycle_seconds")),
         ("Fuel %", lambda row: (row.get("location") or {}).get("fuel_level_percent")),
         ("Fuel Gallons (200 Tank)", lambda row: _estimated_fuel_gallons((row.get("location") or {}).get("fuel_level_percent"))),
         ("Fuel State", lambda row: _fuel_state_label((row.get("location") or {}).get("fuel_level_percent"), (row.get("location") or {}).get("fuel_sensor_reading"))),
@@ -301,6 +308,13 @@ def _driver_tracking_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec
         ("Roster Status", lambda row: roster(row).get("status")),
         ("Roster Duty Status", lambda row: roster(row).get("duty_status")),
         ("Vehicle Number", lambda row: row.get("number")),
+        ("HOS Status", lambda row: _eld_status(row)),
+        ("HOS Summary", lambda row: _eld_summary(row)),
+        ("HOS Duty Status", lambda row: (row.get("eld_hours") or {}).get("duty_status")),
+        ("Drive Left Hours", lambda row: _eld_clock_hours(row, "drive_seconds")),
+        ("Shift Left Hours", lambda row: _eld_clock_hours(row, "shift_seconds")),
+        ("Cycle Left Hours", lambda row: _eld_clock_hours(row, "cycle_seconds")),
+        ("Break Left Hours", lambda row: _eld_clock_hours(row, "break_seconds")),
         ("Vehicle ID", lambda row: row.get("id")),
         ("VIN", lambda row: row.get("vin")),
         ("Make", lambda row: row.get("make")),
@@ -390,6 +404,13 @@ def _vehicle_columns() -> list[ColumnSpec]:
         ("Form Count 30D", lambda row: (row.get("form_summary") or {}).get("count")),
         ("ELD Identifier", lambda row: (row.get("eld_device") or {}).get("identifier")),
         ("ELD Model", lambda row: (row.get("eld_device") or {}).get("model")),
+        ("HOS Status", lambda row: _eld_status(row)),
+        ("HOS Summary", lambda row: _eld_summary(row)),
+        ("HOS Duty Status", lambda row: (row.get("eld_hours") or {}).get("duty_status")),
+        ("Drive Left Hours", lambda row: _eld_clock_hours(row, "drive_seconds")),
+        ("Shift Left Hours", lambda row: _eld_clock_hours(row, "shift_seconds")),
+        ("Cycle Left Hours", lambda row: _eld_clock_hours(row, "cycle_seconds")),
+        ("Break Left Hours", lambda row: _eld_clock_hours(row, "break_seconds")),
     ]
 
 
@@ -550,6 +571,59 @@ def _driver_score_columns() -> list[ColumnSpec]:
         ("Hard Corners", lambda row: row.get("num_hard_corners")),
         ("Total Kilometers", lambda row: row.get("total_kilometers")),
     ]
+
+def _hos_log_columns() -> list[ColumnSpec]:
+    return [
+        ("Log ID", lambda row: row.get("id")),
+        ("Driver ID", lambda row: row.get("driver_id")),
+        ("Driver Name", lambda row: row.get("driver_name")),
+        ("Date", lambda row: row.get("date")),
+        ("Start", lambda row: row.get("start_date")),
+        ("End", lambda row: row.get("end_date")),
+        ("Signed", lambda row: "Yes" if row.get("is_signed") else "No"),
+        ("Signed At", lambda row: row.get("signed_at")),
+        ("Cycle", lambda row: row.get("cycle")),
+        ("ELD Mode", lambda row: row.get("eld_mode")),
+        ("Vehicles", lambda row: row.get("vehicle_numbers")),
+        ("Driving Hours", lambda row: _hours(row.get("driving_seconds"))),
+        ("On Duty Hours", lambda row: _hours(row.get("on_duty_seconds"))),
+        ("Off Duty Hours", lambda row: _hours(row.get("off_duty_seconds"))),
+        ("Sleeper Hours", lambda row: _hours(row.get("sleeper_seconds"))),
+        ("Violations", lambda row: row.get("violation_count")),
+        ("Form Errors", lambda row: row.get("form_error_count")),
+        ("Events", lambda row: row.get("event_count")),
+        ("Updated At", lambda row: row.get("updated_at")),
+    ]
+
+
+def _hos_summary_columns() -> list[ColumnSpec]:
+    return [
+        ("Summary ID", lambda row: row.get("id")),
+        ("Driver ID", lambda row: row.get("driver_id")),
+        ("Driver Name", lambda row: row.get("driver_name")),
+        ("Date", lambda row: row.get("date")),
+        ("Duty Status", lambda row: row.get("duty_status")),
+        ("Driving Hours", lambda row: _hours(row.get("driving_seconds"))),
+        ("On Duty Hours", lambda row: _hours(row.get("on_duty_seconds"))),
+        ("Off Duty Hours", lambda row: _hours(row.get("off_duty_seconds"))),
+        ("Sleeper Hours", lambda row: _hours(row.get("sleeper_seconds"))),
+        ("Violations", lambda row: row.get("violation_count")),
+        ("Form Errors", lambda row: row.get("form_error_count")),
+        ("Violation Detail", lambda row: _json_text(row.get("violations"))),
+    ]
+
+
+def _eld_status(vehicle: dict) -> str:
+    return str((vehicle.get("eld_hours") or {}).get("status") or "").strip()
+
+
+def _eld_summary(vehicle: dict) -> str:
+    return str((vehicle.get("eld_hours") or {}).get("summary") or "").strip()
+
+
+def _eld_clock_hours(vehicle: dict, key: str) -> float | None:
+    available = (vehicle.get("eld_hours") or {}).get("available_time") or {}
+    return _hours(available.get(key))
 
 
 def _fleet_status_rank(vehicle: dict, roster_by_name: dict[str, dict]) -> int:

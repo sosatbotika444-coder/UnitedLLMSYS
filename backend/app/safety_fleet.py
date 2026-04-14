@@ -43,7 +43,7 @@ QUEUE_META = {
 }
 QUEUE_ORDER = ["critical", "maintenance", "coaching", "compliance", "watch"]
 RISK_LEVELS = ["All", "Critical", "High", "Medium", "Low"]
-FOCUS_OPTIONS = ["All", "Faults", "Coaching", "Compliance", "Stale", "Low Fuel"]
+FOCUS_OPTIONS = ["All", "Faults", "Coaching", "Compliance", "Stale", "Low Fuel", "HOS"]
 
 
 def _utc_now() -> datetime:
@@ -136,6 +136,11 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
     performance_summary = vehicle.get("performance_summary") or {}
     inspection_summary = vehicle.get("inspection_summary") or {}
     idle_summary = vehicle.get("idle_summary") or {}
+    eld_hours = vehicle.get("eld_hours") or {}
+    eld_available = eld_hours.get("available_time") or {}
+    drive_remaining_seconds = eld_available.get("drive_seconds")
+    shift_remaining_seconds = eld_available.get("shift_seconds")
+    cycle_remaining_seconds = eld_available.get("cycle_seconds")
     driver_scorecard = vehicle.get("driver_scorecard") or {}
     location = vehicle.get("location") or {}
 
@@ -347,6 +352,34 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
                 tag="Score watch",
                 action="Review scorecard details with the driver.",
             )
+    if eld_hours.get("status") == "violation":
+        add_factor(
+            24,
+            "HOS violation pressure",
+            eld_hours.get("summary") or "Motive HOS data shows a driver clock violation or exhausted clock.",
+            queue_id="critical",
+            tag="HOS violation",
+            action="Check the driver's log and stop dispatch until HOS is cleared.",
+        )
+    elif eld_hours.get("status") == "warning":
+        add_factor(
+            12,
+            "HOS clock warning",
+            eld_hours.get("summary") or "Driver HOS clock is close to a limit.",
+            queue_id="compliance",
+            tag="HOS warning",
+            action="Confirm remaining drive, shift, and cycle time before assigning the next load.",
+        )
+    elif coverage.get("hos_clocks_live") and vehicle.get("driver") and eld_hours.get("source") == "unavailable":
+        add_factor(
+            6,
+            "No HOS clock",
+            "This assigned driver did not match a live Motive HOS clock in the latest snapshot.",
+            queue_id="compliance",
+            tag="HOS check",
+            action="Verify the driver mapping and HOS permissions in Motive.",
+        )
+
 
     if idle_hours >= 18:
         add_factor(
@@ -397,6 +430,8 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
             _clean_text(vehicle.get("fuel_type")),
             _location_label(vehicle),
             " ".join(tags),
+            _clean_text(eld_hours.get("status")),
+            _clean_text(eld_hours.get("summary")),
             " ".join(item["label"] for item in factors),
             " ".join(item["detail"] for item in factors),
             " ".join(risky_behaviors),
@@ -425,6 +460,11 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
         "severe_faults": severe_faults,
         "pending_events": pending_events,
         "performance_events": performance_events,
+        "eld_hours": eld_hours,
+        "eld_status": eld_hours.get("status"),
+        "drive_remaining_seconds": drive_remaining_seconds,
+        "shift_remaining_seconds": shift_remaining_seconds,
+        "cycle_remaining_seconds": cycle_remaining_seconds,
         "unsafe_inspections": unsafe_inspections,
         "inspection_count": inspection_count,
         "idle_hours_7d": idle_hours,
@@ -503,6 +543,7 @@ def _build_algorithm_summary(metrics: dict, queues: list[dict], coverage: dict[s
             ("performance_records_live", "safety events"),
             ("inspection_records_live", "inspections"),
             ("registration_dates_live", "registration dates"),
+            ("hos_clocks_live", "HOS clocks"),
             ("eld_records_live", "ELD device data"),
             ("driver_scores_live", "driver scorecards"),
         ]
@@ -516,6 +557,7 @@ def _build_algorithm_summary(metrics: dict, queues: list[dict], coverage: dict[s
         "focus": focus,
         "rules": [
             "Active fault codes raise maintenance priority.",
+            "HOS clock warnings and violations raise compliance or immediate action priority.",
             "Pending coaching events and risky behaviors raise driver coaching priority.",
             "Stale telemetry, missing inspections, or registration deadlines raise compliance priority.",
             "Critical fuel levels and severe issues push trucks into immediate action.",
@@ -540,6 +582,7 @@ def build_safety_fleet_snapshot(snapshot: dict) -> dict:
         "inspection_records_live": any((vehicle.get("inspection_summary") or {}).get("count") for vehicle in source_vehicles),
         "registration_dates_live": any(_clean_text(vehicle.get("registration_expiry_date")) for vehicle in source_vehicles),
         "eld_records_live": any(vehicle.get("eld_device") for vehicle in source_vehicles),
+        "hos_clocks_live": any((vehicle.get("eld_hours") or {}).get("source") not in {None, "", "unavailable", "eld_device_only"} for vehicle in source_vehicles),
         "driver_scores_live": any((vehicle.get("driver_scorecard") or {}).get("score") is not None for vehicle in source_vehicles),
     }
 
@@ -559,6 +602,7 @@ def build_safety_fleet_snapshot(snapshot: dict) -> dict:
     event_review_units = sum(1 for vehicle in vehicles if (vehicle.get("pending_events") or 0) > 0)
     average_risk_score = round(sum(vehicle.get("risk_score") or 0 for vehicle in vehicles) / len(vehicles), 1) if vehicles else 0.0
 
+    hos_warning_units = sum(1 for vehicle in vehicles if vehicle.get("eld_status") in {"warning", "violation"})
     metrics = {
         "total_units": len(vehicles),
         "critical_units": critical_units,
@@ -571,6 +615,7 @@ def build_safety_fleet_snapshot(snapshot: dict) -> dict:
         "active_fault_units": active_fault_units,
         "event_review_units": event_review_units,
         "average_risk_score": average_risk_score,
+        "hos_warning_units": hos_warning_units,
     }
 
     return {
