@@ -1838,8 +1838,6 @@ class MotiveClient:
         headers["X-Metric-Units"] = "true" if self.settings.motive_metric_units else "false"
         if self.settings.motive_user_id is not None:
             headers["X-User-Id"] = str(self.settings.motive_user_id)
-        if self.settings.motive_time_zone:
-            headers["X-Time-Zone"] = str(self.settings.motive_time_zone)
 
         payload_bytes = None
         if body is not None:
