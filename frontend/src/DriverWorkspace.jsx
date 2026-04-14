@@ -56,17 +56,29 @@ function formatDurationSeconds(value) {
   return `${hours}h ${String(minutes).padStart(2, '0')}m`;
 }
 
+function isMissingHosClock(eld) {
+  return eld?.status === 'no_hos_clock' || eld?.source === 'eld_device_only';
+}
+
+function formatHosClock(eld, key) {
+  const value = eld?.available_time?.[key];
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return isMissingHosClock(eld) ? 'No HOS' : 'Unknown';
+  }
+  return formatDurationSeconds(value);
+}
+
 function eldStatus(vehicle) {
   const eld = vehicle?.eld_hours || {};
+  if (isMissingHosClock(eld)) return 'No HOS clock';
   if (eld.status && eld.status !== 'unavailable') return eld.status;
-  if (vehicle?.eld_device) return 'device only';
   return 'Unavailable';
 }
 
 function eldTone(vehicle) {
   const status = vehicle?.eld_hours?.status;
   if (status === 'violation') return 'critical';
-  if (status === 'warning') return 'warning';
+  if (status === 'warning' || status === 'no_hos_clock' || vehicle?.eld_hours?.source === 'eld_device_only') return 'warning';
   if (status === 'ok') return 'info';
   return 'neutral';
 }
@@ -135,9 +147,8 @@ export default function DriverWorkspace({ token, user }) {
   const locationLabel = useMemo(() => vehicleLocation(vehicle), [vehicle]);
   const fuelLabel = vehicleFuel(vehicle, match);
   const eldHours = vehicle?.eld_hours || {};
-  const eldAvailable = eldHours.available_time || {};
-  const driveLeft = formatDurationSeconds(eldAvailable.drive_seconds);
-  const shiftLeft = formatDurationSeconds(eldAvailable.shift_seconds);
+  const driveLeft = formatHosClock(eldHours, 'drive_seconds');
+  const shiftLeft = formatHosClock(eldHours, 'shift_seconds');
   const fixedVehicleId = profile?.vehicleId ? String(profile.vehicleId) : '';
 
   if (loading) {
@@ -210,8 +221,8 @@ export default function DriverWorkspace({ token, user }) {
           <div><span>Duty Status</span><strong>{eldHours.duty_status || eldHours.last_hos_status?.status || 'Unknown'}</strong></div>
           <div><span>Drive Left</span><strong>{driveLeft}</strong></div>
           <div><span>Shift Left</span><strong>{shiftLeft}</strong></div>
-          <div><span>Cycle Left</span><strong>{formatDurationSeconds(eldAvailable.cycle_seconds)}</strong></div>
-          <div><span>Break</span><strong>{formatDurationSeconds(eldAvailable.break_seconds)}</strong></div>
+          <div><span>Cycle Left</span><strong>{formatHosClock(eldHours, 'cycle_seconds')}</strong></div>
+          <div><span>Break</span><strong>{formatHosClock(eldHours, 'break_seconds')}</strong></div>
           <div><span>Emergency</span><strong>Service map ready</strong></div>
         </div>
       </section>

@@ -75,12 +75,29 @@ function formatDurationSeconds(value) {
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
+function isMissingHosClock(eld) {
+  return eld?.status === "no_hos_clock" || eld?.source === "eld_device_only";
+}
+
+function formatHosClock(eld, key) {
+  const value = eld?.available_time?.[key];
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return isMissingHosClock(eld) ? "No HOS" : "Unknown";
+  }
+  return formatDurationSeconds(value);
+}
+
 function eldTone(vehicle) {
   const status = vehicle?.eld_hours?.status;
   if (status === "violation") return "stale";
-  if (status === "warning") return "moving";
+  if (status === "warning" || status === "no_hos_clock" || vehicle?.eld_hours?.source === "eld_device_only") return "warning";
   if (status === "ok") return "stopped";
   return "stale";
+}
+
+function eldStatusLabel(eld) {
+  if (isMissingHosClock(eld)) return "No HOS clock";
+  return eld?.status || "n/a";
 }
 
 function formatTimestamp(value) {
@@ -363,7 +380,6 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const historyPoints = detail?.history?.points || [];
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
   const currentEldHours = currentVehicle?.eld_hours || {};
-  const currentEldAvailable = currentEldHours.available_time || {};
   const canFocusStreet = hasCoordinates(currentVehicle);
   const selectedLocationLabel = vehicleLocationTitle(currentVehicle);
   const snapshotWarning = snapshot?.warnings?.[0] || "";
@@ -474,7 +490,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <span>{currentVehicle?.vin || "Select a vehicle to inspect VIN, fuel, faults, and history."}</span>
                 </div>
                 {currentVehicle ? <span className={`motive-status-pill ${vehicleTone(currentVehicle)}`}>{vehicleTone(currentVehicle)}</span> : null}
-                {currentVehicle ? <span className={`motive-status-pill ${eldTone(currentVehicle)}`}>HOS {currentEldHours.status || "n/a"}</span> : null}
+                {currentVehicle ? <span className={`motive-status-pill ${eldTone(currentVehicle)}`}>HOS {eldStatusLabel(currentEldHours)}</span> : null}
               </div>
 
               {currentVehicle ? (
@@ -488,9 +504,9 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <DetailCard label="Idle Time" value={`${decimalValue((currentVehicle.idle_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.idle_summary?.count)} idle events`} />
                     <DetailCard label="Drive Time" value={`${decimalValue((currentVehicle.driving_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.driving_summary?.distance_miles)} miles`} />
                     <DetailCard label="IFTA" value={`${metricValue(currentVehicle.ifta_summary?.distance_miles)} mi`} detail={`${metricValue(currentVehicle.ifta_summary?.count)} trips`} />
-                    <DetailCard label="Drive Left" value={formatDurationSeconds(currentEldAvailable.drive_seconds)} detail={currentEldHours.duty_status || "HOS drive clock"} />
-                    <DetailCard label="Shift Left" value={formatDurationSeconds(currentEldAvailable.shift_seconds)} detail="HOS shift clock" />
-                    <DetailCard label="Cycle Left" value={formatDurationSeconds(currentEldAvailable.cycle_seconds)} detail={currentEldHours.status || "HOS cycle clock"} />
+                    <DetailCard label="Drive Left" value={formatHosClock(currentEldHours, "drive_seconds")} detail={currentEldHours.duty_status || currentEldHours.missing_reason || "HOS drive clock"} />
+                    <DetailCard label="Shift Left" value={formatHosClock(currentEldHours, "shift_seconds")} detail={currentEldHours.missing_reason || "HOS shift clock"} />
+                    <DetailCard label="Cycle Left" value={formatHosClock(currentEldHours, "cycle_seconds")} detail={eldStatusLabel(currentEldHours)} />
                   </div>
 
                   <div className="motive-detail-list">
@@ -569,7 +585,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <span><strong>{vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(vehicle.location.fuel_level_percent)}%` : "-"}</strong><small>{vehicle.fuel_type || "Fuel n/a"}</small></span>
                     <span><strong>{metricValue(vehicle.fault_summary?.active_count)}</strong><small>{metricValue(vehicle.fault_summary?.count)} total</small></span>
                     <span><strong>{vehicle.utilization_summary?.utilization_percentage !== null && vehicle.utilization_summary?.utilization_percentage !== undefined ? `${decimalValue(vehicle.utilization_summary.utilization_percentage)}%` : "-"}</strong><small>{decimalValue((vehicle.idle_summary?.duration_seconds || 0) / 3600)} idle h</small></span>
-                    <span><strong>{metricValue(vehicle.driving_summary?.distance_miles)} mi</strong><small>{formatDurationSeconds(vehicle.eld_hours?.available_time?.drive_seconds)} drive left</small></span>
+                    <span><strong>{metricValue(vehicle.driving_summary?.distance_miles)} mi</strong><small>{formatHosClock(vehicle.eld_hours, "drive_seconds")} drive left</small></span>
                     <span><strong>{formatTimestamp(vehicle.location?.located_at)}</strong><small>{vehicle.is_stale ? "stale" : vehicle.is_moving ? "moving" : "stopped"}</small></span>
                   </button>
                 ))

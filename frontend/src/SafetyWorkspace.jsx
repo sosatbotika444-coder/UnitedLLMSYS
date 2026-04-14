@@ -296,6 +296,17 @@ function formatDurationSeconds(value) {
   const minutes = totalMinutes % 60;
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
+function isMissingHosClock(eld) {
+  return eld?.status === "no_hos_clock" || eld?.source === "eld_device_only";
+}
+
+function formatHosClock(value, eld) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return isMissingHosClock(eld) ? "No HOS" : "Unknown";
+  }
+  return formatDurationSeconds(value);
+}
+
 function queueTone(queueId) {
   if (queueId === "critical") return "critical";
   if (queueId === "maintenance") return "maintenance";
@@ -639,7 +650,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
         (focusFilter === "Compliance" && ((vehicle.queue_ids || []).includes("compliance") || (vehicle.unsafe_inspections || 0) > 0)) ||
         (focusFilter === "Stale" && vehicle.is_stale) ||
         (focusFilter === "Low Fuel" && vehicle.fuel_level_percent !== null && vehicle.fuel_level_percent !== undefined && vehicle.fuel_level_percent <= 25) ||
-        (focusFilter === "HOS" && ["warning", "violation"].includes(vehicle.eld_status));
+        (focusFilter === "HOS" && ["warning", "violation", "no_hos_clock"].includes(vehicle.eld_status));
       return matchesSearch && matchesRisk && matchesQueue && matchesFocus;
     });
   }, [focusFilter, queueFilter, riskFilter, search, vehicles]);
@@ -759,7 +770,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
                       <div><span>Events</span><strong>{formatCount(vehicle.pending_events)}</strong></div>
                       <div><span>Fuel</span><strong>{vehicle.fuel_level_percent !== null && vehicle.fuel_level_percent !== undefined ? `${formatDecimal(vehicle.fuel_level_percent)}%` : "-"}</strong></div>
                       <div><span>Ping</span><strong>{formatAge(vehicle.age_minutes)}</strong></div>
-                      <div><span>HOS</span><strong>{formatDurationSeconds(vehicle.drive_remaining_seconds)}</strong></div>
+                      <div><span>HOS</span><strong>{formatHosClock(vehicle.drive_remaining_seconds, vehicle.eld_hours)}</strong></div>
                     </div>
 
                     {vehicle.tags?.length ? (
@@ -801,7 +812,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
                   <SafetyStatCard label="Pending Events" value={formatCount(selectedVehicle.pending_events)} detail="Need coaching review" tone="info" />
                   <SafetyStatCard label="Fuel" value={selectedVehicle.fuel_level_percent !== null && selectedVehicle.fuel_level_percent !== undefined ? `${formatDecimal(selectedVehicle.fuel_level_percent)}%` : "-"} detail={selectedVehicle.is_moving ? "Truck moving" : selectedVehicle.is_stale ? "Telemetry stale" : "Truck stopped"} tone="neutral" />
                   <SafetyStatCard label="Ping Age" value={formatAge(selectedVehicle.age_minutes)} detail={selectedVehicle.last_location_at ? formatDateTime(selectedVehicle.last_location_at) : "No live timestamp"} tone="dark" />
-                  <SafetyStatCard label="Drive Left" value={formatDurationSeconds(selectedVehicle.drive_remaining_seconds)} detail={selectedVehicle.eld_hours?.summary || selectedVehicle.eld_status || "HOS clock"} tone={selectedVehicle.eld_status === "violation" ? "critical" : selectedVehicle.eld_status === "warning" ? "warning" : "neutral"} />
+                  <SafetyStatCard label="Drive Left" value={formatHosClock(selectedVehicle.drive_remaining_seconds, selectedVehicle.eld_hours)} detail={selectedVehicle.eld_hours?.summary || selectedVehicle.eld_status || "HOS clock"} tone={selectedVehicle.eld_status === "violation" ? "critical" : selectedVehicle.eld_status === "warning" || selectedVehicle.eld_status === "no_hos_clock" ? "warning" : "neutral"} />
                 </div>
 
                 <div className="safety-detail-list">
@@ -809,7 +820,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
                   <div><span>Location</span><strong>{selectedVehicle.location_label}</strong><small>{selectedVehicle.status}</small></div>
                   <div><span>VIN / ELD</span><strong>{selectedVehicle.vin || "Not available"}</strong><small>{selectedVehicle.eld_connected ? `ELD connected | ${selectedVehicle.eld_status || "HOS n/a"}` : selectedVehicle.eld_status || "No ELD summary"}</small></div>
                   <div><span>Registration</span><strong>{selectedVehicle.registration?.date || "Not tracked"}</strong><small>{selectedVehicle.registration?.label || "No registration status"}</small></div>
-                  <div><span>Shift / Cycle</span><strong>{formatDurationSeconds(selectedVehicle.shift_remaining_seconds)}</strong><small>{formatDurationSeconds(selectedVehicle.cycle_remaining_seconds)} cycle left</small></div>
+                  <div><span>Shift / Cycle</span><strong>{formatHosClock(selectedVehicle.shift_remaining_seconds, selectedVehicle.eld_hours)}</strong><small>{formatHosClock(selectedVehicle.cycle_remaining_seconds, selectedVehicle.eld_hours)} cycle left</small></div>
                 </div>
 
                 <section className="safety-detail-section">

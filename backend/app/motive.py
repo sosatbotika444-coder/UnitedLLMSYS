@@ -824,6 +824,20 @@ class MotiveClient:
             form_entries=form_records,
             scorecards=scorecard_records,
         )
+        hos_matched_vehicle_count = sum(
+            1
+            for item in vehicles
+            if (item.get("eld_hours") or {}).get("source") not in {None, "", "unavailable", "eld_device_only"}
+        )
+        eld_only_hos_count = sum(
+            1
+            for item in vehicles
+            if (item.get("eld_hours") or {}).get("source") == "eld_device_only"
+        )
+        if eld_only_hos_count and not hos_matched_vehicle_count and not errors.get("hos_available_time"):
+            warnings.append(
+                f"Motive returned {len(hos_available_records)} HOS available-time record(s), but none matched current trucks. ELD gateways are mapped; live HOS clocks need current Motive driver/HOS data."
+            )
 
         recent_activity = {
             "fault_codes": sort_by_recent(fault_records, "last_observed_at", "first_observed_at")[:12],
@@ -1288,9 +1302,11 @@ class MotiveClient:
                 status_label = "violation"
             elif warning_messages:
                 status_label = "warning"
+        elif source == "eld_device_only":
+            status_label = "no_hos_clock"
 
         if source == "eld_device_only":
-            summary = "ELD device mapped; HOS clock not returned."
+            summary = "Motive returned the ELD device, but no matching HOS clock for this truck or driver."
         elif status_label == "unavailable":
             summary = "No live HOS clock returned."
         elif warning_messages:
@@ -1302,6 +1318,7 @@ class MotiveClient:
             "source": source,
             "status": status_label,
             "summary": summary,
+            "missing_reason": "Motive HOS returned no matching current driver clock." if source == "eld_device_only" else "",
             "driver_id": (driver or {}).get("id") or (availability or {}).get("driver_id") or (latest_summary or {}).get("driver_id") or (latest_log or {}).get("driver_id"),
             "driver_name": first_text((driver or {}).get("full_name"), (availability or {}).get("driver_name"), (latest_summary or {}).get("driver_name"), (latest_log or {}).get("driver_name")),
             "duty_status": first_text((availability or {}).get("duty_status"), (latest_summary or {}).get("duty_status"), (driver or {}).get("duty_status")),

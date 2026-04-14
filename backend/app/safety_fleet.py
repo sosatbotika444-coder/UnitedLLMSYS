@@ -370,11 +370,11 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
             tag="HOS warning",
             action="Confirm remaining drive, shift, and cycle time before assigning the next load.",
         )
-    elif coverage.get("hos_clocks_live") and vehicle.get("driver") and eld_hours.get("source") == "unavailable":
+    elif coverage.get("hos_clocks_live") and vehicle.get("driver") and eld_hours.get("status") in {"unavailable", "no_hos_clock"}:
         add_factor(
             6,
             "No HOS clock",
-            "This assigned driver did not match a live Motive HOS clock in the latest snapshot.",
+            eld_hours.get("summary") or "This assigned driver did not match a live Motive HOS clock in the latest snapshot.",
             queue_id="compliance",
             tag="HOS check",
             action="Verify the driver mapping and HOS permissions in Motive.",

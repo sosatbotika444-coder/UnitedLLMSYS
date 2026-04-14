@@ -5954,6 +5954,11 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
   color: #1d4ed8;
 }
 
+.motive-status-pill.warning {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+
 .motive-status-pill.stale {
   background: rgba(248, 113, 113, 0.14);
   color: #b91c1c;
