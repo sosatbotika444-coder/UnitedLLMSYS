@@ -9052,7 +9052,6 @@ textarea:focus,
   padding: 0 !important;
   border-radius: 8px !important;
   box-shadow: none !important;
-  transform: none !important;
   background-image: none !important;
 }
 
@@ -9084,7 +9083,6 @@ textarea:focus,
 .safety-service-map-marker.selected {
   outline: 2px solid var(--text) !important;
   outline-offset: 2px !important;
-  transform: none !important;
 }
 
 .maplibregl-popup-content,
