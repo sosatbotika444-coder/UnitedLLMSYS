@@ -289,15 +289,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         source: STOPS_SOURCE_ID,
         filter: ["has", "point_count"],
         paint: {
-          "circle-color": [
-            "step",
-            ["get", "point_count"],
-            "#1d4ed8",
-            12,
-            "#0f766e",
-            32,
-            "#ea580c"
-          ],
+          "circle-color": "#16a34a",
           "circle-radius": [
             "step",
             ["get", "point_count"],
@@ -334,22 +326,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         source: STOPS_SOURCE_ID,
         filter: ["!", ["has", "point_count"]],
         paint: {
-          "circle-color": [
-            "case",
-            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "below"]],
-            "#16a34a",
-            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "above"]],
-            "#dc2626",
-            ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "unknown"]],
-            "#64748b",
-            ["boolean", ["get", "isStrategyStop"], false],
-            "#f59e0b",
-            ["boolean", ["get", "isBest"], false],
-            "#1d4ed8",
-            ["boolean", ["get", "isIndependent"], false],
-            "#64748b",
-            "#2563eb"
-          ],
+          "circle-color": "#16a34a",
           "circle-radius": [
             "case",
             ["boolean", ["get", "isStrategyStop"], false],

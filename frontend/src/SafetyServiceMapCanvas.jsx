@@ -103,8 +103,8 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
         language: "en-US",
         mapLibre: {
           container: containerRef.current,
-          center: hasCenterVehicle ? [centerVehicle.lon, centerVehicle.lat] : [-96, 39],
-          zoom: hasCenterVehicle ? 9 : 3,
+          center: [-96, 39],
+          zoom: 3,
         },
       });
       setMapError("");
@@ -128,7 +128,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
       }
       mapRef.current = null;
     };
-  }, [centerVehicle, hasCenterVehicle]);
+  }, []);
 
   useEffect(() => {
     const mapLibreMap = mapRef.current?.mapLibreMap;
@@ -155,7 +155,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     const bounds = new maplibregl.LngLatBounds();
 
     if (centerVehicle && hasCoordinates(centerVehicle)) {
-      const vehicleElement = createMarkerElement("vehicle", "TR", false, vehicleMarkerTitle(centerVehicle));
+      const vehicleElement = createMarkerElement("vehicle", "DR", false, vehicleMarkerTitle(centerVehicle));
       vehicleElement.addEventListener("click", () => showPopup(centerVehicle.lon, centerVehicle.lat, vehiclePopup(centerVehicle)));
       markersRef.current.push(new maplibregl.Marker({ element: vehicleElement }).setLngLat([centerVehicle.lon, centerVehicle.lat]).addTo(mapLibreMap));
       bounds.extend([centerVehicle.lon, centerVehicle.lat]);
@@ -174,8 +174,6 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
 
     if (selectedItem && hasCoordinates(selectedItem)) {
       showPopup(selectedItem.lon, selectedItem.lat, servicePopup(selectedItem));
-      mapLibreMap.easeTo({ center: [selectedItem.lon, selectedItem.lat], zoom: 11, duration: 500 });
-      return;
     }
 
     if (!bounds.isEmpty()) {

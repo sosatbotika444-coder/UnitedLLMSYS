@@ -9906,3 +9906,28 @@ body.theme-dark .driver-profile-grid strong {
     max-width: 120px;
   }
 }
+
+.marker-start,
+.marker-start.tt-marker-labeled,
+.motive-map-driver-marker,
+.motive-map-marker-moving.motive-map-driver-marker,
+.motive-map-marker-stopped.motive-map-driver-marker,
+.motive-map-marker-stale.motive-map-driver-marker,
+.safety-service-map-marker-vehicle,
+.safety-service-map-marker-vehicle.labeled {
+  background: #dc2626 !important;
+}
+
+.safety-service-map-marker-official,
+.safety-service-map-marker-emergency,
+.safety-service-map-marker-poi,
+.marker-fuel,
+.marker-fuel-best,
+.marker-fuel-independent {
+  background: #16a34a !important;
+}
+
+.marker-end,
+.marker-end.tt-marker-labeled {
+  background: #2563eb !important;
+}
