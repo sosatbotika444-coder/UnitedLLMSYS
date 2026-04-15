@@ -186,6 +186,44 @@ class SafetyShiftBriefResponse(SafetyShiftBriefBase):
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
 
+class TeamChatAuthor(BaseModel):
+    id: int
+    fullName: str = ""
+    email: str = ""
+    department: DepartmentName
+
+
+class TeamChatReplyPreview(BaseModel):
+    id: int
+    body: str = ""
+    authorName: str = ""
+    department: DepartmentName | str = "fuel"
+    createdAt: datetime | None = None
+    isDeleted: bool = False
+
+
+class TeamChatMessageCreate(BaseModel):
+    room: str = Field(default="general", min_length=1, max_length=64)
+    body: str = Field(min_length=1, max_length=4000)
+    replyToId: int | None = Field(default=None, ge=1)
+
+
+class TeamChatMessageUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class TeamChatMessageResponse(BaseModel):
+    id: int
+    room: str
+    body: str
+    author: TeamChatAuthor
+    replyTo: TeamChatReplyPreview | None = None
+    isOwn: bool = False
+    isDeleted: bool = False
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+    editedAt: datetime | None = None
+
 class LoadBase(BaseModel):
     driver: str = Field(default="", max_length=255)
     truck: str = Field(default="", max_length=64)

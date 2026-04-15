@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UnitedLaneChat from "./UnitedLaneChat";
 import SafetyServiceTools from "./SafetyServiceTools";
+import TeamChat from "./TeamChat";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
@@ -14,6 +15,7 @@ const safetyTabs = [
   { id: "emergency", label: "Emergency" },
   { id: "documents", label: "Documents" },
   { id: "notes", label: "Notes" },
+  { id: "team-chat", label: "Team Chat" },
   { id: "ai", label: "AI Chat" }
 ];
 const documentSections = [
@@ -2029,6 +2031,10 @@ export default function SafetyWorkspace({ token, user }) {
 
       <section hidden={activeTab !== "notes"}>
         <SafetyNotesPanel token={token} user={user} />
+      </section>
+
+      <section hidden={activeTab !== "team-chat"}>
+        <TeamChat token={token} user={user} active={activeTab === "team-chat"} />
       </section>
 
       <section hidden={activeTab !== "ai"}>

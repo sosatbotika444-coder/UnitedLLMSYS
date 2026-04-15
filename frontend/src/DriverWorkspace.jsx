@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import SafetyServiceTools from './SafetyServiceTools';
+import TeamChat from './TeamChat';
 
 const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
 const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production.up.railway.app/api';
@@ -7,6 +8,7 @@ const driverTabs = [
   { id: 'fuel', label: 'Fuel Route' },
   { id: 'service', label: 'Service' },
   { id: 'emergency', label: 'Emergency' },
+  { id: 'chat', label: 'Team Chat' },
   { id: 'profile', label: 'Profile' }
 ];
 
@@ -203,6 +205,10 @@ export default function DriverWorkspace({ token, user }) {
 
       <section className='workspace-tab-panel' hidden={activeTab !== 'emergency'}>
         <SafetyServiceTools token={token} mode='emergency' active={activeTab === 'emergency'} fixedVehicleId={fixedVehicleId} lockedVehicle />
+      </section>
+
+      <section className='workspace-tab-panel' hidden={activeTab !== 'chat'}>
+        <TeamChat token={token} user={user} active={activeTab === 'chat'} />
       </section>
 
       <section className='panel driver-profile-panel workspace-tab-panel' hidden={activeTab !== 'profile'}>

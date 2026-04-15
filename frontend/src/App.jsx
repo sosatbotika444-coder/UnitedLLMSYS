@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
+import TeamChat from "./TeamChat";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
@@ -24,6 +25,7 @@ const workspaceTabs = [
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
   { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
+  { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
   { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
 ];
 const themeOptions = [
@@ -51,6 +53,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Loads",
     subtitle: "Edit and save load rows."
+  },
+  chat: {
+    eyebrow: "All Workspaces",
+    title: "Team Chat",
+    subtitle: "Shared communication for Fuel Service, Safety, and Driver accounts."
   },
   settings: {
     eyebrow: "Fuel Service",
@@ -1081,6 +1088,10 @@ export default function App() {
                 </div>
               </div>
             </section>
+          </section>
+
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "chat"}>
+            <TeamChat token={token} user={user} active={activeWorkspace === "chat"} />
           </section>
 
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "settings"}>

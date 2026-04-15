@@ -10,6 +10,7 @@ from app.database import Base, engine, ensure_runtime_schema
 from app.motive import motive_snapshot_runtime_status, start_motive_snapshot_refresh_worker, stop_motive_snapshot_refresh_worker
 from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
 from app.routes.auth import router as auth_router
+from app.routes.chat import router as chat_router
 from app.routes.driver import router as driver_router
 from app.routes.loads import router as loads_router
 from app.routes.motive import router as motive_router
@@ -49,6 +50,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
 app.include_router(driver_router, prefix="/api")
 app.include_router(loads_router, prefix="/api")
 app.include_router(navigation_router, prefix="/api")
