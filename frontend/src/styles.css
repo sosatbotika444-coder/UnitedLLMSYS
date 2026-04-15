@@ -11651,3 +11651,193 @@ body.theme-dark .mobile-more-sheet button,
 body.theme-dark .mobile-quick-card {
   background: rgba(30, 41, 59, 0.82);
 }
+.install-app-widget {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 90;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.install-app-widget > * {
+  pointer-events: auto;
+}
+
+.install-app-button {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+  font: inherit;
+  cursor: pointer;
+}
+
+.install-app-button span {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.install-app-button strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.install-app-button:hover {
+  transform: translateY(-1px);
+  background: #14532d;
+}
+
+.install-app-help {
+  width: min(318px, calc(100vw - 28px));
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #0f172a;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.2);
+}
+
+.install-app-help div {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.install-app-help span {
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.install-app-help strong {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.install-app-help p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.install-app-help button {
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.install-app-widget.mobile {
+  right: 12px;
+  bottom: calc(86px + env(safe-area-inset-bottom));
+}
+
+.install-app-widget.mobile .install-app-button {
+  min-height: 42px;
+  padding: 8px 11px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+@media (max-width: 760px) {
+  .install-app-widget {
+    right: 10px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .install-app-widget.mobile {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  .install-app-help {
+    width: min(310px, calc(100vw - 20px));
+  }
+}
+
+body.theme-dark .install-app-help {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.98);
+  color: #f8fafc;
+}
+
+body.theme-dark .install-app-help p {
+  color: #cbd5e1;
+}
+
+body.theme-dark .install-app-help button {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(30, 41, 59, 0.9);
+  color: #f8fafc;
+}
+
+.mobile-workspace-top-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.mobile-workspace-top-actions .install-app-widget.mobile {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  z-index: 1;
+  display: block;
+}
+
+.mobile-workspace-top-actions .install-app-button {
+  min-height: 36px;
+  padding: 7px 9px;
+  border-color: rgba(20, 83, 45, 0.24);
+  background: #14532d;
+  box-shadow: none;
+}
+
+.mobile-workspace-top-actions .install-app-button span {
+  font-size: 10px;
+}
+
+.mobile-workspace-top-actions .install-app-button strong {
+  font-size: 11px;
+}
+
+.mobile-workspace-top-actions .install-app-help {
+  position: fixed;
+  top: calc(62px + env(safe-area-inset-top));
+  right: 10px;
+}
+
+@media (max-width: 390px) {
+  .mobile-workspace-top-actions {
+    gap: 5px;
+  }
+
+  .mobile-workspace-top-actions .install-app-button {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 6px 8px;
+  }
+
+  .mobile-workspace-top-actions .install-app-button strong {
+    display: none;
+  }
+}

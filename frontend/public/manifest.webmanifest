@@ -1,0 +1,50 @@
+{
+  "id": "/?source=pwa",
+  "name": "United Lane Operations",
+  "short_name": "United Lane",
+  "description": "United Lane dispatch, safety, driver support, routing, service, and team chat workspace.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#eef2f7",
+  "theme_color": "#07111f",
+  "categories": ["business", "productivity", "navigation"],
+  "icons": [
+    {
+      "src": "/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Driver Workspace",
+      "short_name": "Driver",
+      "description": "Open driver fuel, service, emergency, and team chat tools.",
+      "url": "/?workspace=driver",
+      "icons": [{ "src": "/pwa-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Team Chat",
+      "short_name": "Chat",
+      "description": "Open the United Lane shared operations chat.",
+      "url": "/?workspace=chat",
+      "icons": [{ "src": "/pwa-icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

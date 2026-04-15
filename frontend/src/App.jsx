@@ -181,6 +181,78 @@ function DepartmentCard({ option, active, onSelect }) {
   );
 }
 
+
+function InstallAppButton({ mobile = false }) {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+    setInstalled(Boolean(isStandalone));
+
+    function handleBeforeInstallPrompt(event) {
+      event.preventDefault();
+      setDeferredPrompt(event);
+      setInstalled(false);
+    }
+
+    function handleAppInstalled() {
+      setInstalled(true);
+      setDeferredPrompt(null);
+      setHelpOpen(false);
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice.catch(() => null);
+      setDeferredPrompt(null);
+      if (choice?.outcome === "accepted") {
+        setInstalled(true);
+      }
+      return;
+    }
+    setHelpOpen((open) => !open);
+  }
+
+  if (installed) {
+    return null;
+  }
+
+  const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent || "");
+
+  return (
+    <div className={`install-app-widget ${mobile ? "mobile" : ""}`}>
+      {helpOpen ? (
+        <section className="install-app-help">
+          <div>
+            <span>Install App</span>
+            <strong>United Lane on your phone</strong>
+          </div>
+          {isIos ? (
+            <p>Open this site in Safari, tap Share, then tap Add to Home Screen.</p>
+          ) : (
+            <p>Use the browser Install option or Add to Home Screen. Chrome and Edge may show the install prompt automatically.</p>
+          )}
+          <button type="button" onClick={() => setHelpOpen(false)}>Close</button>
+        </section>
+      ) : null}
+      <button className="install-app-button" type="button" onClick={installApp}>
+        <span>Install</span>
+        <strong>App</strong>
+      </button>
+    </div>
+  );
+}
 function MobileBottomNav({ items, activeId, onSelect }) {
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile workspace navigation">
@@ -205,7 +277,10 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
             <strong>{title}</strong>
           </div>
         </div>
-        <button className="mobile-logout-button" type="button" onClick={onLogout}>Logout</button>
+        <div className="mobile-workspace-top-actions">
+          <InstallAppButton mobile />
+          <button className="mobile-logout-button" type="button" onClick={onLogout}>Logout</button>
+        </div>
       </header>
 
       <main className="mobile-workspace-main">
@@ -863,6 +938,7 @@ export default function App() {
           </section>
         </main>
 
+        <InstallAppButton />
         {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );
@@ -949,6 +1025,7 @@ export default function App() {
           </section>
         </main>
 
+        <InstallAppButton />
         {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );
@@ -1034,6 +1111,7 @@ export default function App() {
           </section>
         </main>
 
+        <InstallAppButton />
         {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );
@@ -1478,6 +1556,7 @@ export default function App() {
         </section>
       </main>
 
+      <InstallAppButton />
       {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
     </div>
   );
