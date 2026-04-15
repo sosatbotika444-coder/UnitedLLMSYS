@@ -29,6 +29,17 @@ const workspaceTabs = [
   { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
   { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
 ];
+const mobileFuelTabs = [
+  { id: "command", label: "Home", icon: "HM" },
+  { id: "loads", label: "Loads", icon: "LD" },
+  { id: "routing", label: "Route", icon: "RT" },
+  { id: "chat", label: "Chat", icon: "CH" },
+  { id: "more", label: "More", icon: "MR" }
+];
+const mobileFuelMoreTabs = [
+  { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
+  { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "ST" }
+];
 const themeOptions = [
   { id: "light", label: "Luxe Light", detail: "Bright executive workspace", accent: "Ivory, blue, emerald" },
   { id: "dark", label: "Night Ops", detail: "Low-glare premium console", accent: "Graphite, cyan, lime" },
@@ -183,7 +194,7 @@ function MobileBottomNav({ items, activeId, onSelect }) {
   );
 }
 
-function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, message, error, onLogout, action, navItems = [], activeId = "", onSelect, children }) {
+function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, message, error, onLogout, action, navItems = [], activeId = "", onSelect, morePanel = null, children }) {
   return (
     <div className="mobile-workspace-shell">
       <header className="mobile-workspace-topbar">
@@ -198,7 +209,7 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
       </header>
 
       <main className="mobile-workspace-main">
-        <section className="mobile-workspace-hero">
+        <section className="mobile-workspace-hero mobile-workspace-hero-compact">
           <div>
             <span>{currentDate}</span>
             <h1>{title}</h1>
@@ -217,11 +228,11 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
         {children}
       </main>
 
+      {morePanel}
       {navItems.length ? <MobileBottomNav items={navItems} activeId={activeId} onSelect={onSelect} /> : null}
     </div>
   );
 }
-
 function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
   const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
 
@@ -296,7 +307,32 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
   );
 }
 
-function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, createRow, deleteRow, saveRow, updateLocalRow, theme, setTheme }) {
+
+function MobileQuickActions({ onSelect, onCreateLoad }) {
+  const actions = [
+    { id: "loads", label: "Loads", detail: "Edit dispatch cards", tone: "green" },
+    { id: "routing", label: "Route", detail: "Build fuel plan", tone: "blue" },
+    { id: "chat", label: "Chat", detail: "Message the team", tone: "dark" },
+    { id: "tracking", label: "Tracking", detail: "Live fleet view", tone: "amber" }
+  ];
+
+  return (
+    <section className="mobile-quick-actions">
+      <button type="button" className="mobile-quick-create" onClick={onCreateLoad}>
+        <span>New</span>
+        <strong>Create Load</strong>
+        <small>Start dispatch work</small>
+      </button>
+      {actions.map((action) => (
+        <button key={action.id} type="button" className={`mobile-quick-card mobile-quick-${action.tone}`} onClick={() => onSelect(action.id)}>
+          <span>{action.label}</span>
+          <strong>{action.detail}</strong>
+        </button>
+      ))}
+    </section>
+  );
+}
+function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, createRow, deleteRow, saveRow, updateLocalRow, theme, setTheme, onSelectWorkspace }) {
   if (activeWorkspace === "tracking") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
   }
@@ -660,6 +696,20 @@ export default function App() {
     setActiveWorkspace("command");
   }
 
+
+  function handleMobileFuelNav(tabId) {
+    if (tabId === "more") {
+      setMobileMoreOpen((open) => !open);
+      return;
+    }
+    setMobileMoreOpen(false);
+    setActiveWorkspace(tabId);
+  }
+
+  function openMobileWorkspace(tabId) {
+    setMobileMoreOpen(false);
+    setActiveWorkspace(tabId);
+  }
   function openSitePanel(panel) {
     setSitePanel(panel);
   }
@@ -1001,9 +1051,19 @@ export default function App() {
         message={message}
         error={error}
         onLogout={logout}
-        navItems={workspaceTabs.map((tab) => ({ ...tab, mobileLabel: tab.id === "command" ? "Home" : tab.label }))}
-        activeId={activeWorkspace}
-        onSelect={setActiveWorkspace}
+        navItems={mobileFuelTabs}
+        activeId={mobileMoreOpen || mobileFuelMoreTabs.some((tab) => tab.id === activeWorkspace) ? "more" : activeWorkspace}
+        onSelect={handleMobileFuelNav}
+        morePanel={mobileMoreOpen ? (
+          <section className="mobile-more-sheet">
+            <div><span>More Tools</span><strong>Fuel Service</strong></div>
+            {mobileFuelMoreTabs.map((tab) => (
+              <button key={tab.id} type="button" className={activeWorkspace === tab.id ? "active" : ""} onClick={() => openMobileWorkspace(tab.id)}>
+                <span>{tab.icon}</span><div><strong>{tab.label}</strong><small>{tab.detail}</small></div>
+              </button>
+            ))}
+          </section>
+        ) : null}
         action={activeWorkspace === "loads" ? <button className="primary-button" type="button" onClick={createRow}>New Load</button> : null}
       >
         <MobileFuelWorkspaceContent
@@ -1026,6 +1086,7 @@ export default function App() {
           updateLocalRow={updateLocalRow}
           theme={theme}
           setTheme={setTheme}
+          onSelectWorkspace={openMobileWorkspace}
         />
       </MobileWorkspaceShell>
     );

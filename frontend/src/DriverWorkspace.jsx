@@ -177,6 +177,14 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
           <article><span>Drive</span><strong>{driveLeft}</strong><small>{eldHours.duty_status || 'HOS drive clock'}</small></article>
           <article><span>Shift</span><strong>{shiftLeft}</strong><small>{eldStatus(vehicle)}</small></article>
         </section>
+      ) : null}
+
+      {mobile ? (
+        <section className='driver-mobile-action-rail'>
+          <button type='button' onClick={() => setActiveTab('emergency')}><span>SOS</span><strong>Emergency</strong></button>
+          <button type='button' onClick={() => setActiveTab('service')}><span>Fix</span><strong>Service</strong></button>
+          <button type='button' onClick={() => setActiveTab('chat')}><span>Team</span><strong>Chat</strong></button>
+        </section>
       ) : (
         <section className='safety-fleet-metrics driver-metric-grid'>
           <DriverMetric label='Truck' value={truckNumber} detail={profile?.driverName || user?.full_name || 'Driver'} tone='info' />
