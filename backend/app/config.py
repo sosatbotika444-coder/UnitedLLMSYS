@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     openrouter_chat_max_output_tokens: int = 300
     openrouter_app_name: str = "UnitedLLMSYS"
     openrouter_app_url: str = "http://localhost:8000"
+    route_guidance_ai_enabled: bool = False
+    route_guidance_ai_timeout_seconds: float = 4.0
     motive_api_base_url: str = "https://api.gomotive.com"
     motive_oauth_base_url: str = "https://gomotive.com"
     motive_api_key: str = ""

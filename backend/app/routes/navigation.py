@@ -81,6 +81,10 @@ FUEL_TIME_VALUE_PER_HOUR = 75.0
 FUEL_DETOUR_PRICE_SPREAD_GALLONS = 50.0
 FUEL_STOP_SERVICE_SECONDS = 10 * 60
 MAX_SMART_FUEL_STOPS = 3
+MAX_STRATEGY_CANDIDATES = 40
+AUDIT_ROUTE_STOP_LIMIT = 30
+STRATEGY_ROUTE_BANDS = 8
+STRATEGY_BAND_KEEP = 3
 FUEL_SAFETY_BUFFER_RATIO = 0.05
 FUEL_SAFETY_BUFFER_MIN_MILES = 10.0
 FUEL_SAFETY_BUFFER_MAX_MILES = 35.0
@@ -606,6 +610,7 @@ def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSugg
     return suggestions
 
 
+@lru_cache(maxsize=512)
 def geocode_address(query: str) -> GeocodedPoint:
     encoded_query = quote(query)
     params = urlencode({"key": settings.tomtom_api_key, "limit": 1})
@@ -627,8 +632,9 @@ def build_station_map_link(origin: GeocodedPoint, stop: FuelStop) -> str:
     return f"https://www.google.com/maps/dir/?api=1&origin={quote(origin.label)}&destination={stop.lat},{stop.lon}&travelmode=driving"
 
 
-def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: str):
-    route_points = f"{origin.lat},{origin.lon}:{destination.lat},{destination.lon}"
+@lru_cache(maxsize=256)
+def get_routes_cached(origin_lat: float, origin_lon: float, destination_lat: float, destination_lon: float, vehicle_type: str):
+    route_points = f"{origin_lat},{origin_lon}:{destination_lat},{destination_lon}"
     params = urlencode({
         "key": settings.tomtom_api_key,
         "maxAlternatives": 2,
@@ -637,6 +643,16 @@ def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: 
         "travelMode": "truck" if vehicle_type.lower() == "truck" else "car",
     })
     return http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points}/json?{params}").get("routes", [])
+
+
+def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: str):
+    return get_routes_cached(
+        round(float(origin.lat), 5),
+        round(float(origin.lon), 5),
+        round(float(destination.lat), 5),
+        round(float(destination.lon), 5),
+        vehicle_type.lower(),
+    )
 
 
 def to_route_points(route: dict, max_points: int = 220) -> list[RoutePoint]:
@@ -656,7 +672,7 @@ def to_route_points(route: dict, max_points: int = 220) -> list[RoutePoint]:
 def build_route_station_context(index: int, route: dict, fuel_type: str) -> RouteStationContext:
     summary = route.get("summary", {})
     route_points = to_route_points(route)
-    routing_points = to_route_points(route, max_points=700)
+    routing_points = to_route_points(route, max_points=360)
     return RouteStationContext(
         index=index,
         summary=summary,
@@ -991,6 +1007,59 @@ def priced_route_stops(route: RouteOption, route_miles: float) -> list[FuelStop]
             by_id[key] = stop
     return sorted(by_id.values(), key=lambda item: (stop_route_miles(item) or 0, stop_choice_key(item, stop_route_miles(item) or 0)))
 
+def strategy_candidate_stops(
+    stops: list[FuelStop],
+    route_miles: float,
+    price_target: float | None,
+    current_fuel: float,
+    tank_capacity: float,
+    mpg: float,
+) -> list[FuelStop]:
+    if len(stops) <= MAX_STRATEGY_CANDIDATES:
+        return stops
+
+    selected: list[FuelStop] = []
+    seen: set[str] = set()
+
+    def add(stop: FuelStop):
+        key = stop.id or f"{stop.lat},{stop.lon}"
+        if key in seen:
+            return
+        seen.add(key)
+        selected.append(stop)
+
+    for stop in stops[:8]:
+        add(stop)
+
+    band_size = max(route_miles / STRATEGY_ROUTE_BANDS, 1.0)
+    for band_index in range(STRATEGY_ROUTE_BANDS):
+        band_start = band_index * band_size
+        band_end = route_miles + 1 if band_index == STRATEGY_ROUTE_BANDS - 1 else (band_index + 1) * band_size
+        band_stops = [
+            stop for stop in stops
+            if band_start <= (stop_route_miles(stop) or 0) < band_end
+        ]
+        for stop in sorted(band_stops, key=lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))[:STRATEGY_BAND_KEEP]:
+            add(stop)
+
+    full_range_miles = tank_capacity * mpg
+    target_miles = current_fuel * mpg
+    while target_miles < route_miles + full_range_miles:
+        for stop in sorted(stops, key=lambda item: abs((stop_route_miles(item) or 0) - target_miles))[:4]:
+            add(stop)
+        target_miles += max(full_range_miles * 0.85, 1.0)
+
+    for stop in sorted(stops, key=lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))[:16]:
+        add(stop)
+
+    if price_target is not None:
+        for stop in sorted(stops, key=lambda item: (price_target_overage(stop_auto_diesel_price(item), price_target), stop_choice_key(item, stop_route_miles(item) or 0, mpg)))[:16]:
+            add(stop)
+
+    for stop in stops[-4:]:
+        add(stop)
+
+    return sorted(selected[:MAX_STRATEGY_CANDIDATES], key=lambda item: stop_route_miles(item) or 0)
 
 def strategy_stop_sequences(stops: list[FuelStop]):
     max_count = min(MAX_SMART_FUEL_STOPS, len(stops))
@@ -1231,6 +1300,7 @@ def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest
         )
 
     stops = priced_route_stops(route, route_miles)
+    stops = strategy_candidate_stops(stops, route_miles, price_target, current_fuel, tank_capacity, mpg)
     if not stops:
         return FuelStrategy(status="unreachable", warnings=warnings + ["No published Auto Diesel stops were found on this route."], **base)
 
@@ -1337,7 +1407,7 @@ def save_route_audit(
             points=[point_payload(point) for point in route.points],
         ))
 
-        for stop_rank, stop in enumerate(route.fuel_stops, start=1):
+        for stop_rank, stop in enumerate(route.fuel_stops[:AUDIT_ROUTE_STOP_LIMIT], start=1):
             db.add(RoutingFuelStop(
                 routing_request_id=request_record.id,
                 route_id=route.id,
@@ -1432,19 +1502,24 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     if not raw_routes:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No route alternatives found")
 
-    route_contexts = [
-        build_route_station_context(index, route, payload.fuel_type)
-        for index, route in enumerate(raw_routes[:3], start=1)
-    ]
+    route_items = list(enumerate(raw_routes[:3], start=1))
+    with ThreadPoolExecutor(max_workers=min(3, len(route_items) or 1)) as executor:
+        route_contexts = list(executor.map(lambda item: build_route_station_context(item[0], item[1], payload.fuel_type), route_items))
     refresh_shortlisted_live_prices(
         [item for context in route_contexts for item in context.shortlisted_stations],
         payload.fuel_type,
     )
 
+    def refine_context_detours(context: RouteStationContext):
+        refine_shortlisted_detours(context.shortlisted_stations, context.routing_points, payload.vehicle_type)
+        return context
+
+    with ThreadPoolExecutor(max_workers=min(3, len(route_contexts) or 1)) as executor:
+        route_contexts = list(executor.map(refine_context_detours, route_contexts))
+
     routes: list[RouteOption] = []
     combined_stops: dict[str, FuelStop] = {}
     for context in route_contexts:
-        refine_shortlisted_detours(context.shortlisted_stations, context.routing_points, payload.vehicle_type)
         fuel_stops = sort_stops(finalize_shortlisted_official_stations(context.shortlisted_stations), payload.sort_by)
         for stop in fuel_stops:
             merge_stop(combined_stops, stop)

@@ -97,17 +97,20 @@ Response rules:
 """
 
 
-def get_openrouter_client(api_key: str | None = None):
+def get_openrouter_client(api_key: str | None = None, timeout_seconds: float | None = None):
     resolved_key = api_key or DEFAULT_OPENROUTER_API_KEY
     if not resolved_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
     if OpenAI is None:
         raise RuntimeError("openai package is not installed")
 
-    return OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=resolved_key,
-    )
+    client_options = {
+        "base_url": OPENROUTER_BASE_URL,
+        "api_key": resolved_key,
+    }
+    if timeout_seconds is not None:
+        client_options["timeout"] = timeout_seconds
+    return OpenAI(**client_options)
 
 
 def build_station_price_prompt(
@@ -341,8 +344,11 @@ def generate_unitedlane_route_guidance(
         detour_time_minutes=detour_time_minutes,
         map_link=map_link,
     )
+    if not settings.route_guidance_ai_enabled:
+        return fallback
+
     try:
-        client = get_openrouter_client(api_key=api_key)
+        client = get_openrouter_client(api_key=api_key, timeout_seconds=settings.route_guidance_ai_timeout_seconds)
         response = client.chat.completions.create(
             model=model,
             messages=build_unitedlane_route_messages(

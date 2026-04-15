@@ -38,9 +38,11 @@ CATALOG_MAX_AGE = timedelta(days=7)
 CATALOG_WORKERS = 18
 DEFAULT_ROUTE_CORRIDOR_MILES = 35.0
 SHORTLISTED_ROUTE_STATION_LIMIT = 80
-ROUTE_REFINE_LIMIT = 28
+ROUTE_REFINE_LIMIT = 12
 LIVE_PRICE_REFRESH_WORKERS = 12
-ROUTE_REFINE_WORKERS = 8
+LIVE_PRICE_ROUTE_ENQUEUE_LIMIT = 48
+ROUTE_REFINE_WORKERS = 4
+ROUTE_DETOUR_TIMEOUT_SECONDS = 6.0
 EARTH_RADIUS_M = 6371000.0
 CATALOG_PATH = Path(__file__).resolve().parent / "data" / "official_station_catalog.json"
 LIVE_PRICE_CACHE_VERSION = 1
@@ -67,20 +69,19 @@ LIVE_PRICE_RUNTIME = {
 }
 ShortlistedOfficialStation = tuple[FuelStop, dict, int]
 
-def safe_http_request(url: str, headers: dict | None = None) -> str | None:
-    #here is main problem where can be srtuted are all other continiuds
+def safe_http_request(url: str, headers: dict | None = None, timeout_seconds: float = 30.0) -> str | None:
     request = Request(url, headers=headers or OFFICIAL_SITE_HEADERS)
     try:
-        with urlopen(request, timeout=30, context=ssl_context) as response:
+        with urlopen(request, timeout=timeout_seconds, context=ssl_context) as response:
             return response.read().decode("utf-8", errors="replace")
     except Exception:
         return None
 
 
 
-def http_json(url: str, headers: dict | None = None):
+def http_json(url: str, headers: dict | None = None, timeout_seconds: float = 30.0):
     request = Request(url, headers=headers or OFFICIAL_SITE_HEADERS)
-    with urlopen(request, timeout=30, context=ssl_context) as response:
+    with urlopen(request, timeout=timeout_seconds, context=ssl_context) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
@@ -1051,6 +1052,7 @@ def refresh_shortlisted_live_prices(
         persist_live_price_cache()
         return
 
+    enqueued_for_route = 0
     for task_key, group in grouped.items():
         cached_entry = get_live_price_cache_entry(task_key)
         if cached_entry and is_live_price_entry_usable(cached_entry):
@@ -1058,7 +1060,10 @@ def refresh_shortlisted_live_prices(
                 apply_cached_live_price_entry(stop, cached_entry, fuel_type)
             if is_live_price_entry_fresh(cached_entry):
                 continue
-        enqueue_live_price_refresh(task_key, group[0][1])
+        if enqueued_for_route >= LIVE_PRICE_ROUTE_ENQUEUE_LIMIT:
+            continue
+        if enqueue_live_price_refresh(task_key, group[0][1]):
+            enqueued_for_route += 1
 
 
 def refine_detour(stop: FuelStop, route_points: list[RoutePoint], nearest_index: int, vehicle_type: str):
@@ -1073,7 +1078,7 @@ def refine_detour(stop: FuelStop, route_points: list[RoutePoint], nearest_index:
         "travelMode": "truck" if vehicle_type.lower() == "truck" else "car",
     })
     try:
-        data = http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points_string}/json?{params}")
+        data = http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points_string}/json?{params}", timeout_seconds=ROUTE_DETOUR_TIMEOUT_SECONDS)
     except Exception:
         return
     routes = data.get("routes") or []
