@@ -37,7 +37,7 @@ CATALOG_VERSION = 1
 CATALOG_MAX_AGE = timedelta(days=7)
 CATALOG_WORKERS = 18
 DEFAULT_ROUTE_CORRIDOR_MILES = 35.0
-SHORTLISTED_ROUTE_STATION_LIMIT = 80
+SHORTLISTED_ROUTE_STATION_LIMIT = None
 ROUTE_REFINE_LIMIT = 12
 LIVE_PRICE_REFRESH_WORKERS = 12
 LIVE_PRICE_ROUTE_ENQUEUE_LIMIT = 48
@@ -1154,6 +1154,8 @@ def shortlist_official_stations_along_route(route_points: list[RoutePoint], fuel
         candidates.append((stop, record, nearest_index))
 
     candidates.sort(key=lambda item: (item[0].off_route_miles or 9999, item[0].origin_miles or 9999, item[0].name.lower()))
+    if SHORTLISTED_ROUTE_STATION_LIMIT is None:
+        return candidates
     return candidates[:SHORTLISTED_ROUTE_STATION_LIMIT]
 
 
