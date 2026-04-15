@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIsMobileViewport } from "./useViewportMode";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const MESSAGE_LIMIT = 120;
@@ -136,7 +137,7 @@ function TeamChatMessage({ message, replyCount, highlighted, canModerate, onRepl
   );
 }
 
-export default function TeamChat({ token, user, active = true, room = "general" }) {
+export default function TeamChat({ token, user, active = true, room = "general", mobile = false }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -149,10 +150,13 @@ export default function TeamChat({ token, user, active = true, room = "general" 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [highlightedId, setHighlightedId] = useState(null);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const messageListRef = useRef(null);
   const lastMessageIdRef = useRef(0);
   const requestInFlightRef = useRef(false);
   const shouldStickToBottomRef = useRef(true);
+  const isViewportMobile = useIsMobileViewport();
+  const mobileMode = mobile || isViewportMobile;
 
   const loadMessages = useCallback(
     async ({ afterId = 0, mode = "initial" } = {}) => {
@@ -341,6 +345,82 @@ export default function TeamChat({ token, user, active = true, room = "general" 
     return <div className="notice error inline-notice">Sign in to use Team Chat.</div>;
   }
 
+  if (mobileMode) {
+    return (
+      <section className="team-chat-panel team-chat-mobile-panel">
+        <header className="team-chat-mobile-header">
+          <div>
+            <span>General Channel</span>
+            <h2>Team Chat</h2>
+            <p>{visibleMessageCount} visible messages</p>
+          </div>
+          <button type="button" onClick={() => setMobileToolsOpen((open) => !open)}>{mobileToolsOpen ? "Close" : "Filters"}</button>
+        </header>
+
+        {mobileToolsOpen ? (
+          <section className="team-chat-mobile-tools">
+            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search messages" />
+            <div className="team-chat-filter-row">
+              {departmentFilters.map((filter) => (
+                <button key={filter.id} type="button" className={departmentFilter === filter.id ? "active" : ""} onClick={() => setDepartmentFilter(filter.id)}>
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <div className="team-chat-mobile-people">
+              {participants.slice(0, 8).map((person) => (
+                <span key={person.id}><b>{authorInitials(person)}</b>{person.fullName || "Unknown"}</span>
+              ))}
+            </div>
+            <button type="button" className="secondary-button" onClick={() => loadMessages({ mode: "manual" })} disabled={refreshing || loading}>{refreshing ? "Refreshing..." : "Refresh"}</button>
+          </section>
+        ) : null}
+
+        {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+        <div className="team-chat-mobile-log" ref={messageListRef} onScroll={handleListScroll}>
+          {loading ? <div className="team-chat-empty">Loading Team Chat...</div> : null}
+          {!loading && !filteredMessages.length ? (
+            <div className="team-chat-empty"><strong>No messages found.</strong><span>Start the shared channel or clear filters.</span></div>
+          ) : null}
+          {filteredMessages.map((message) => (
+            <TeamChatMessage
+              key={message.id}
+              message={message}
+              replyCount={replyCounts.get(message.id) || 0}
+              highlighted={highlightedId === message.id}
+              canModerate={user?.department === "safety"}
+              onReply={setReplyTo}
+              onEdit={startEdit}
+              onDelete={deleteMessage}
+              onJumpToReply={jumpToReply}
+            />
+          ))}
+        </div>
+
+        {editingId ? (
+          <form className="team-chat-mobile-composer editing" onSubmit={saveEdit}>
+            <div className="team-chat-composer-context"><strong>Editing message</strong><button type="button" onClick={() => { setEditingId(null); setEditDraft(""); }}>Cancel</button></div>
+            <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={2} maxLength={4000} />
+            <button className="primary-button" type="submit" disabled={sending || !editDraft.trim()}>{sending ? "Saving..." : "Save"}</button>
+          </form>
+        ) : (
+          <form className="team-chat-mobile-composer" onSubmit={sendMessage}>
+            {replyTo ? (
+              <div className="team-chat-composer-context">
+                <div><strong>Replying</strong><span>{shortMessage(replyTo.body, 90)}</span></div>
+                <button type="button" onClick={() => setReplyTo(null)}>Cancel</button>
+              </div>
+            ) : null}
+            <div className="team-chat-mobile-inputbar">
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={4000} placeholder="Message everyone..." />
+              <button className="primary-button" type="submit" disabled={!canSend}>{sending ? "..." : "Send"}</button>
+            </div>
+          </form>
+        )}
+      </section>
+    );
+  }
   return (
     <section className="team-chat-panel">
       <div className="team-chat-hero">

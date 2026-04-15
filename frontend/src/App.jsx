@@ -3,6 +3,7 @@ import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
+import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
@@ -169,7 +170,203 @@ function DepartmentCard({ option, active, onSelect }) {
   );
 }
 
+function MobileBottomNav({ items, activeId, onSelect }) {
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Mobile workspace navigation">
+      {items.map((item) => (
+        <button key={item.id} type="button" className={activeId === item.id ? "active" : ""} onClick={() => onSelect(item.id)}>
+          <span>{item.icon || item.label.slice(0, 2).toUpperCase()}</span>
+          <strong>{item.mobileLabel || item.label}</strong>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, message, error, onLogout, action, navItems = [], activeId = "", onSelect, children }) {
+  return (
+    <div className="mobile-workspace-shell">
+      <header className="mobile-workspace-topbar">
+        <div className="mobile-workspace-brandline">
+          <UnitedLaneMark className="mobile-workspace-mark" />
+          <div>
+            <span>{kicker}</span>
+            <strong>{title}</strong>
+          </div>
+        </div>
+        <button className="mobile-logout-button" type="button" onClick={onLogout}>Logout</button>
+      </header>
+
+      <main className="mobile-workspace-main">
+        <section className="mobile-workspace-hero">
+          <div>
+            <span>{currentDate}</span>
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
+          </div>
+          <article>
+            <span>{user?.department || "team"}</span>
+            <strong>{user?.full_name || "Account"}</strong>
+          </article>
+        </section>
+
+        {action ? <div className="mobile-primary-action">{action}</div> : null}
+        {message ? <div className="notice success inline-notice">{message}</div> : null}
+        {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+        {children}
+      </main>
+
+      {navItems.length ? <MobileBottomNav items={navItems} activeId={activeId} onSelect={onSelect} /> : null}
+    </div>
+  );
+}
+
+function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
+  const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+
+  return (
+    <article className="mobile-load-card">
+      <header>
+        <div>
+          <span>Truck {row.truck || "-"}</span>
+          <strong>{row.driver || "Unassigned driver"}</strong>
+        </div>
+        <select
+          className={`status-select ${getStatusTone(row.status)}`}
+          value={row.status}
+          onChange={async (event) => {
+            const value = event.target.value;
+            onUpdate(row.id, "status", value);
+            await onSave({ ...row, status: value });
+          }}
+        >
+          {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+        </select>
+      </header>
+
+      <div className="mobile-load-fields">
+        <label>Driver<input value={row.driver} onChange={(event) => onUpdate(row.id, "driver", event.target.value)} onBlur={(event) => onSave({ ...row, driver: event.target.value })} /></label>
+        <label>Truck<input value={row.truck} onChange={(event) => onUpdate(row.id, "truck", event.target.value)} onBlur={(event) => onSave({ ...row, truck: event.target.value })} /></label>
+        <label>Pickup<input value={row.pickup_city} onChange={(event) => onUpdate(row.id, "pickup_city", event.target.value)} onBlur={(event) => onSave({ ...row, pickup_city: event.target.value })} /></label>
+        <label>Delivery<input value={row.delivery_city} onChange={(event) => onUpdate(row.id, "delivery_city", event.target.value)} onBlur={(event) => onSave({ ...row, delivery_city: event.target.value })} /></label>
+      </div>
+
+      <div className="mobile-load-fuel-row">
+        <div className={getFuelTone(Number(row.fuel_level))}>
+          <span>Fuel</span>
+          <strong>{row.fuel_level}%</strong>
+        </div>
+        <label>
+          Fuel level
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={row.fuel_level}
+            onChange={async (event) => {
+              const value = Number(event.target.value);
+              const nextRow = { ...row, fuel_level: value };
+              onUpdate(row.id, "fuel_level", value);
+              await onSave({ ...nextRow, miles_to_empty: computeMilesToEmpty(nextRow) });
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="mobile-load-stats">
+        <div><span>Miles Empty</span><strong>{row.miles_to_empty || "0"}</strong></div>
+        <div><span>Full Load</span><strong>{fullLoadMiles}</strong></div>
+        <div><span>Tank</span><strong>{row.tank_capacity || "-"}</strong></div>
+        <div><span>MPG</span><strong>{row.mpg || "-"}</strong></div>
+      </div>
+
+      <details className="mobile-load-stops">
+        <summary>Stops and notes</summary>
+        <label>1st Stop<textarea value={row.stop1} onChange={(event) => onUpdate(row.id, "stop1", event.target.value)} onBlur={(event) => onSave({ ...row, stop1: event.target.value })} /></label>
+        <label>2nd Stop<textarea value={row.stop2} onChange={(event) => onUpdate(row.id, "stop2", event.target.value)} onBlur={(event) => onSave({ ...row, stop2: event.target.value })} /></label>
+        <label>3rd Stop<textarea value={row.stop3} onChange={(event) => onUpdate(row.id, "stop3", event.target.value)} onBlur={(event) => onSave({ ...row, stop3: event.target.value })} /></label>
+      </details>
+
+      <footer>
+        <span>{savingId === row.id ? "Saving..." : "Auto-saves on field exit"}</span>
+        <button className="delete-button" type="button" onClick={() => onDelete(row.id)}>Delete</button>
+      </footer>
+    </article>
+  );
+}
+
+function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, createRow, deleteRow, saveRow, updateLocalRow, theme, setTheme }) {
+  if (activeWorkspace === "tracking") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "routing") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} active loadRows={rows} /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "loads") {
+    return (
+      <section className="mobile-workspace-section mobile-loads-workspace">
+        <div className="mobile-load-controls">
+          <label>Search loads<input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Driver, truck, city" /></label>
+          <button className="primary-button" type="button" onClick={createRow}>New Load</button>
+        </div>
+        <div className="mobile-chip-strip">
+          {loadStatusTabs.map((status) => {
+            const total = status === "All" ? rows.length : rows.filter((row) => row.status === status).length;
+            return <button key={status} type="button" className={statusFilter === status ? "active" : ""} onClick={() => setStatusFilter(status)}>{status}<span>{total}</span></button>;
+          })}
+        </div>
+        <div className="mobile-load-list">
+          {filteredRows.length ? filteredRows.map((row) => <MobileLoadCard key={row.id} row={row} savingId={savingId} onUpdate={updateLocalRow} onSave={saveRow} onDelete={deleteRow} />) : <div className="mobile-empty-card">{gridLoading ? "Loading loads..." : "No loads yet."}</div>}
+        </div>
+      </section>
+    );
+  }
+
+  if (activeWorkspace === "chat") {
+    return <TeamChat token={token} user={user} active mobile />;
+  }
+
+  if (activeWorkspace === "settings") {
+    return (
+      <section className="mobile-workspace-section mobile-settings-stack">
+        <article className="panel settings-panel-card">
+          <div className="panel-head"><h2>Theme</h2><span>Choose the look.</span></div>
+          <div className="theme-option-grid">
+            {themeOptions.map((option) => (
+              <button key={option.id} type="button" className={`theme-option-card ${theme === option.id ? "active" : ""}`} onClick={() => setTheme(option.id)}>
+                <span className={`theme-option-swatch theme-option-swatch-${option.id}`} />
+                <strong>{option.label}</strong>
+                <small>{option.detail}</small>
+                <em>{option.accent}</em>
+              </button>
+            ))}
+          </div>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mobile-workspace-section mobile-command-workspace">
+      <section className="mobile-metric-grid">
+        <MetricCard label="Loads" value={metrics.total} detail={`${metrics.activeLoads} active`} tone="green" />
+        <MetricCard label="Low fuel" value={metrics.lowFuelCount} detail="Below 40%" tone={metrics.lowFuelCount ? "amber" : "blue"} />
+        <MetricCard label="Review" value={metrics.reviewLoads} detail={`${metrics.delayedLoads} delayed`} tone="violet" />
+        <MetricCard label="Miles" value={formatNumber(metrics.totalMilesToEmpty)} detail="All loads" tone="dark" />
+      </section>
+      <Suspense fallback={<ModuleLoader label="Loading Motive operations cards..." />}><MotiveDashboardCards token={token} active /></Suspense>
+      <section className="panel workspace-tool-surface mobile-tool-panel">
+        <div className="panel-head"><div><h2>Fuel Tools</h2><span>Route and station tools.</span></div></div>
+        <Suspense fallback={<ModuleLoader label="Loading service catalog..." />}><TomTomSuite token={token} /></Suspense>
+      </section>
+    </section>
+  );
+}
 export default function App() {
+  const isMobileViewport = useIsMobileViewport();
   const [mode, setMode] = useState("login");
   const [registerForm, setRegisterForm] = useState(emptyRegister);
   const [loginForm, setLoginForm] = useState(emptyLogin);
@@ -495,7 +692,7 @@ export default function App() {
           activeItem={activeSiteNav}
         />
 
-        <main className="auth-shell site-auth-shell auth-shell-compact">
+        <main className={`auth-shell site-auth-shell auth-shell-compact ${isMobileViewport ? "mobile-auth-shell" : ""}`}>
           <section className="auth-panel auth-panel-compact">
             <div className="auth-panel-head">
               <span className="brand-pill">United Lane LLC</span>
@@ -621,6 +818,22 @@ export default function App() {
     );
   }
 
+  if (isDriverWorkspace && isMobileViewport) {
+    return (
+      <MobileWorkspaceShell
+        kicker="Driver"
+        title="Driver Workspace"
+        subtitle="Truck, route, service, emergency, and team chat."
+        user={user}
+        currentDate={currentDate}
+        message={message}
+        error={error}
+        onLogout={logout}
+      >
+        <DriverWorkspace token={token} user={user} mobile />
+      </MobileWorkspaceShell>
+    );
+  }
   if (isDriverWorkspace) {
     return (
       <div className="site-page-shell">
@@ -688,6 +901,22 @@ export default function App() {
 
         {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
+    );
+  }
+  if (!isFuelService && isMobileViewport) {
+    return (
+      <MobileWorkspaceShell
+        kicker="Safety"
+        title="Safety"
+        subtitle="Fleet alerts, incidents, emergency tools, documents, and team chat."
+        user={user}
+        currentDate={currentDate}
+        message={message}
+        error={error}
+        onLogout={logout}
+      >
+        <SafetyWorkspace token={token} user={user} mobile />
+      </MobileWorkspaceShell>
     );
   }
   if (!isFuelService) {
@@ -760,6 +989,47 @@ export default function App() {
     );
   }
 
+
+  if (isMobileViewport) {
+    return (
+      <MobileWorkspaceShell
+        kicker="Fuel Service"
+        title={activeWorkspaceCopy.title}
+        subtitle={activeWorkspaceCopy.subtitle}
+        user={user}
+        currentDate={currentDate}
+        message={message}
+        error={error}
+        onLogout={logout}
+        navItems={workspaceTabs.map((tab) => ({ ...tab, mobileLabel: tab.id === "command" ? "Home" : tab.label }))}
+        activeId={activeWorkspace}
+        onSelect={setActiveWorkspace}
+        action={activeWorkspace === "loads" ? <button className="primary-button" type="button" onClick={createRow}>New Load</button> : null}
+      >
+        <MobileFuelWorkspaceContent
+          activeWorkspace={activeWorkspace}
+          token={token}
+          user={user}
+          rows={rows}
+          filteredRows={filteredRows}
+          metrics={metrics}
+          search={search}
+          setSearch={setSearch}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          loadStatusTabs={loadStatusTabs}
+          gridLoading={gridLoading}
+          savingId={savingId}
+          createRow={createRow}
+          deleteRow={deleteRow}
+          saveRow={saveRow}
+          updateLocalRow={updateLocalRow}
+          theme={theme}
+          setTheme={setTheme}
+        />
+      </MobileWorkspaceShell>
+    );
+  }
   return (
     <div className="site-page-shell">
       <SiteHeader

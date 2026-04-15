@@ -4,6 +4,13 @@ import TeamChat from './TeamChat';
 
 const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
 const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production.up.railway.app/api';
+const driverMobileTabs = [
+  { id: 'fuel', label: 'Fuel' },
+  { id: 'service', label: 'Service' },
+  { id: 'emergency', label: 'SOS' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'profile', label: 'Profile' }
+];
 const driverTabs = [
   { id: 'fuel', label: 'Fuel Route' },
   { id: 'service', label: 'Service' },
@@ -104,7 +111,7 @@ function DriverMetric({ label, value, detail, tone = 'neutral' }) {
   );
 }
 
-export default function DriverWorkspace({ token, user }) {
+export default function DriverWorkspace({ token, user, mobile = false }) {
   const [activeTab, setActiveTab] = useState('fuel');
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -162,23 +169,32 @@ export default function DriverWorkspace({ token, user }) {
   }
 
   return (
-    <section className='workspace-content-stack driver-workspace'>
-      <section className='safety-fleet-metrics driver-metric-grid'>
-        <DriverMetric label='Truck' value={truckNumber} detail={profile?.driverName || user?.full_name || 'Driver'} tone='info' />
-        <DriverMetric label='Fuel' value={fuelLabel} detail='Live Motive fuel' tone='warning' />
-        <DriverMetric label='Status' value={vehicleStatus(vehicle)} detail='Current vehicle state' tone='dark' />
-        <DriverMetric label='Location' value={locationLabel} detail='Route and service center' tone='neutral' />
-        <DriverMetric label='Drive Left' value={driveLeft} detail={eldHours.duty_status || 'HOS drive clock'} tone={eldTone(vehicle)} />
-        <DriverMetric label='Shift Left' value={shiftLeft} detail='HOS shift clock' tone={eldTone(vehicle)} />
-        <DriverMetric label='HOS' value={eldStatus(vehicle)} detail={eldHours.summary || 'Motive ELD clock'} tone={eldTone(vehicle)} />
-      </section>
+    <section className={`workspace-content-stack driver-workspace ${mobile ? 'driver-workspace-mobile' : ''}`}>
+      {mobile ? (
+        <section className='driver-mobile-snapshot'>
+          <article><span>Truck</span><strong>{truckNumber}</strong><small>{profile?.driverName || user?.full_name || 'Driver'}</small></article>
+          <article><span>Fuel</span><strong>{fuelLabel}</strong><small>Live Motive fuel</small></article>
+          <article><span>Drive</span><strong>{driveLeft}</strong><small>{eldHours.duty_status || 'HOS drive clock'}</small></article>
+          <article><span>Shift</span><strong>{shiftLeft}</strong><small>{eldStatus(vehicle)}</small></article>
+        </section>
+      ) : (
+        <section className='safety-fleet-metrics driver-metric-grid'>
+          <DriverMetric label='Truck' value={truckNumber} detail={profile?.driverName || user?.full_name || 'Driver'} tone='info' />
+          <DriverMetric label='Fuel' value={fuelLabel} detail='Live Motive fuel' tone='warning' />
+          <DriverMetric label='Status' value={vehicleStatus(vehicle)} detail='Current vehicle state' tone='dark' />
+          <DriverMetric label='Location' value={locationLabel} detail='Route and service center' tone='neutral' />
+          <DriverMetric label='Drive Left' value={driveLeft} detail={eldHours.duty_status || 'HOS drive clock'} tone={eldTone(vehicle)} />
+          <DriverMetric label='Shift Left' value={shiftLeft} detail='HOS shift clock' tone={eldTone(vehicle)} />
+          <DriverMetric label='HOS' value={eldStatus(vehicle)} detail={eldHours.summary || 'Motive ELD clock'} tone={eldTone(vehicle)} />
+        </section>
+      )}
 
-      <div className='workspace-inline-tabs driver-workspace-tabs'>
-        {driverTabs.map((tab) => (
+      <div className={mobile ? 'mobile-internal-tabs driver-mobile-tabs' : 'workspace-inline-tabs driver-workspace-tabs'}>
+        {(mobile ? driverMobileTabs : driverTabs).map((tab) => (
           <button
             key={tab.id}
             type='button'
-            className={`workspace-inline-tab ${activeTab === tab.id ? 'active' : ''}`}
+            className={mobile ? (activeTab === tab.id ? 'active' : '') : `workspace-inline-tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
@@ -208,7 +224,7 @@ export default function DriverWorkspace({ token, user }) {
       </section>
 
       <section className='workspace-tab-panel' hidden={activeTab !== 'chat'}>
-        <TeamChat token={token} user={user} active={activeTab === 'chat'} />
+        <TeamChat token={token} user={user} active={activeTab === 'chat'} mobile={mobile} />
       </section>
 
       <section className='panel driver-profile-panel workspace-tab-panel' hidden={activeTab !== 'profile'}>

@@ -6,6 +6,20 @@ import TeamChat from "./TeamChat";
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
 const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif";
+const safetyMobilePrimaryTabs = [
+  { id: "fleet", label: "Fleet" },
+  { id: "investigations", label: "Incidents" },
+  { id: "brief", label: "Brief" },
+  { id: "team-chat", label: "Chat" }
+];
+const safetyMobileMoreTabs = [
+  { id: "automation", label: "Automation" },
+  { id: "services", label: "Service Map" },
+  { id: "emergency", label: "Emergency" },
+  { id: "documents", label: "Documents" },
+  { id: "notes", label: "Notes" },
+  { id: "ai", label: "AI Chat" }
+];
 const safetyTabs = [
   { id: "fleet", label: "Fleet Safety" },
   { id: "automation", label: "Automation" },
@@ -1934,7 +1948,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
     </section>
   );
 }
-export default function SafetyWorkspace({ token, user }) {
+export default function SafetyWorkspace({ token, user, mobile = false }) {
   const [activeTab, setActiveTab] = useState("fleet");
   const [fleetData, setFleetData] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(true);
@@ -1982,20 +1996,52 @@ export default function SafetyWorkspace({ token, user }) {
     loadFleet(false);
   }, [loadFleet, token]);
 
+  const mobilePrimaryIds = new Set(safetyMobilePrimaryTabs.map((tab) => tab.id));
+  const mobileActiveNav = mobilePrimaryIds.has(activeTab) ? activeTab : "more";
+
+  function selectMobilePrimaryTab(tabId) {
+    if (tabId === "more") {
+      setActiveTab(mobilePrimaryIds.has(activeTab) ? "automation" : activeTab);
+      return;
+    }
+    setActiveTab(tabId);
+  }
+
   return (
-    <section className="workspace-content-stack safety-workspace-stack">
-      <div className="workspace-inline-tabs safety-workspace-tabs">
-        {safetyTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`workspace-inline-tab ${activeTab === tab.id ? "active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+    <section className={`workspace-content-stack safety-workspace-stack ${mobile ? "safety-workspace-mobile" : ""}`}>
+      {mobile ? (
+        <>
+          <div className="mobile-internal-tabs safety-mobile-tabs">
+            {[...safetyMobilePrimaryTabs, { id: "more", label: "More" }].map((tab) => (
+              <button key={tab.id} type="button" className={mobileActiveNav === tab.id ? "active" : ""} onClick={() => selectMobilePrimaryTab(tab.id)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {mobileActiveNav === "more" ? (
+            <div className="mobile-more-grid">
+              {safetyMobileMoreTabs.map((tab) => (
+                <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="workspace-inline-tabs safety-workspace-tabs">
+          {safetyTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`workspace-inline-tab ${activeTab === tab.id ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <section hidden={activeTab !== "fleet"}>
         <SafetyFleetPanel data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
@@ -2034,7 +2080,7 @@ export default function SafetyWorkspace({ token, user }) {
       </section>
 
       <section hidden={activeTab !== "team-chat"}>
-        <TeamChat token={token} user={user} active={activeTab === "team-chat"} />
+        <TeamChat token={token} user={user} active={activeTab === "team-chat"} mobile={mobile} />
       </section>
 
       <section hidden={activeTab !== "ai"}>
