@@ -171,6 +171,11 @@ VITE_TOMTOM_API_KEY=your-tomtom-api-key
 - `GET /api/health`
 - `GET /api/motive/status`
 - `GET /api/motive/fleet`
+- `GET /api/fuel-authorizations`
+- `POST /api/fuel-authorizations`
+- `POST /api/fuel-authorizations/{id}/mark-sent`
+- `POST /api/fuel-authorizations/{id}/reconcile`
+- `POST /api/fuel-authorizations/reconcile-open`
 
 ## Deployment checklist
 
@@ -206,3 +211,4 @@ TOMTOM_API_KEY=your-tomtom-api-key
 ```
 
 If you prefer Nixpacks instead of Docker, set the service root directory to `backend` manually.
+

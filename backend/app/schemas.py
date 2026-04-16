@@ -388,6 +388,7 @@ class FuelStrategy(BaseModel):
 
 
 class RouteAssistantResponse(BaseModel):
+    routing_request_id: int | None = None
     origin: GeocodedPoint
     destination: GeocodedPoint
     routes: list[RouteOption]
@@ -510,4 +511,144 @@ class MotiveFleetSnapshot(BaseModel):
     drivers: list[MotiveUserSummary] = Field(default_factory=list)
     vehicles: list[MotiveVehicleSummary] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+FuelAuthorizationStatus = Literal["approved", "sent", "used", "expired", "violated", "cancelled"]
+
+
+class FuelAuthorizationCreate(BaseModel):
+    routing_request_id: int | None = Field(default=None, ge=1)
+    vehicle_id: int | None = Field(default=None, ge=1)
+    vehicle_number: str = Field(default="", max_length=128)
+    driver_name: str = Field(default="", max_length=255)
+    origin_label: str = Field(default="", max_length=512)
+    destination_label: str = Field(default="", max_length=512)
+    route_id: str = Field(default="", max_length=64)
+    route_label: str = Field(default="", max_length=128)
+    station_id: str = Field(min_length=1, max_length=512)
+    station_name: str = Field(default="", max_length=512)
+    station_brand: str = Field(default="", max_length=255)
+    station_address: str = Field(default="", max_length=2000)
+    station_city: str = Field(default="", max_length=255)
+    station_state: str = Field(default="", max_length=32)
+    station_postal_code: str = Field(default="", max_length=32)
+    station_lat: float | None = None
+    station_lon: float | None = None
+    station_source_url: str = Field(default="", max_length=3000)
+    station_map_link: str = Field(default="", max_length=3000)
+    fuel_type: str = Field(default="Auto Diesel", max_length=64)
+    planned_gallons: float = Field(default=0, ge=0)
+    max_gallons: float | None = Field(default=None, ge=0)
+    planned_amount: float = Field(default=0, ge=0)
+    max_amount: float | None = Field(default=None, ge=0)
+    planned_price_per_gallon: float | None = Field(default=None, ge=0)
+    max_price_per_gallon: float | None = Field(default=None, ge=0)
+    price_target: float | None = Field(default=None, ge=0)
+    fuel_before_gallons: float | None = Field(default=None, ge=0)
+    fuel_after_gallons: float | None = Field(default=None, ge=0)
+    route_miles: float | None = Field(default=None, ge=0)
+    miles_to_next: float | None = Field(default=None, ge=0)
+    safety_buffer_miles: float | None = Field(default=None, ge=0)
+    dispatcher_note: str = Field(default="", max_length=4000)
+    driver_message: str = Field(default="", max_length=8000)
+    source: str = Field(default="route_assistant", max_length=64)
+    status: FuelAuthorizationStatus = "approved"
+    expires_at: datetime | None = None
+    policy_snapshot: dict[str, Any] = Field(default_factory=dict)
+    station_snapshot: dict[str, Any] = Field(default_factory=dict)
+    strategy_snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
+class FuelAuthorizationUpdate(BaseModel):
+    status: FuelAuthorizationStatus | None = None
+    max_gallons: float | None = Field(default=None, ge=0)
+    max_amount: float | None = Field(default=None, ge=0)
+    max_price_per_gallon: float | None = Field(default=None, ge=0)
+    expires_at: datetime | None = None
+    dispatcher_note: str | None = Field(default=None, max_length=4000)
+    driver_message: str | None = Field(default=None, max_length=8000)
+
+
+class FuelAuthorizationAction(BaseModel):
+    note: str = Field(default="", max_length=4000)
+
+
+class FuelAuthorizationResponse(BaseModel):
+    id: int
+    user_id: int
+    routing_request_id: int | None = None
+    approval_code: str
+    status: FuelAuthorizationStatus | str
+    source: str = "route_assistant"
+    vehicle_id: int | None = None
+    vehicle_number: str = ""
+    driver_name: str = ""
+    origin_label: str = ""
+    destination_label: str = ""
+    route_id: str = ""
+    route_label: str = ""
+    station_id: str = ""
+    station_name: str = ""
+    station_brand: str = ""
+    station_address: str = ""
+    station_city: str = ""
+    station_state: str = ""
+    station_postal_code: str = ""
+    station_lat: float | None = None
+    station_lon: float | None = None
+    station_source_url: str = ""
+    station_map_link: str = ""
+    fuel_type: str = "Auto Diesel"
+    planned_gallons: float = 0
+    max_gallons: float = 0
+    planned_amount: float = 0
+    max_amount: float = 0
+    planned_price_per_gallon: float | None = None
+    max_price_per_gallon: float | None = None
+    price_target: float | None = None
+    fuel_before_gallons: float | None = None
+    fuel_after_gallons: float | None = None
+    route_miles: float | None = None
+    miles_to_next: float | None = None
+    safety_buffer_miles: float | None = None
+    dispatcher_note: str = ""
+    driver_message: str = ""
+    policy_snapshot: dict[str, Any] = Field(default_factory=dict)
+    station_snapshot: dict[str, Any] = Field(default_factory=dict)
+    strategy_snapshot: dict[str, Any] = Field(default_factory=dict)
+    matched_purchase_id: str | None = None
+    actual_purchased_at: str | None = None
+    actual_vendor: str = ""
+    actual_city: str = ""
+    actual_state: str = ""
+    actual_gallons: float | None = None
+    actual_amount: float | None = None
+    actual_price_per_gallon: float | None = None
+    reconciliation_details: dict[str, Any] = Field(default_factory=dict)
+    violation_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    approved_at: datetime | None = None
+    sent_at: datetime | None = None
+    expires_at: datetime | None = None
+    reconciled_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class FuelAuthorizationReconcileResult(BaseModel):
+    authorization: FuelAuthorizationResponse
+    status_before: str
+    status_after: str
+    matched: bool = False
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class FuelAuthorizationBulkReconcileResponse(BaseModel):
+    checked: int = 0
+    matched: int = 0
+    violated: int = 0
+    expired: int = 0
+    results: list[FuelAuthorizationReconcileResult] = Field(default_factory=list)
 

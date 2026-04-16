@@ -198,3 +198,75 @@ class RoutingFuelStop(Base):
     location_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     official_match: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+
+
+class FuelAuthorization(Base):
+    __tablename__ = "fuel_authorizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    routing_request_id: Mapped[int | None] = mapped_column(ForeignKey("routing_requests.id", ondelete="SET NULL"), index=True, nullable=True)
+    approval_code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="approved", index=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), default="route_assistant", nullable=False)
+
+    vehicle_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    vehicle_number: Mapped[str] = mapped_column(String(128), default="", index=True, nullable=False)
+    driver_name: Mapped[str] = mapped_column(String(255), default="", index=True, nullable=False)
+
+    origin_label: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    destination_label: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    route_id: Mapped[str] = mapped_column(String(64), default="", index=True, nullable=False)
+    route_label: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+
+    station_id: Mapped[str] = mapped_column(Text, default="", index=True, nullable=False)
+    station_name: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    station_brand: Mapped[str] = mapped_column(String(255), default="", index=True, nullable=False)
+    station_address: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    station_city: Mapped[str] = mapped_column(String(255), default="", index=True, nullable=False)
+    station_state: Mapped[str] = mapped_column(String(32), default="", index=True, nullable=False)
+    station_postal_code: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    station_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    station_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    station_source_url: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    station_map_link: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    fuel_type: Mapped[str] = mapped_column(String(64), default="Auto Diesel", nullable=False)
+    planned_gallons: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    max_gallons: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    planned_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    max_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    planned_price_per_gallon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_price_per_gallon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_target: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    fuel_before_gallons: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_after_gallons: Mapped[float | None] = mapped_column(Float, nullable=True)
+    route_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    miles_to_next: Mapped[float | None] = mapped_column(Float, nullable=True)
+    safety_buffer_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    dispatcher_note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    driver_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    policy_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    station_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    strategy_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+    matched_purchase_id: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
+    actual_purchased_at: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    actual_vendor: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    actual_city: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    actual_state: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    actual_gallons: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_price_per_gallon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reconciliation_details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    violation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True, nullable=True)
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

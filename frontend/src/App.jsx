@@ -10,6 +10,7 @@ const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
 const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
+const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
@@ -25,6 +26,7 @@ const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
+  { id: "approvals", label: "Approvals", detail: "Fuel limits", icon: "FA" },
   { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
   { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
   { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
@@ -38,6 +40,7 @@ const mobileFuelTabs = [
 ];
 const mobileFuelMoreTabs = [
   { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
+  { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
   { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "ST" }
 ];
 const themeOptions = [
@@ -60,6 +63,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Routing",
     subtitle: "Build routes and fuel plans."
+  },
+  approvals: {
+    eyebrow: "Fuel Service",
+    title: "Fuel Approvals",
+    subtitle: "Approve stops, limits, and Motive purchase checks."
   },
   loads: {
     eyebrow: "Fuel Service",
@@ -416,6 +424,10 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} active loadRows={rows} /></Suspense></section>;
   }
 
+  if (activeWorkspace === "approvals") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading fuel authorizations..." />}><FuelAuthorizations token={token} active /></Suspense></section>;
+  }
+
   if (activeWorkspace === "loads") {
     return (
       <section className="mobile-workspace-section mobile-loads-workspace">
@@ -497,6 +509,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("command");
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sitePanel, setSitePanel] = useState("");
 
   useEffect(() => {
@@ -1291,6 +1304,12 @@ export default function App() {
             </Suspense>
           </section>
 
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "approvals"}>
+            <Suspense fallback={<ModuleLoader label="Loading fuel authorizations..." />}>
+              <FuelAuthorizations token={token} active={activeWorkspace === "approvals"} />
+            </Suspense>
+          </section>
+
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "loads"}>
             <section className="loads-control-card">
               <div>
@@ -1561,6 +1580,4 @@ export default function App() {
     </div>
   );
 }
-
-
 

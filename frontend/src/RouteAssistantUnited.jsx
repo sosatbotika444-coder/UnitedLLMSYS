@@ -452,6 +452,9 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
   const [routePlan, setRoutePlan] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState("");
+  const [approvalError, setApprovalError] = useState("");
+  const [approvalBusyKey, setApprovalBusyKey] = useState("");
   const [routeLoadingSeconds, setRouteLoadingSeconds] = useState(0);
   const [fleetSnapshot, setFleetSnapshot] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(false);
@@ -897,6 +900,8 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     if (!token) return;
     setRouteLoading(true);
     setRouteError("");
+    setApprovalMessage("");
+    setApprovalError("");
     try {
       const payload = {
         ...routeForm,
@@ -921,6 +926,81 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     }
   }
 
+  function buildFuelAuthorizationPayload(item) {
+    const stop = item?.stop || {};
+    const plannedGallons = Number(item?.gallons_to_buy) || 0;
+    const plannedPrice = Number(item?.auto_diesel_price ?? getAutoDieselPrice(stop));
+    const plannedAmount = Number(item?.estimated_cost) || (Number.isFinite(plannedPrice) ? plannedGallons * plannedPrice : 0);
+    const maxGallons = Math.ceil((plannedGallons * 1.05 + 5) * 10) / 10;
+    const maxPrice = Number.isFinite(plannedPrice) ? Number((plannedPrice + 0.05).toFixed(3)) : null;
+    const maxAmount = Math.ceil(Math.max(plannedAmount * 1.08, (maxPrice || plannedPrice || 0) * maxGallons) * 100) / 100;
+    const stationRouteLink = buildStopsRouteLink(routePlan, [stop]) || routePlan?.station_map_link || "";
+    const vehicleId = selectedVehicle?.id ? Number(selectedVehicle.id) : null;
+
+    return {
+      routing_request_id: routePlan?.routing_request_id || null,
+      vehicle_id: Number.isFinite(vehicleId) ? vehicleId : null,
+      vehicle_number: vehicleLabel(selectedVehicle),
+      driver_name: vehicleDriverName(selectedVehicle),
+      origin_label: routePlan?.origin?.label || routeForm.origin,
+      destination_label: routePlan?.destination?.label || routeForm.destination,
+      route_id: fuelStrategy?.route_id || "",
+      route_label: fuelStrategy?.route_label || "",
+      station_id: stop.id || `${stop.lat},${stop.lon}`,
+      station_name: stop.name || stop.brand || "Fuel Stop",
+      station_brand: stop.brand || "",
+      station_address: stop.address || "",
+      station_city: stop.city || "",
+      station_state: stop.state_code || "",
+      station_postal_code: stop.postal_code || "",
+      station_lat: stop.lat ?? null,
+      station_lon: stop.lon ?? null,
+      station_source_url: stop.source_url || "",
+      station_map_link: stationRouteLink,
+      fuel_type: routeForm.fuel_type || "Auto Diesel",
+      planned_gallons: plannedGallons,
+      max_gallons: maxGallons,
+      planned_amount: plannedAmount,
+      max_amount: maxAmount,
+      planned_price_per_gallon: Number.isFinite(plannedPrice) ? plannedPrice : null,
+      max_price_per_gallon: maxPrice,
+      price_target: smartFuelPriceTarget,
+      fuel_before_gallons: item?.fuel_before_gallons ?? null,
+      fuel_after_gallons: item?.fuel_after_gallons ?? null,
+      route_miles: item?.route_miles ?? null,
+      miles_to_next: item?.miles_to_next ?? null,
+      safety_buffer_miles: item?.safety_buffer_miles ?? null,
+      dispatcher_note: `Approved from Smart Fuel Plan. ${item?.reason || ""}`.trim(),
+      source: "route_assistant",
+      status: "approved",
+      station_snapshot: stop,
+      strategy_snapshot: { ...item, stop },
+      policy_snapshot: {
+        created_from: "RouteAssistantUnited",
+        current_fuel_gallons: Number(routeForm.current_fuel_gallons) || null,
+        tank_capacity_gallons: Number(routeForm.tank_capacity_gallons) || null,
+        mpg: Number(routeForm.mpg) || null
+      }
+    };
+  }
+
+  async function createFuelAuthorization(item) {
+    if (!token || !selectedVehicle || !item?.stop) return;
+    const busyKey = `${item.sequence}-${item.stop.id}`;
+    setApprovalBusyKey(busyKey);
+    setApprovalMessage("");
+    setApprovalError("");
+    try {
+      const payload = buildFuelAuthorizationPayload(item);
+      const created = await apiRequest("/fuel-authorizations", { method: "POST", body: JSON.stringify(payload) }, token);
+      setApprovalMessage(`Fuel approval ${created.approval_code} created for ${created.vehicle_number || "truck"}.`);
+      window.dispatchEvent(new CustomEvent("fuel-authorization-created", { detail: created }));
+    } catch (authorizationError) {
+      setApprovalError(authorizationError.message);
+    } finally {
+      setApprovalBusyKey("");
+    }
+  }
   function applyDraftFilters() {
     if (plannerNeedsRefresh) {
       buildRoutePlan(draftFilters);
@@ -1084,6 +1164,8 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
       {fleetError ? <div className="notice error inline-notice">{fleetError}</div> : null}
       {routeLoading ? <div className="notice info inline-notice" aria-live="polite">{routeLoadingMessage}</div> : null}
       {routeError ? <div className="notice error inline-notice">{routeError}</div> : null}
+      {approvalMessage ? <div className="notice success inline-notice">{approvalMessage}</div> : null}
+      {approvalError ? <div className="notice error inline-notice">{approvalError}</div> : null}
 
       {routePlan ? (
         <div className="route-results">
@@ -1280,6 +1362,16 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
                           <span>Next {formatMiles(item.miles_to_next)} to {item.next_target_label}</span>
                         </div>
                         <em>{item.reason}</em>
+                        {!driverMode ? (
+                          <button
+                            className="primary-button primary-button-brand fuel-approval-button"
+                            type="button"
+                            onClick={() => createFuelAuthorization(item)}
+                            disabled={!selectedVehicle || approvalBusyKey === `${item.sequence}-${item.stop.id}`}
+                          >
+                            {approvalBusyKey === `${item.sequence}-${item.stop.id}` ? "Approving..." : "Approve fuel stop"}
+                          </button>
+                        ) : null}
                       </article>
                     ))}
                   </div>
@@ -1403,6 +1495,4 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     </section>
   );
 }
-
-
 

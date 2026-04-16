@@ -11841,3 +11841,319 @@ body.theme-dark .install-app-help button {
     display: none;
   }
 }
+.fuel-approval-button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 4px;
+  border-radius: 8px;
+}
+
+.fuel-auth-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.fuel-auth-head,
+.fuel-auth-head-actions,
+.fuel-auth-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fuel-auth-head-actions {
+  justify-content: flex-end;
+}
+
+.fuel-auth-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fuel-auth-metrics article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.fuel-auth-metrics span,
+.fuel-auth-metrics small,
+.fuel-auth-card-head span,
+.fuel-auth-card-head small,
+.fuel-auth-station small,
+.fuel-auth-message-box span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fuel-auth-metrics strong,
+.fuel-auth-card strong,
+.fuel-auth-actuals strong {
+  color: #0f172a;
+}
+
+.fuel-auth-filter-card {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fuel-auth-filter-card label {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 240px);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fuel-auth-filter-card select {
+  min-height: 42px;
+  border: 1px solid rgba(100, 116, 139, 0.26);
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  padding: 9px 10px;
+}
+
+.fuel-auth-filter-card > span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.fuel-auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fuel-auth-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-left: 5px solid #16a34a;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.fuel-auth-card.fuel-auth-sent {
+  border-left-color: #2563eb;
+}
+
+.fuel-auth-card.fuel-auth-used {
+  border-left-color: #0f766e;
+}
+
+.fuel-auth-card.fuel-auth-violated {
+  border-left-color: #dc2626;
+}
+
+.fuel-auth-card.fuel-auth-closed {
+  border-left-color: #64748b;
+}
+
+.fuel-auth-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fuel-auth-card-head div,
+.fuel-auth-station,
+.fuel-auth-message-box,
+.fuel-auth-actuals {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fuel-auth-card-head strong,
+.fuel-auth-station strong {
+  overflow-wrap: anywhere;
+}
+
+.fuel-auth-card-head em {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.fuel-auth-violated .fuel-auth-card-head em {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.fuel-auth-sent .fuel-auth-card-head em {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.fuel-auth-closed .fuel-auth-card-head em {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.fuel-auth-station span,
+.fuel-auth-route-line span,
+.fuel-auth-message-box p,
+.fuel-auth-actuals span {
+  overflow-wrap: anywhere;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.fuel-auth-metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fuel-auth-metric-row span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(100, 116, 139, 0.18);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 9px;
+  font-size: 12px;
+}
+
+.fuel-auth-route-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.fuel-auth-route-line strong {
+  color: #16a34a;
+  font-size: 12px;
+}
+
+.fuel-auth-message-box,
+.fuel-auth-actuals,
+.fuel-auth-checks {
+  border: 1px solid rgba(100, 116, 139, 0.18);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.fuel-auth-message-box p {
+  margin: 0;
+}
+
+.fuel-auth-checks {
+  display: grid;
+  gap: 6px;
+}
+
+.fuel-auth-checks span {
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fuel-auth-checks span.issue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.fuel-auth-actions {
+  justify-content: flex-start;
+}
+
+.fuel-auth-actions .secondary-button,
+.fuel-auth-actions .delete-button {
+  border-radius: 8px;
+}
+
+body.theme-dark .fuel-auth-metrics article,
+body.theme-dark .fuel-auth-card,
+body.theme-dark .fuel-auth-filter-card select,
+body.theme-dark .fuel-auth-metric-row span,
+body.theme-dark .fuel-auth-route-line,
+body.theme-dark .fuel-auth-message-box,
+body.theme-dark .fuel-auth-actuals,
+body.theme-dark .fuel-auth-checks {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.88);
+}
+
+body.theme-dark .fuel-auth-metrics strong,
+body.theme-dark .fuel-auth-card strong,
+body.theme-dark .fuel-auth-actuals strong,
+body.theme-dark .fuel-auth-filter-card select {
+  color: #f8fafc;
+}
+
+body.theme-dark .fuel-auth-station span,
+body.theme-dark .fuel-auth-route-line span,
+body.theme-dark .fuel-auth-message-box p,
+body.theme-dark .fuel-auth-actuals span,
+body.theme-dark .fuel-auth-filter-card > span {
+  color: #cbd5e1;
+}
+
+@media (max-width: 1080px) {
+  .fuel-auth-grid,
+  .fuel-auth-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .fuel-auth-metric-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .fuel-auth-head,
+  .fuel-auth-head-actions,
+  .fuel-auth-filter-card,
+  .fuel-auth-card-head,
+  .fuel-auth-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fuel-auth-head-actions .secondary-button,
+  .fuel-auth-head-actions .primary-button,
+  .fuel-auth-actions .secondary-button,
+  .fuel-auth-actions .delete-button,
+  .fuel-auth-actions .fuel-source-link {
+    width: 100%;
+  }
+
+  .fuel-auth-metric-row {
+    grid-template-columns: 1fr;
+  }
+}
+

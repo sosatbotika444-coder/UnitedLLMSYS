@@ -1544,7 +1544,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     map_link = build_map_link(origin.label, destination.label)
     data_source = "TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance"
     try:
-        save_route_audit(
+        route_audit = save_route_audit(
             db=db,
             current_user=current_user,
             payload=payload,
@@ -1565,6 +1565,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Route was calculated, but database logging failed") from exc
 
     return RouteAssistantResponse(
+        routing_request_id=route_audit.id,
         origin=origin,
         destination=destination,
         routes=routes,
@@ -1593,5 +1594,4 @@ def assistant_chat(payload: UnitedLaneChatRequest, current_user: User = Depends(
     except UnitedLaneChatProviderError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return UnitedLaneChatResponse(assistant_name=UNITEDLANE_CHAT_IDENTITY, message=reply)
-
 

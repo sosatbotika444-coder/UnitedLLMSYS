@@ -13,7 +13,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 
 HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
-SECTION_FILL = PatternFill(fill_type="solid", fgColor="D9EAF7")
+SECTION_FILL = PatternFill(fill_type="solid", fgColor="D9EAF7") 
 HEADER_FONT = Font(color="FFFFFF", bold=True)
 SECTION_FONT = Font(bold=True)
 TITLE_FONT = Font(bold=True, size=16)

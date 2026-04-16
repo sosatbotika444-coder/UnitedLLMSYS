@@ -14,9 +14,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.config import get_settings
 from app.database import Base
-from app.models import Load, RoutingFuelStop, RoutingRequest, RoutingRoute, User
+from app.models import FuelAuthorization, Load, RoutingFuelStop, RoutingRequest, RoutingRoute, User
 
-MODELS_IN_ORDER = [User, Load, RoutingRequest, RoutingRoute, RoutingFuelStop]
+MODELS_IN_ORDER = [User, Load, RoutingRequest, RoutingRoute, RoutingFuelStop, FuelAuthorization]
 
 
 def normalize_database_url(value: str) -> str:
@@ -119,3 +119,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
