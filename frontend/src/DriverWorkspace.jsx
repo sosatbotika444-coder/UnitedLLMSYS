@@ -3,7 +3,7 @@ import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
 
 const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
-const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production.up.railway.app/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 const driverMobileTabs = [
   { id: 'fuel', label: 'Fuel' },
   { id: 'service', label: 'Service' },

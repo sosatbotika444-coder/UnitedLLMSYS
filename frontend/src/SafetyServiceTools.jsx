@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SafetyServiceMapCanvas from "./SafetyServiceMapCanvas";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 
 async function apiRequest(path, options = {}, token = "") {
   const headers = {

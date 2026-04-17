@@ -3,7 +3,7 @@ import UnitedLaneChat from "./UnitedLaneChat";
 import SafetyServiceTools from "./SafetyServiceTools";
 import TeamChat from "./TeamChat";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
 const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif";
 const safetyMobilePrimaryTabs = [

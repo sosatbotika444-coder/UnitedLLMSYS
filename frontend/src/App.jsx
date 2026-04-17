@@ -12,7 +12,7 @@ const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
 const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
