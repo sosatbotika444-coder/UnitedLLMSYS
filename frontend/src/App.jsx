@@ -601,7 +601,7 @@ export default function App() {
   }, [selectedDepartment]);
 
   useEffect(() => {
-    if (selectedDepartment === "admin" && mode === "register") {
+    if (selectedDepartment !== "driver" && mode === "register") {
       setMode("login");
     }
   }, [mode, selectedDepartment]);
@@ -857,7 +857,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : "Each account belongs to one department."}</div>
+            <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Accounts are created by Admin only."}</div>
 
             {isRestoringSession ? null : (
               <>
@@ -865,7 +865,7 @@ export default function App() {
                   <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
                     Login
                   </button>
-                  {selectedDepartment !== "admin" ? (
+                  {selectedDepartment === "driver" ? (
                     <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
                       Register
                     </button>

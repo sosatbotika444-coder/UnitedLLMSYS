@@ -14,16 +14,23 @@ from app.auth import (
     verify_password,
     get_current_user,
 )
+from app.config import get_settings
 from app.database import get_db
 from app.models import User
 from app.schemas import TokenResponse, UserCreate, UserLogin, UserResponse
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+settings = get_settings()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
+    if not settings.public_registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is disabled. Accounts are created by Admin only.",
+        )
     if payload.department == "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin accounts can only be created from the admin panel")
 
