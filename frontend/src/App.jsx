@@ -8,6 +8,7 @@ import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLane
 
 const AdminPanel = lazy(() => import("./AdminPanel"));
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
+const RouteHistoryPanel = lazy(() => import("./RouteHistoryPanel"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
 const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
@@ -28,6 +29,7 @@ const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
+  { id: "history", label: "Route History", detail: "All builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Fuel limits", icon: "FA" },
   { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
   { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
@@ -42,6 +44,7 @@ const mobileFuelTabs = [
 ];
 const mobileFuelMoreTabs = [
   { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
+  { id: "history", label: "Route History", detail: "All routing builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
   { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "ST" }
 ];
@@ -65,6 +68,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Routing",
     subtitle: "Build routes and fuel plans."
+  },
+  history: {
+    eyebrow: "Fuel Service",
+    title: "Route History",
+    subtitle: "Search every route build by account, driver, truck, origin, destination, or date."
   },
   approvals: {
     eyebrow: "Fuel Service",
@@ -424,6 +432,10 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
 
   if (activeWorkspace === "routing") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} active loadRows={rows} /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "history") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading route history..." />}><RouteHistoryPanel token={token} active /></Suspense></section>;
   }
 
   if (activeWorkspace === "approvals") {
@@ -1410,6 +1422,12 @@ export default function App() {
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "routing"}>
             <Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}>
               <RouteAssistant token={token} active={activeWorkspace === "routing"} loadRows={rows} />
+            </Suspense>
+          </section>
+
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "history"}>
+            <Suspense fallback={<ModuleLoader label="Loading route history..." />}>
+              <RouteHistoryPanel token={token} active={activeWorkspace === "history"} />
             </Suspense>
           </section>
 

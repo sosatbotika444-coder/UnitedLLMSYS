@@ -905,6 +905,9 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     try {
       const payload = {
         ...routeForm,
+        vehicle_id: selectedVehicle?.id ? Number(selectedVehicle.id) : null,
+        vehicle_number: selectedVehicle ? vehicleLabel(selectedVehicle) : "",
+        driver_name: selectedVehicle ? vehicleDriverName(selectedVehicle) : "",
         current_fuel_gallons: toOptionalNumber(routeForm.current_fuel_gallons),
         tank_capacity_gallons: toOptionalNumber(routeForm.tank_capacity_gallons),
         mpg: toOptionalNumber(routeForm.mpg),

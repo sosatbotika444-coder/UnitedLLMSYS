@@ -291,6 +291,9 @@ class LoadResponse(LoadBase):
 class RouteAssistantRequest(BaseModel):
     origin: str = Field(min_length=2, max_length=255)
     destination: str = Field(min_length=2, max_length=255)
+    vehicle_id: int | None = None
+    vehicle_number: str = Field(default="", max_length=128)
+    driver_name: str = Field(default="", max_length=255)
     vehicle_type: str = Field(default="Truck", max_length=32)
     fuel_type: str = Field(default="Auto Diesel", max_length=32)
     current_fuel_gallons: float | None = Field(default=None, ge=0)
@@ -436,6 +439,84 @@ class RouteAssistantResponse(BaseModel):
     station_map_link: str | None = None
     data_source: str = "FindFuelStops"
 
+
+class RouteHistoryUser(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    username: str | None = None
+    department: DepartmentName
+
+
+class RouteHistoryRoute(BaseModel):
+    id: int
+    route_id: str
+    label: str
+    distance_meters: int
+    travel_time_seconds: int
+    traffic_delay_seconds: int
+    fuel_stop_count: int
+
+
+class RouteHistoryFuelStop(BaseModel):
+    id: int
+    stop_id: str
+    route_id: str | None = None
+    route_label: str | None = None
+    stop_rank: int
+    is_top_stop: bool = False
+    is_selected: bool = False
+    name: str = ""
+    brand: str = ""
+    city: str = ""
+    address: str = ""
+    state_code: str | None = None
+    lat: float
+    lon: float
+    off_route_miles: float | None = None
+    auto_diesel_price: float | None = None
+    diesel_price: float | None = None
+    price: float | None = None
+    price_date: str | None = None
+    source_url: str | None = None
+
+
+class RouteHistoryItem(BaseModel):
+    id: int
+    created_at: datetime
+    status: str
+    user: RouteHistoryUser
+    origin_query: str
+    destination_query: str
+    origin_label: str
+    destination_label: str
+    vehicle_id: int | None = None
+    vehicle_number: str = ""
+    driver_name: str = ""
+    vehicle_type: str = ""
+    fuel_type: str = ""
+    sort_by: str = ""
+    current_fuel_gallons: float | None = None
+    tank_capacity_gallons: float | None = None
+    mpg: float | None = None
+    map_link: str = ""
+    station_map_link: str | None = None
+    data_source: str = ""
+    price_support: str = ""
+    assistant_message: str = ""
+    selected_stop_id: str | None = None
+    route_count: int = 0
+    top_fuel_stop_count: int = 0
+    routes: list[RouteHistoryRoute] = Field(default_factory=list)
+    top_fuel_stops: list[RouteHistoryFuelStop] = Field(default_factory=list)
+    selected_stop: RouteHistoryFuelStop | None = None
+    fuel_strategy: dict[str, Any] | None = None
+
+
+class RouteHistoryResponse(BaseModel):
+    total: int
+    returned: int
+    items: list[RouteHistoryItem] = Field(default_factory=list)
 
 class ApiCapability(BaseModel):
     id: str

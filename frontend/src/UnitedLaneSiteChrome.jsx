@@ -102,6 +102,7 @@ export const sitePanels = {
           "Dashboard: shows load counts, active loads, low fuel count, review items, and miles left.",
           "Tracking: displays Motive fleet data, vehicle status, locations, drivers, movement, stale status, low fuel, and faults.",
           "Routing: builds routes from point A to point B and combines live truck fuel with station and route data.",
+          "Route History: searches every saved route build by account, driver, truck, origin, destination, or date.",
           "Approvals: manages pre-approved fuel stops, gallon limits, amount limits, expiration, reconciliation, and violations.",
           "Loads: editable dispatch sheet for driver, truck, status, MPG, fuel percent, pickup, stops, and delivery.",
           "Settings: browser theme selection for the workspace."
@@ -119,7 +120,8 @@ export const sitePanels = {
           "Filter stops by brand, city, maximum off-route distance, and auto diesel price target.",
           "Build smart fuel plans with max three planned stops.",
           "Open map links for routes and selected fuel stops.",
-          "Approve a fuel stop directly from the routing result."
+          "Approve a fuel stop directly from the routing result.",
+          "Every completed route build is saved with the account that created it, route options, selected stop, and fuel planning summary."
         ]
       },
       {

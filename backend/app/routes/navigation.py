@@ -4,6 +4,7 @@ import re
 import ssl
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, time
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import lru_cache
@@ -13,6 +14,7 @@ from urllib.request import Request, urlopen
 
 import certifi
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai_settings import (
@@ -43,6 +45,11 @@ from app.schemas import (
     LocationSuggestionResponse,
     RouteAssistantRequest,
     RouteAssistantResponse,
+    RouteHistoryFuelStop,
+    RouteHistoryItem,
+    RouteHistoryResponse,
+    RouteHistoryRoute,
+    RouteHistoryUser,
     RouteOption,
     RoutePoint,
     TomTomCapabilityCatalog,
@@ -1473,6 +1480,217 @@ def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, 
         map_link=station_map_link,
     )
 
+
+
+def route_history_raw_request(record: RoutingRequest) -> dict:
+    raw_request = record.raw_request or {}
+    if isinstance(raw_request, dict):
+        return raw_request
+    if isinstance(raw_request, str):
+        try:
+            parsed = json.loads(raw_request)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def route_history_summary(record: RoutingRequest) -> dict:
+    summary = record.response_summary or {}
+    if isinstance(summary, dict):
+        return summary
+    if isinstance(summary, str):
+        try:
+            parsed = json.loads(summary)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def optional_float(value) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def optional_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def route_history_stop_model(stop: RoutingFuelStop) -> RouteHistoryFuelStop:
+    return RouteHistoryFuelStop(
+        id=stop.id,
+        stop_id=stop.stop_id,
+        route_id=stop.route_id,
+        route_label=stop.route_label,
+        stop_rank=stop.stop_rank,
+        is_top_stop=stop.is_top_stop,
+        is_selected=stop.is_selected,
+        name=stop.name,
+        brand=stop.brand,
+        city=stop.city,
+        address=stop.address,
+        state_code=stop.state_code,
+        lat=stop.lat,
+        lon=stop.lon,
+        off_route_miles=stop.off_route_miles,
+        auto_diesel_price=stop.auto_diesel_price,
+        diesel_price=stop.diesel_price,
+        price=stop.price,
+        price_date=stop.price_date,
+        source_url=stop.source_url,
+    )
+
+
+def route_history_route_model(route: RoutingRoute) -> RouteHistoryRoute:
+    return RouteHistoryRoute(
+        id=route.id,
+        route_id=route.route_id,
+        label=route.label,
+        distance_meters=route.distance_meters,
+        travel_time_seconds=route.travel_time_seconds,
+        traffic_delay_seconds=route.traffic_delay_seconds,
+        fuel_stop_count=route.fuel_stop_count,
+    )
+
+
+def route_history_search_blob(record: RoutingRequest, user: User, raw_request: dict) -> str:
+    created_at = record.created_at
+    date_text = created_at.strftime("%Y-%m-%d") if isinstance(created_at, datetime) else ""
+    parts = [
+        record.origin_query,
+        record.destination_query,
+        record.origin_label,
+        record.destination_label,
+        record.vehicle_type,
+        record.fuel_type,
+        record.sort_by,
+        raw_request.get("driver_name"),
+        raw_request.get("driver"),
+        raw_request.get("vehicle_number"),
+        raw_request.get("truck"),
+        raw_request.get("vehicle_id"),
+        user.full_name,
+        user.email,
+        user.username,
+        user.department,
+        date_text,
+        str(created_at or ""),
+    ]
+    return " ".join(str(part or "").casefold() for part in parts)
+
+
+def build_route_history_item(
+    record: RoutingRequest,
+    user: User,
+    route_rows: list[RoutingRoute],
+    stop_rows: list[RoutingFuelStop],
+) -> RouteHistoryItem:
+    raw_request = route_history_raw_request(record)
+    summary = route_history_summary(record)
+    selected_stop_row = next((stop for stop in stop_rows if stop.is_selected), None)
+    if not selected_stop_row and record.selected_stop_id:
+        selected_stop_row = next((stop for stop in stop_rows if stop.stop_id == record.selected_stop_id), None)
+    highlighted_stop_rows = [stop for stop in stop_rows if stop.is_selected or stop.is_top_stop]
+    highlighted_stop_rows.sort(key=lambda stop: (not stop.is_selected, stop.route_label or "", stop.stop_rank, stop.id))
+
+    return RouteHistoryItem(
+        id=record.id,
+        created_at=record.created_at,
+        status=record.status,
+        user=RouteHistoryUser(
+            id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            username=user.username,
+            department=user.department,
+        ),
+        origin_query=record.origin_query,
+        destination_query=record.destination_query,
+        origin_label=record.origin_label,
+        destination_label=record.destination_label,
+        vehicle_id=optional_int(raw_request.get("vehicle_id")),
+        vehicle_number=str(raw_request.get("vehicle_number") or raw_request.get("truck") or ""),
+        driver_name=str(raw_request.get("driver_name") or raw_request.get("driver") or ""),
+        vehicle_type=record.vehicle_type,
+        fuel_type=record.fuel_type,
+        sort_by=record.sort_by,
+        current_fuel_gallons=optional_float(raw_request.get("current_fuel_gallons")),
+        tank_capacity_gallons=optional_float(raw_request.get("tank_capacity_gallons")),
+        mpg=optional_float(raw_request.get("mpg")),
+        map_link=record.map_link,
+        station_map_link=record.station_map_link,
+        data_source=record.data_source,
+        price_support=record.price_support,
+        assistant_message=record.assistant_message,
+        selected_stop_id=record.selected_stop_id,
+        route_count=int(summary.get("route_count") or len(route_rows)),
+        top_fuel_stop_count=int(summary.get("top_fuel_stop_count") or len(highlighted_stop_rows)),
+        routes=[route_history_route_model(route) for route in route_rows],
+        top_fuel_stops=[route_history_stop_model(stop) for stop in highlighted_stop_rows[:12]],
+        selected_stop=route_history_stop_model(selected_stop_row) if selected_stop_row else None,
+        fuel_strategy=summary.get("fuel_strategy") if isinstance(summary.get("fuel_strategy"), dict) else None,
+    )
+
+
+@router.get("/route-history", response_model=RouteHistoryResponse)
+def route_history(
+    search: str = Query(default="", max_length=255),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=250, ge=1, le=500),
+    current_user: User = Depends(require_user_department("fuel")),
+    db: Session = Depends(get_db),
+):
+    statement = select(RoutingRequest, User).join(User, RoutingRequest.user_id == User.id)
+    if date_from:
+        statement = statement.where(RoutingRequest.created_at >= datetime.combine(date_from, time.min))
+    if date_to:
+        statement = statement.where(RoutingRequest.created_at <= datetime.combine(date_to, time.max))
+    rows = db.execute(statement.order_by(RoutingRequest.created_at.desc(), RoutingRequest.id.desc())).all()
+    request_ids = [record.id for record, _user in rows]
+
+    routes_by_request: dict[int, list[RoutingRoute]] = {}
+    stops_by_request: dict[int, list[RoutingFuelStop]] = {}
+    if request_ids:
+        route_records = db.scalars(
+            select(RoutingRoute)
+            .where(RoutingRoute.routing_request_id.in_(request_ids))
+            .order_by(RoutingRoute.routing_request_id.desc(), RoutingRoute.id.asc())
+        ).all()
+        stop_records = db.scalars(
+            select(RoutingFuelStop)
+            .where(RoutingFuelStop.routing_request_id.in_(request_ids))
+            .order_by(RoutingFuelStop.routing_request_id.desc(), RoutingFuelStop.is_selected.desc(), RoutingFuelStop.is_top_stop.desc(), RoutingFuelStop.route_label.asc(), RoutingFuelStop.stop_rank.asc(), RoutingFuelStop.id.asc())
+        ).all()
+        for route in route_records:
+            routes_by_request.setdefault(route.routing_request_id, []).append(route)
+        for stop in stop_records:
+            stops_by_request.setdefault(stop.routing_request_id, []).append(stop)
+
+    normalized_search = search.strip().casefold()
+    matched_items: list[RouteHistoryItem] = []
+    for record, owner in rows:
+        raw_request = route_history_raw_request(record)
+        if normalized_search and normalized_search not in route_history_search_blob(record, owner, raw_request):
+            continue
+        matched_items.append(build_route_history_item(
+            record=record,
+            user=owner,
+            route_rows=routes_by_request.get(record.id, []),
+            stop_rows=stops_by_request.get(record.id, []),
+        ))
+
+    return RouteHistoryResponse(total=len(matched_items), returned=min(len(matched_items), limit), items=matched_items[:limit])
 
 @router.get("/location-suggestions", response_model=LocationSuggestionResponse)
 def location_suggestions(
