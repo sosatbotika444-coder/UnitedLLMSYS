@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth import create_access_token, hash_password, require_user_department, verify_password
+from app.auth import assert_user_can_authenticate, create_access_token, hash_password, mark_user_login, require_user_department, verify_password
 from app.config import get_settings
 from app.database import get_db
 from app.driver_identity import make_driver_email, parse_driver_vehicle_id
@@ -212,6 +212,7 @@ def register_driver(payload: DriverRegister, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Driver profile already exists. Please sign in.") from exc
 
     db.refresh(user)
+    mark_user_login(db, user)
     return TokenResponse(access_token=create_access_token(user.id), user=user)
 
 
@@ -227,6 +228,7 @@ def login_driver(payload: DriverLogin, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == email, User.department == "driver"))
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid truck number or password")
+    assert_user_can_authenticate(user)
 
     motive_name = _driver_name(vehicle)
     if motive_name and user.full_name != motive_name:
@@ -234,6 +236,7 @@ def login_driver(payload: DriverLogin, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
+    mark_user_login(db, user)
     return TokenResponse(access_token=create_access_token(user.id), user=user)
 
 

@@ -158,8 +158,8 @@ def delete_team_chat_message(
     message = db.get(TeamChatMessage, message_id)
     if not message:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    if message.user_id != current_user.id and current_user.department != "safety":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the author or Safety can delete this message")
+    if message.user_id != current_user.id and current_user.department not in {"safety", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the author, Safety, or Admin can delete this message")
 
     message.is_deleted = True
     message.body = DELETED_MESSAGE

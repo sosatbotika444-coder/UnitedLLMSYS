@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
-DepartmentName = Literal["fuel", "safety", "driver"]
+DepartmentName = Literal["admin", "fuel", "safety", "driver"]
 
 
 class UserCreate(BaseModel):
@@ -14,7 +14,7 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     department: DepartmentName
 
@@ -22,10 +22,44 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
+    username: str | None = None
     full_name: str
     department: DepartmentName
+    is_banned: bool = False
+    ban_reason: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    last_login_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    username: str | None = Field(default=None, max_length=80)
+    full_name: str = Field(min_length=2, max_length=255)
+    password: str = Field(min_length=6, max_length=128)
+    department: DepartmentName = "fuel"
+
+
+class AdminUserUpdate(BaseModel):
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, max_length=80)
+    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    department: DepartmentName | None = None
+    is_banned: bool | None = None
+    ban_reason: str | None = Field(default=None, max_length=2000)
+
+
+class AdminPasswordReset(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
+class AdminUserRow(UserResponse):
+    load_count: int = 0
+    routing_request_count: int = 0
+    fuel_authorization_count: int = 0
+    chat_message_count: int = 0
 
 
 class TokenResponse(BaseModel):
@@ -651,4 +685,3 @@ class FuelAuthorizationBulkReconcileResponse(BaseModel):
     violated: int = 0
     expired: int = 0
     results: list[FuelAuthorizationReconcileResult] = Field(default_factory=list)
-

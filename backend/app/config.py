@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     device: str = "142 Carbondale Rd SW, Dalton, GA, 30721"
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60
+    admin_bootstrap_enabled: bool = True
+    admin_username: str = "redevil"
+    admin_password: str = "reddevil"
+    admin_email: str = "redevil@admin.unitedlanellc.com"
     cors_origins: str = "https://dpsearch.netlify.app,http://localhost:5173"
     tomtom_api_key: str = ""
     openrouter_api_key: str = ""

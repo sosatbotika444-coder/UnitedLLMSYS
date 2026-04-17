@@ -45,6 +45,14 @@ class Base(DeclarativeBase):
     pass
 
 
+def _execute_schema_statements(statements: list[str]) -> None:
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def ensure_runtime_schema() -> None:
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
@@ -52,18 +60,29 @@ def ensure_runtime_schema() -> None:
         return
 
     user_columns = {column["name"] for column in inspector.get_columns("users")}
-    if "department" in user_columns:
-        return
+    statements: list[str] = []
 
-    if settings.database_backend == "postgresql":
-        statement = "ALTER TABLE users ADD COLUMN department VARCHAR(32) NOT NULL DEFAULT 'fuel'"
-    else:
-        statement = "ALTER TABLE users ADD COLUMN department VARCHAR(32) NOT NULL DEFAULT 'fuel'"
+    def add_column(name: str, definition: str) -> None:
+        if name not in user_columns:
+            statements.append(f"ALTER TABLE users ADD COLUMN {name} {definition}")
 
-    with engine.begin() as connection:
-        connection.execute(text(statement))
+    add_column("department", "VARCHAR(32) NOT NULL DEFAULT 'fuel'")
+    add_column("username", "VARCHAR(80)")
+    add_column("is_banned", "BOOLEAN NOT NULL DEFAULT FALSE" if settings.database_backend == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0")
+    add_column("ban_reason", "TEXT NOT NULL DEFAULT ''")
+    add_column("created_at", "TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP" if settings.database_backend == "postgresql" else "DATETIME")
+    add_column("updated_at", "TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP" if settings.database_backend == "postgresql" else "DATETIME")
+    add_column("last_login_at", "TIMESTAMP WITH TIME ZONE" if settings.database_backend == "postgresql" else "DATETIME")
 
+    _execute_schema_statements(statements)
 
+    indexes = {index["name"] for index in inspector.get_indexes("users")}
+    index_statements: list[str] = []
+    if "ix_users_username_unique" not in indexes:
+        index_statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username_unique ON users (username)")
+    if "ix_users_is_banned" not in indexes:
+        index_statements.append("CREATE INDEX IF NOT EXISTS ix_users_is_banned ON users (is_banned)")
+    _execute_schema_statements(index_statements)
 def get_db():
     db = SessionLocal()
     try:

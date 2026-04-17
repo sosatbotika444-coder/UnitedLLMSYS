@@ -6,6 +6,7 @@ import TeamChat from "./TeamChat";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
+const AdminPanel = lazy(() => import("./AdminPanel"));
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
 const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
@@ -18,6 +19,7 @@ const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
+  { id: "admin", label: "Admin", detail: "Users, bans, statistics" },
   { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking" },
   { id: "safety", label: "Safety", detail: "Fleet, services, AI" },
   { id: "driver", label: "Driver", detail: "My truck, fuel, service" }
@@ -599,6 +601,12 @@ export default function App() {
   }, [selectedDepartment]);
 
   useEffect(() => {
+    if (selectedDepartment === "admin" && mode === "register") {
+      setMode("login");
+    }
+  }, [mode, selectedDepartment]);
+
+  useEffect(() => {
     const timers = [60, 220].map((delay) => window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [activeWorkspace]);
@@ -659,6 +667,7 @@ export default function App() {
 
   const activeDepartment = user?.department || selectedDepartment;
   const selectedDepartmentMeta = getDepartmentMeta(activeDepartment);
+  const isAdminWorkspace = activeDepartment === "admin";
   const isFuelService = activeDepartment === "fuel";
   const isDriverWorkspace = activeDepartment === "driver";
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
@@ -848,7 +857,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="auth-lock-note">Each account belongs to one department.</div>
+            <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : "Each account belongs to one department."}</div>
 
             {isRestoringSession ? null : (
               <>
@@ -856,9 +865,11 @@ export default function App() {
                   <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
                     Login
                   </button>
-                  <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
-                    Register
-                  </button>
+                  {selectedDepartment !== "admin" ? (
+                    <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
+                      Register
+                    </button>
+                  ) : null}
                 </div>
 
                 {selectedDepartment === "driver" ? (
@@ -879,12 +890,12 @@ export default function App() {
                     }}
                   >
                     <label>
-                      Email
+                      {selectedDepartment === "admin" ? "Username or Email" : "Email"}
                       <input
-                        type="email"
+                        type={selectedDepartment === "admin" ? "text" : "email"}
                         value={loginForm.email}
                         onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
-                        placeholder="name@company.com"
+                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
                         required
                       />
                     </label>
@@ -921,12 +932,12 @@ export default function App() {
                       />
                     </label>
                     <label>
-                      Email
+                      {selectedDepartment === "admin" ? "Username or Email" : "Email"}
                       <input
-                        type="email"
+                        type={selectedDepartment === "admin" ? "text" : "email"}
                         value={registerForm.email}
                         onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
-                        placeholder="name@company.com"
+                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
                         required
                       />
                     </label>
@@ -957,6 +968,96 @@ export default function App() {
     );
   }
 
+  if (isAdminWorkspace && isMobileViewport) {
+    return (
+      <MobileWorkspaceShell
+        kicker="Admin"
+        title="Admin Panel"
+        subtitle="Accounts, bans, roles, passwords, and system statistics."
+        user={user}
+        currentDate={currentDate}
+        message={message}
+        error={error}
+        onLogout={logout}
+      >
+        <Suspense fallback={<ModuleLoader label="Loading admin panel..." />}>
+          <AdminPanel token={token} user={user} />
+        </Suspense>
+      </MobileWorkspaceShell>
+    );
+  }
+  if (isAdminWorkspace) {
+    return (
+      <div className="site-page-shell">
+        <SiteHeader
+          onHome={handleHomeNavigation}
+          onAbout={() => openSitePanel("about")}
+          onPrivacy={() => openSitePanel("privacy")}
+          activeItem={activeSiteNav}
+        />
+
+        <main className="workspace-app-shell site-workspace-shell workspace-app-shell-admin">
+          <aside className="workspace-sidebar-shell">
+            <div className="workspace-sidebar-brand">
+              <div className="workspace-sidebar-logo">
+                <UnitedLaneMark className="workspace-sidebar-logo-mark" />
+              </div>
+              <div className="workspace-sidebar-brand-copy">
+                <strong>United Lane LLC</strong>
+                <span>Admin</span>
+                <small>{user.username ? `@${user.username}` : user.email}</small>
+              </div>
+            </div>
+
+            <article className="workspace-sidebar-account-card">
+              <span>Admin</span>
+              <strong>{user.full_name}</strong>
+              <small>{user.email}</small>
+              <em>Full access</em>
+            </article>
+
+            <div className="workspace-sidebar-footer">
+              <div className="workspace-sidebar-footer-card">
+                <span>{currentDate}</span>
+                <strong>Admin ready</strong>
+                <small>Users, bans, statistics</small>
+              </div>
+              <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
+                Logout
+              </button>
+            </div>
+          </aside>
+
+          <section className="workspace-main-shell">
+            <header className="workspace-main-header">
+              <div className="workspace-main-heading">
+                <span className="workspace-main-kicker">Admin</span>
+                <h1>Admin Panel</h1>
+                <p>Manage accounts, access, bans, passwords, and platform statistics.</p>
+              </div>
+
+              <div className="workspace-main-meta">
+                <div className="workspace-main-usercard">
+                  <span>Admin</span>
+                  <strong>{user.full_name}</strong>
+                </div>
+              </div>
+            </header>
+
+            {message ? <div className="notice success inline-notice">{message}</div> : null}
+            {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+            <Suspense fallback={<ModuleLoader label="Loading admin panel..." />}>
+              <AdminPanel token={token} user={user} />
+            </Suspense>
+          </section>
+        </main>
+
+        <InstallAppButton />
+        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
+      </div>
+    );
+  }
   if (isDriverWorkspace && isMobileViewport) {
     return (
       <MobileWorkspaceShell
@@ -1580,4 +1681,3 @@ export default function App() {
     </div>
   );
 }
-
