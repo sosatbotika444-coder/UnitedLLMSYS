@@ -12482,3 +12482,21 @@ body.theme-dark .admin-filter-row select {
     width: 100%;
   }
 }
+
+.auth-docs-button {
+  width: 100%;
+  margin-bottom: 16px;
+  border: 1px solid rgba(26, 34, 96, 0.16);
+  background: rgba(26, 34, 96, 0.06);
+  color: #1a2260;
+}
+
+.auth-docs-button:hover {
+  background: rgba(26, 34, 96, 0.1);
+}
+
+body.theme-dark .auth-docs-button {
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+}

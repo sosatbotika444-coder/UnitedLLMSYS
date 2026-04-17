@@ -835,6 +835,7 @@ export default function App() {
         <SiteHeader
           onHome={handleHomeNavigation}
           onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
           onPrivacy={() => openSitePanel("privacy")}
           activeItem={activeSiteNav}
         />
@@ -858,6 +859,9 @@ export default function App() {
             </div>
 
             <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Accounts are created by Admin only."}</div>
+            <button className="secondary-button auth-docs-button" type="button" onClick={() => openSitePanel("docs")}>
+              Docs
+            </button>
 
             {isRestoringSession ? null : (
               <>
@@ -992,6 +996,7 @@ export default function App() {
         <SiteHeader
           onHome={handleHomeNavigation}
           onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
           onPrivacy={() => openSitePanel("privacy")}
           activeItem={activeSiteNav}
         />
@@ -1080,6 +1085,7 @@ export default function App() {
         <SiteHeader
           onHome={handleHomeNavigation}
           onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
           onPrivacy={() => openSitePanel("privacy")}
           activeItem={activeSiteNav}
         />
@@ -1166,6 +1172,7 @@ export default function App() {
         <SiteHeader
           onHome={handleHomeNavigation}
           onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
           onPrivacy={() => openSitePanel("privacy")}
           activeItem={activeSiteNav}
         />
@@ -1288,6 +1295,7 @@ export default function App() {
       <SiteHeader
         onHome={handleHomeNavigation}
         onAbout={() => openSitePanel("about")}
+        onDocs={() => openSitePanel("docs")}
         onPrivacy={() => openSitePanel("privacy")}
         activeItem={activeSiteNav}
       />
