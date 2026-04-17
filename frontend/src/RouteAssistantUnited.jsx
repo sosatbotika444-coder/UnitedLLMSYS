@@ -366,6 +366,29 @@ function getNetworkLabel(stop) {
   return stop.brand || stop.name || "Fuel Stop";
 }
 
+function priceStatusLabel(status) {
+  if (status === "live") return "Live official price";
+  if (status === "live_cache") return "Recently refreshed price";
+  if (status === "recent_cache") return "Recent official cache";
+  if (status === "catalog_cache") return "Catalog official price";
+  if (status === "unavailable") return "Official price unavailable";
+  return "Official network price";
+}
+
+function formatPriceUpdatedAt(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
+}
+
+function priceSourceLine(stop, priceSignalMeta) {
+  const parts = [priceStatusLabel(stop.price_status), stop.price_source || "Official Love's/Pilot network page"];
+  const updatedAt = formatPriceUpdatedAt(stop.price_updated_at || stop.price_date);
+  if (updatedAt) parts.push(updatedAt);
+  if (priceSignalMeta.target !== null) parts.push(priceSignalMeta.summary);
+  return parts.filter(Boolean).join(" | ");
+}
 function StopCard({ stop, compact = false, priceTarget = null }) {
   const tone = getNetworkTone(stop);
   const autoDieselPrice = getAutoDieselPrice(stop);
@@ -394,7 +417,8 @@ function StopCard({ stop, compact = false, priceTarget = null }) {
       <div className={`fuel-price-row fuel-price-row-brand ${priceSignalClass}`.trim()}>
         <div>
           <strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
-          <span>{priceSignalMeta.target !== null ? `${stop.price_source || "Official Love's/Pilot network page"} | ${priceSignalMeta.summary}` : (stop.price_source || "Official Love's/Pilot network page")}</span>
+          <span>{priceSourceLine(stop, priceSignalMeta)}</span>
+
         </div>
         {stop.source_url ? (
           <a className="fuel-source-link" href={stop.source_url} target="_blank" rel="noreferrer">

@@ -7,7 +7,7 @@ import ssl
 import threading
 import time
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -34,12 +34,14 @@ PILOT_SITEMAP_URL = "https://locations.pilotflyingj.com/sitemap.xml"
 PILOT_LAMBDA_PROXY_URL = "https://ogc8wzyh57.execute-api.us-east-1.amazonaws.com/prod/get"
 PILOT_FUEL_API_ROOT = "https://api.cp.pilotflyingj.com/pfj-loyaltymkt-yext-e/api/v1/site"
 CATALOG_VERSION = 1
-CATALOG_MAX_AGE = timedelta(days=7)
+CATALOG_MAX_AGE = timedelta(days=max(7, settings.station_catalog_max_age_days))
 CATALOG_WORKERS = 18
 DEFAULT_ROUTE_CORRIDOR_MILES = 35.0
 SHORTLISTED_ROUTE_STATION_LIMIT = None
 ROUTE_REFINE_LIMIT = 12
 LIVE_PRICE_REFRESH_WORKERS = 12
+ROUTE_LIVE_PRICE_BLOCKING_LIMIT = max(0, settings.route_live_price_blocking_limit)
+ROUTE_LIVE_PRICE_TIMEOUT_SECONDS = max(0.0, settings.route_live_price_timeout_seconds)
 LIVE_PRICE_ROUTE_ENQUEUE_LIMIT = 48
 ROUTE_REFINE_WORKERS = 4
 ROUTE_DETOUR_TIMEOUT_SECONDS = 6.0
@@ -66,6 +68,17 @@ LIVE_PRICE_RUNTIME = {
     "dropped": 0,
     "last_success_at": None,
     "last_error_at": None,
+}
+CATALOG_REFRESH_LOCK = threading.Lock()
+CATALOG_REFRESH_THREAD: threading.Thread | None = None
+CATALOG_RUNTIME = {
+    "refreshing": False,
+    "last_started_at": None,
+    "last_success_at": None,
+    "last_error_at": None,
+    "last_error": "",
+    "last_station_count": 0,
+    "refresh_count": 0,
 }
 ShortlistedOfficialStation = tuple[FuelStop, dict, int]
 
@@ -500,7 +513,7 @@ def build_station_catalog() -> list[dict]:
 
 
 
-def read_catalog_cache() -> list[dict] | None:
+def read_catalog_cache_payload(allow_stale: bool = False) -> tuple[list[dict], datetime, bool] | None:
     if not CATALOG_PATH.exists():
         return None
     try:
@@ -519,13 +532,21 @@ def read_catalog_cache() -> list[dict] | None:
         return None
     if generated_at.tzinfo is None:
         generated_at = generated_at.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) - generated_at > CATALOG_MAX_AGE:
-        return None
 
     stations = payload.get("stations")
     if not isinstance(stations, list):
         return None
-    return stations
+
+    is_fresh = datetime.now(timezone.utc) - generated_at <= CATALOG_MAX_AGE
+    if not is_fresh and not allow_stale:
+        return None
+    return stations, generated_at, is_fresh
+
+
+
+def read_catalog_cache(allow_stale: bool = False) -> list[dict] | None:
+    payload = read_catalog_cache_payload(allow_stale=allow_stale)
+    return payload[0] if payload else None
 
 
 
@@ -540,15 +561,119 @@ def write_catalog_cache(stations: list[dict]):
 
 
 
+def _update_catalog_runtime(**changes):
+    with CATALOG_REFRESH_LOCK:
+        for key, value in changes.items():
+            CATALOG_RUNTIME[key] = value
+
+
+
+def _catalog_refresh_worker(reason: str):
+    _update_catalog_runtime(
+        refreshing=True,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+        last_error="",
+    )
+    try:
+        stations = build_station_catalog()
+        if not stations:
+            raise RuntimeError("Official station catalog refresh returned no stations")
+        write_catalog_cache(stations)
+        try:
+            get_official_station_catalog.cache_clear()
+        except Exception:
+            pass
+        _update_catalog_runtime(
+            refreshing=False,
+            last_success_at=datetime.now(timezone.utc).isoformat(),
+            last_station_count=len(stations),
+            refresh_count=int(CATALOG_RUNTIME.get("refresh_count") or 0) + 1,
+        )
+    except Exception as exc:
+        _update_catalog_runtime(
+            refreshing=False,
+            last_error_at=datetime.now(timezone.utc).isoformat(),
+            last_error=f"{reason}: {exc}",
+        )
+
+
+
+def start_station_catalog_refresh(reason: str = "manual") -> bool:
+    global CATALOG_REFRESH_THREAD
+    if not settings.station_catalog_background_refresh_enabled:
+        return False
+    with CATALOG_REFRESH_LOCK:
+        if CATALOG_REFRESH_THREAD and CATALOG_REFRESH_THREAD.is_alive():
+            return False
+        CATALOG_REFRESH_THREAD = threading.Thread(
+            target=_catalog_refresh_worker,
+            args=(reason,),
+            name="station-catalog-refresh",
+            daemon=True,
+        )
+        CATALOG_REFRESH_THREAD.start()
+        return True
+
+
+
+def start_station_catalog_refresh_if_needed() -> bool:
+    cached = read_catalog_cache_payload(allow_stale=True)
+    if cached is None:
+        return start_station_catalog_refresh("missing catalog")
+    _stations, _generated_at, is_fresh = cached
+    if not is_fresh:
+        return start_station_catalog_refresh("stale catalog")
+    return False
+
+
+
+def station_catalog_runtime_status() -> dict:
+    cached = read_catalog_cache_payload(allow_stale=True)
+    with CATALOG_REFRESH_LOCK:
+        runtime = dict(CATALOG_RUNTIME)
+        refreshing = bool(CATALOG_REFRESH_THREAD and CATALOG_REFRESH_THREAD.is_alive())
+    if cached is None:
+        return {
+            **runtime,
+            "refreshing": refreshing,
+            "cached": False,
+            "fresh": False,
+            "generated_at": None,
+            "age_seconds": None,
+            "station_count": 0,
+            "max_age_days": CATALOG_MAX_AGE.days,
+        }
+    stations, generated_at, is_fresh = cached
+    age_seconds = max(0.0, (datetime.now(timezone.utc) - generated_at).total_seconds())
+    return {
+        **runtime,
+        "refreshing": refreshing,
+        "cached": True,
+        "fresh": is_fresh,
+        "generated_at": generated_at.isoformat(),
+        "age_seconds": round(age_seconds, 1),
+        "station_count": len(stations),
+        "max_age_days": CATALOG_MAX_AGE.days,
+    }
+
+
+
 @lru_cache(maxsize=1)
 def get_official_station_catalog() -> list[dict]:
-    cached = read_catalog_cache()
-    if cached is not None:
-        return cached
-    stations = build_station_catalog()
-    write_catalog_cache(stations)
-    return stations
+    cached_payload = read_catalog_cache_payload(allow_stale=True)
+    if cached_payload is not None:
+        stations, _generated_at, is_fresh = cached_payload
+        if not is_fresh:
+            start_station_catalog_refresh("stale catalog")
+        return stations
 
+    start_station_catalog_refresh("missing catalog")
+    if settings.station_catalog_blocking_rebuild_on_miss_enabled:
+        stations = build_station_catalog()
+        if stations:
+            write_catalog_cache(stations)
+        return stations
+    return []
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -651,6 +776,8 @@ def clone_record_as_stop(record: dict, fuel_type: str, off_route_m: float, origi
         price_less_tax=None,
         price_source=str(record.get("price_source") or "Official network page"),
         price_date=str(record.get("price_date") or "") or None,
+        price_status="catalog_cache" if selected_price is not None else "unavailable",
+        price_updated_at=str(record.get("price_date") or "") or None,
         parking_spaces=str(record.get("parking_spaces") or "") or None,
         amenity_score=round(amenity_bonus + location_bonus, 1),
         overall_score=score,
@@ -777,6 +904,8 @@ def apply_live_price_payload(stop: FuelStop, payload: dict, fuel_type: str):
         },
         fuel_type,
     )
+    stop.price_status = str(payload.get("price_status") or ("live" if stop.price is not None else "unavailable"))
+    stop.price_updated_at = str(payload.get("price_updated_at") or payload.get("updated_at") or payload.get("price_date") or "") or stop.price_updated_at
 
 
 def _load_live_price_cache_locked():
@@ -837,6 +966,8 @@ def store_live_price_cache_entry(task_key: str, payload: dict):
         "fuel_types": list(payload.get("fuel_types") or []),
         "price_source": str(payload.get("price_source") or "Official network page"),
         "price_date": str(payload.get("price_date") or "") or None,
+        "price_updated_at": str(payload.get("price_updated_at") or datetime.now(timezone.utc).isoformat()),
+        "price_status": str(payload.get("price_status") or "live"),
     }
     with LIVE_PRICE_CACHE_LOCK:
         _load_live_price_cache_locked()
@@ -869,7 +1000,9 @@ def is_live_price_entry_usable(entry: dict | None, now_ts: float | None = None) 
 
 
 def apply_cached_live_price_entry(stop: FuelStop, entry: dict, fuel_type: str):
-    apply_live_price_payload(stop, entry, fuel_type)
+    payload = dict(entry)
+    payload["price_status"] = "live_cache" if is_live_price_entry_fresh(entry) else "recent_cache"
+    apply_live_price_payload(stop, payload, fuel_type)
 
 
 def _update_live_price_runtime(**changes):
@@ -1021,6 +1154,49 @@ def copy_live_price_fields(source: FuelStop, target: FuelStop):
     target.price = source.price
     target.price_date = source.price_date
     target.price_source = source.price_source
+    target.price_status = source.price_status
+    target.price_updated_at = source.price_updated_at
+
+
+
+def refresh_live_price_group(group: list[ShortlistedOfficialStation], fuel_type: str) -> bool:
+    primary_stop, record, _ = group[0]
+    refresh_live_prices(primary_stop, record, fuel_type)
+    for stop, _, _ in group[1:]:
+        copy_live_price_fields(primary_stop, stop)
+    return primary_stop.price is not None and primary_stop.price_status in {"live", "live_cache", "recent_cache"}
+
+
+
+def refresh_price_groups_with_budget(
+    groups: list[list[ShortlistedOfficialStation]],
+    fuel_type: str,
+    max_workers: int,
+    timeout_seconds: float,
+) -> set[str]:
+    refreshed_keys: set[str] = set()
+    if not groups or timeout_seconds <= 0:
+        return refreshed_keys
+
+    executor = ThreadPoolExecutor(max_workers=min(max_workers, len(groups) or 1))
+    futures = {
+        executor.submit(refresh_live_price_group, group, fuel_type): live_price_task_key(group[0][0], group[0][1])
+        for group in groups
+    }
+    try:
+        for future in as_completed(futures, timeout=timeout_seconds):
+            task_key = futures[future]
+            try:
+                if future.result():
+                    refreshed_keys.add(task_key)
+            except Exception:
+                _increment_live_price_runtime("errors")
+                _update_live_price_runtime(last_error_at=datetime.now(timezone.utc).isoformat())
+    except TimeoutError:
+        pass
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return refreshed_keys
 
 
 
@@ -1029,6 +1205,8 @@ def refresh_shortlisted_live_prices(
     fuel_type: str,
     max_workers: int = LIVE_PRICE_REFRESH_WORKERS,
     blocking: bool | None = None,
+    blocking_limit: int = ROUTE_LIVE_PRICE_BLOCKING_LIMIT,
+    timeout_seconds: float = ROUTE_LIVE_PRICE_TIMEOUT_SECONDS,
 ):
     if not shortlisted:
         return
@@ -1041,18 +1219,13 @@ def refresh_shortlisted_live_prices(
         grouped.setdefault(live_price_task_key(stop, record), []).append((stop, record, nearest_index))
 
     if blocking:
-        def refresh_group(group: list[ShortlistedOfficialStation]):
-            primary_stop, record, _ = group[0]
-            refresh_live_prices(primary_stop, record, fuel_type)
-            for stop, _, _ in group[1:]:
-                copy_live_price_fields(primary_stop, stop)
-
         with ThreadPoolExecutor(max_workers=min(max_workers, len(grouped) or 1)) as executor:
-            list(executor.map(refresh_group, grouped.values()))
+            list(executor.map(lambda group: refresh_live_price_group(group, fuel_type), grouped.values()))
         persist_live_price_cache()
         return
 
-    enqueued_for_route = 0
+    immediate_groups: list[list[ShortlistedOfficialStation]] = []
+    queue_groups: list[tuple[str, list[ShortlistedOfficialStation]]] = []
     for task_key, group in grouped.items():
         cached_entry = get_live_price_cache_entry(task_key)
         if cached_entry and is_live_price_entry_usable(cached_entry):
@@ -1060,6 +1233,26 @@ def refresh_shortlisted_live_prices(
                 apply_cached_live_price_entry(stop, cached_entry, fuel_type)
             if is_live_price_entry_fresh(cached_entry):
                 continue
+        if len(immediate_groups) < max(0, blocking_limit):
+            immediate_groups.append(group)
+        else:
+            queue_groups.append((task_key, group))
+
+    refreshed_keys = refresh_price_groups_with_budget(
+        immediate_groups,
+        fuel_type,
+        max_workers=max(1, min(max_workers, settings.live_price_queue_workers or max_workers)),
+        timeout_seconds=timeout_seconds,
+    )
+
+    enqueued_for_route = 0
+    for group in immediate_groups:
+        task_key = live_price_task_key(group[0][0], group[0][1])
+        if task_key in refreshed_keys:
+            continue
+        queue_groups.append((task_key, group))
+
+    for task_key, group in queue_groups:
         if enqueued_for_route >= LIVE_PRICE_ROUTE_ENQUEUE_LIMIT:
             continue
         if enqueue_live_price_refresh(task_key, group[0][1]):

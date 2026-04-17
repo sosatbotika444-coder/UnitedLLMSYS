@@ -354,6 +354,8 @@ class FuelStop(BaseModel):
     price_less_tax: float | None = None
     price_source: str | None = None
     price_date: str | None = None
+    price_status: str | None = None
+    price_updated_at: str | None = None
     diesel_price: float | None = None
     auto_diesel_price: float | None = None
     unleaded_price: float | None = None

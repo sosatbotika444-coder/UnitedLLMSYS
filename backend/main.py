@@ -9,7 +9,7 @@ from app.auth import ensure_admin_user
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine, ensure_runtime_schema
 from app.motive import motive_snapshot_runtime_status, start_motive_snapshot_refresh_worker, stop_motive_snapshot_refresh_worker
-from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, stop_live_price_refresh_workers
+from app.official_stations import live_price_runtime_status, start_live_price_refresh_workers, start_station_catalog_refresh_if_needed, station_catalog_runtime_status, stop_live_price_refresh_workers
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.chat import router as chat_router
@@ -31,6 +31,7 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         ensure_admin_user(db)
     start_live_price_refresh_workers()
+    start_station_catalog_refresh_if_needed()
     start_motive_snapshot_refresh_worker(settings)
     try:
         yield
@@ -78,5 +79,6 @@ def health_check():
         "compression": "gzip",
         "motive_configured": bool(settings.motive_api_key or settings.motive_access_token),
         "live_price_background_refresh": live_price_runtime_status(),
+        "station_catalog_cache": station_catalog_runtime_status(),
         "motive_snapshot_cache": motive_snapshot_runtime_status(),
     }

@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     live_price_cache_persist_seconds: int = 5
     live_price_queue_workers: int = 4
     live_price_queue_max_size: int = 2048
+    station_catalog_max_age_days: int = 30
+    station_catalog_background_refresh_enabled: bool = True
+    station_catalog_blocking_rebuild_on_miss_enabled: bool = False
+    route_live_price_blocking_limit: int = 18
+    route_live_price_timeout_seconds: float = 12.0
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), env_file_encoding="utf-8-sig", extra="ignore")
 

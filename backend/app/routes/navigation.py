@@ -1350,6 +1350,19 @@ def choose_best_fuel_strategy(payload: RouteAssistantRequest, origin: GeocodedPo
     return min(strategies, key=lambda item: strategy_rank_key(item, price_target) + (item.total_route_miles, item.route_label or ""))
 
 
+
+def priority_live_price_candidates(route_contexts: list[RouteStationContext], limit: int = 36) -> list:
+    candidates = [item for context in route_contexts for item in context.shortlisted_stations]
+    candidates.sort(key=lambda item: (
+        -(item[0].overall_score or 0),
+        item[0].off_route_miles if item[0].off_route_miles is not None else 9999,
+        item[0].origin_miles if item[0].origin_miles is not None else 9999,
+        item[0].brand,
+        item[0].name,
+    ))
+    return candidates[:limit]
+
+
 def point_payload(point: RoutePoint) -> dict:
     return {"lat": point.lat, "lon": point.lon}
 
@@ -1723,10 +1736,6 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     route_items = list(enumerate(raw_routes[:3], start=1))
     with ThreadPoolExecutor(max_workers=min(3, len(route_items) or 1)) as executor:
         route_contexts = list(executor.map(lambda item: build_route_station_context(item[0], item[1], payload.fuel_type), route_items))
-    refresh_shortlisted_live_prices(
-        [item for context in route_contexts for item in context.shortlisted_stations],
-        payload.fuel_type,
-    )
 
     def refine_context_detours(context: RouteStationContext):
         refine_shortlisted_detours(context.shortlisted_stations, context.routing_points, payload.vehicle_type)
@@ -1734,6 +1743,15 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
 
     with ThreadPoolExecutor(max_workers=min(3, len(route_contexts) or 1)) as executor:
         route_contexts = list(executor.map(refine_context_detours, route_contexts))
+
+    priority_price_candidates = priority_live_price_candidates(route_contexts)
+    refresh_shortlisted_live_prices(priority_price_candidates, payload.fuel_type)
+    refresh_shortlisted_live_prices(
+        [item for context in route_contexts for item in context.shortlisted_stations],
+        payload.fuel_type,
+        blocking_limit=0,
+        timeout_seconds=0,
+    )
 
     routes: list[RouteOption] = []
     combined_stops: dict[str, FuelStop] = {}
@@ -1756,7 +1774,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     selected_stop = fuel_strategy.stops[0].stop if fuel_strategy and fuel_strategy.stops else (top_fuel_stops[0] if top_fuel_stops else None)
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
     assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
-    price_support = "UnitedLane parses official Love's and Pilot station data, matches those coordinates to your route, and returns auto diesel pricing where the network publishes it. Live prices now come from a local cache with background refresh, so route builds do not wait on every network call."
+    price_support = "UnitedLane uses the cached official Love's/Pilot station catalog for fast routing, then refreshes live official fuel prices for priority route stops within a short time budget and queues the rest in the background."
     if payload.price_target:
         price_support += f" Smart routing also tries to stay at or below ${payload.price_target:.3f}/gal and only goes above that target when the route cannot be completed safely or efficiently otherwise."
     map_link = build_map_link(origin.label, destination.label)
