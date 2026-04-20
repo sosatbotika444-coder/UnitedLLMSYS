@@ -154,12 +154,14 @@ function vehicleFuelPercent(vehicle) {
 
 function vehicleLocationQuery(vehicle) {
   const location = vehicle?.location || {};
+  const lat = Number(location.lat);
+  const lon = Number(location.lon);
+
+  // Prefer live GPS coordinates over address text to avoid stale origin points.
+  if (Number.isFinite(lat) && Number.isFinite(lon)) return `${lat}, ${lon}`;
   if (location.address) return location.address;
   const cityState = [location.city, location.state].filter(Boolean).join(", ");
   if (cityState) return cityState;
-  if (location.lat !== null && location.lat !== undefined && location.lon !== null && location.lon !== undefined) {
-    return `${location.lat}, ${location.lon}`;
-  }
   return "";
 }
 
