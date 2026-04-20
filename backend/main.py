@@ -15,6 +15,7 @@ from app.routes.auth import router as auth_router
 from app.routes.chat import router as chat_router
 from app.routes.driver import router as driver_router
 from app.routes.fuel_authorizations import router as fuel_authorizations_router
+from app.routes.full_road import router as full_road_router
 from app.routes.loads import router as loads_router
 from app.routes.motive import router as motive_router
 from app.routes.navigation import router as navigation_router
@@ -60,6 +61,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(driver_router, prefix="/api")
 app.include_router(fuel_authorizations_router, prefix="/api")
+app.include_router(full_road_router, prefix="/api")
 app.include_router(loads_router, prefix="/api")
 app.include_router(navigation_router, prefix="/api")
 app.include_router(motive_router, prefix="/api")

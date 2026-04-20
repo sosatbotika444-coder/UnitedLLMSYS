@@ -7,6 +7,7 @@ import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
 const AdminPanel = lazy(() => import("./AdminPanel"));
+const FullRoadWorkspace = lazy(() => import("./FullRoadWorkspace"));
 const RouteAssistant = lazy(() => import("./RouteAssistantUnited"));
 const RouteHistoryPanel = lazy(() => import("./RouteHistoryPanel"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
@@ -28,6 +29,7 @@ const departmentOptions = [
 const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
+  { id: "fullroad", label: "Full Road", detail: "Live trip chain", icon: "FR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
   { id: "history", label: "Route History", detail: "All builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Fuel limits", icon: "FA" },
@@ -44,6 +46,7 @@ const mobileFuelTabs = [
 ];
 const mobileFuelMoreTabs = [
   { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
+  { id: "fullroad", label: "Full Road", detail: "Truck to pickup to delivery", icon: "FR" },
   { id: "history", label: "Route History", detail: "All routing builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
   { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "ST" }
@@ -63,6 +66,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Tracking",
     subtitle: "Fleet visibility and status."
+  },
+  fullroad: {
+    eyebrow: "Fuel Service",
+    title: "Full Road",
+    subtitle: "Live truck to pickup to delivery with fuel planning."
   },
   routing: {
     eyebrow: "Fuel Service",
@@ -432,6 +440,10 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
 
   if (activeWorkspace === "routing") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading route intelligence..." />}><RouteAssistant token={token} active loadRows={rows} /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "fullroad") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Full Road..." />}><FullRoadWorkspace token={token} active loadRows={rows} /></Suspense></section>;
   }
 
   if (activeWorkspace === "history") {
@@ -1416,6 +1428,12 @@ export default function App() {
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "tracking"}>
             <Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}>
               <MotiveTrackingPanel token={token} active={activeWorkspace === "tracking"} />
+            </Suspense>
+          </section>
+
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "fullroad"}>
+            <Suspense fallback={<ModuleLoader label="Loading Full Road..." />}>
+              <FullRoadWorkspace token={token} active={activeWorkspace === "fullroad"} loadRows={rows} />
             </Suspense>
           </section>
 

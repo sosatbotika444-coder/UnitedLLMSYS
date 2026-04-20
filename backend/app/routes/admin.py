@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth import hash_password, normalize_email, normalize_username, require_user_department
 from app.database import get_db
 from app.models import (
+    FullRoadTrip,
     FuelAuthorization,
     Load,
     RoutingRequest,
@@ -118,6 +119,7 @@ def admin_overview(
             "loads": _count(db, Load),
             "routingRequests": _count(db, RoutingRequest),
             "fuelAuthorizations": _count(db, FuelAuthorization),
+            "fullRoadTrips": _count(db, FullRoadTrip),
             "teamMessages": _count(db, TeamChatMessage),
             "safetyDocuments": _count(db, SafetyDocument),
             "safetyCases": _count(db, SafetyInvestigationCase),

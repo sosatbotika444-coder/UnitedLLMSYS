@@ -75,13 +75,14 @@ function buildPriceLabel(stop, priceTarget) {
   return `Auto Diesel\n${autoDiesel}`;
 }
 
-export default function RouteMap({ plan, isFullscreen = false, active = true, priceTarget = null, startMarkerTitle = "", endMarkerTitle = "" }) {
+export default function RouteMap({ plan, isFullscreen = false, active = true, priceTarget = null, startMarkerTitle = "", endMarkerTitle = "", markers }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const popupRef = useRef(null);
   const handlersBoundRef = useRef(false);
   const [mapError, setMapError] = useState("");
+  const extraMarkers = useMemo(() => (Array.isArray(markers) ? markers : []), [markers]);
 
   const allStops = useMemo(() => {
     const byId = new Map();
@@ -391,6 +392,11 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       allStops.forEach((stop) => bounds.extend([stop.lon, stop.lat]));
       bounds.extend([plan.origin.lon, plan.origin.lat]);
       bounds.extend([plan.destination.lon, plan.destination.lat]);
+      extraMarkers.forEach((marker) => {
+        if (marker?.lat !== undefined && marker?.lon !== undefined) {
+          bounds.extend([marker.lon, marker.lat]);
+        }
+      });
       mapLibreMap.fitBounds(bounds, { padding: 50, duration: 0 });
 
       const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A", startMarkerTitle) })
@@ -401,6 +407,18 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         .addTo(mapLibreMap);
 
       markersRef.current.push(startMarker, endMarker);
+
+      extraMarkers.forEach((marker) => {
+        if (marker?.lat === undefined || marker?.lon === undefined) {
+          return;
+        }
+        const extraMarker = new maplibregl.Marker({
+          element: createMarkerElement(marker.className || "marker-mid", marker.label || "•", marker.title || "")
+        })
+          .setLngLat([marker.lon, marker.lat])
+          .addTo(mapLibreMap);
+        markersRef.current.push(extraMarker);
+      });
     };
 
     const initializeMap = () => {
@@ -446,7 +464,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       }
       mapRef.current = null;
     };
-  }, [allStops, endMarkerTitle, plan, priceTarget, startMarkerTitle, strategyStopIds]);
+  }, [allStops, endMarkerTitle, extraMarkers, plan, priceTarget, startMarkerTitle, strategyStopIds]);
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;
@@ -454,4 +472,3 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
 
   return <div ref={containerRef} className="live-route-map" />;
 }
-

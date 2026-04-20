@@ -118,6 +118,31 @@ class Load(Base):
     delivery_city: Mapped[str] = mapped_column(String(255), default="", nullable=False)
 
 
+class FullRoadTrip(Base):
+    __tablename__ = "full_road_trips"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    load_id: Mapped[int | None] = mapped_column(ForeignKey("loads.id", ondelete="SET NULL"), index=True, nullable=True)
+    vehicle_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    truck_number: Mapped[str] = mapped_column(String(128), default="", index=True, nullable=False)
+    driver_name: Mapped[str] = mapped_column(String(255), default="", index=True, nullable=False)
+    pickup: Mapped[str] = mapped_column(String(512), default="", index=True, nullable=False)
+    delivery: Mapped[str] = mapped_column(String(512), default="", index=True, nullable=False)
+    stage: Mapped[str] = mapped_column(String(64), default="enroute_pickup", index=True, nullable=False)
+    tank_capacity_gallons: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    mpg: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    current_fuel_gallons: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    fuel_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    to_pickup_plan: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    to_delivery_plan: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    live: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class RoutingRequest(Base):
     __tablename__ = "routing_requests"
 

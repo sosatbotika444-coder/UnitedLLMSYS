@@ -12836,3 +12836,354 @@ body.theme-blue .route-history-stops div.selected {
     flex-direction: column;
   }
 }
+
+.marker-pickup,
+.marker-pickup.tt-marker-labeled {
+  background: #0f766e;
+}
+
+.marker-live,
+.marker-live.tt-marker-labeled {
+  background: #b45309;
+}
+
+.full-road-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.full-road-builder-panel,
+.full-road-trip-strip-panel,
+.full-road-control-panel,
+.full-road-map-panel,
+.full-road-fuel-panel,
+.full-road-leg-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.92));
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.full-road-head,
+.compact-panel-head {
+  align-items: center;
+}
+
+.full-road-head-actions,
+.full-road-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.full-road-head-chip {
+  padding: 8px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.86);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.full-road-builder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.full-road-builder-grid label,
+.full-road-leg-grid span,
+.full-road-live-grid article,
+.full-road-selected-vehicle article,
+.full-road-top-stop-card,
+.full-road-fuel-stop-item {
+  display: grid;
+  gap: 6px;
+}
+
+.full-road-builder-grid label,
+.full-road-builder-grid select,
+.full-road-builder-grid input {
+  min-width: 0;
+}
+
+.full-road-builder-grid label {
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.full-road-builder-grid input,
+.full-road-builder-grid select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.full-road-wide-field {
+  grid-column: span 3;
+}
+
+.full-road-selected-vehicle,
+.full-road-live-grid,
+.full-road-leg-grid,
+.full-road-fuel-grid,
+.full-road-top-stop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.full-road-selected-vehicle article,
+.full-road-live-grid article,
+.full-road-leg-stop,
+.full-road-top-stop-card,
+.full-road-fuel-stop-item {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.full-road-selected-vehicle span,
+.full-road-live-grid span,
+.full-road-leg-card span,
+.full-road-fuel-card span,
+.full-road-trip-stage {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.full-road-builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.full-road-trip-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 320px);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.full-road-trip-tab {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-height: 132px;
+  padding: 14px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.full-road-trip-tab:hover,
+.full-road-trip-tab.active {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 18px 30px rgba(37, 99, 235, 0.12);
+}
+
+.full-road-trip-stage {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.full-road-trip-stage.tone-active {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(239, 246, 255, 0.9);
+}
+
+.full-road-trip-stage.tone-pickup {
+  color: #0f766e;
+  border-color: rgba(15, 118, 110, 0.18);
+  background: rgba(236, 253, 245, 0.94);
+}
+
+.full-road-trip-stage.tone-delivery {
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.18);
+  background: rgba(255, 247, 237, 0.95);
+}
+
+.full-road-trip-stage.tone-delivered {
+  color: #166534;
+  border-color: rgba(22, 101, 52, 0.18);
+  background: rgba(240, 253, 244, 0.95);
+}
+
+.full-road-trip-tab strong,
+.full-road-leg-card strong,
+.full-road-fuel-card strong,
+.full-road-live-grid strong,
+.full-road-selected-vehicle strong {
+  color: var(--text-strong);
+}
+
+.full-road-trip-tab small,
+.full-road-trip-tab em,
+.full-road-leg-card small,
+.full-road-leg-card em,
+.full-road-fuel-card small,
+.full-road-top-stop-card small,
+.full-road-fuel-stop-item small {
+  color: var(--muted);
+}
+
+.full-road-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.full-road-control-panel,
+.full-road-map-panel,
+.full-road-fuel-panel {
+  padding: 18px;
+}
+
+.full-road-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+  gap: 18px;
+}
+
+.full-road-map-stage {
+  min-height: 620px;
+  overflow: hidden;
+}
+
+.full-road-side-stack,
+.full-road-leg-card,
+.full-road-fuel-card,
+.full-road-leg-stop-list,
+.full-road-fuel-stop-list {
+  display: grid;
+  gap: 12px;
+}
+
+.full-road-leg-card,
+.full-road-fuel-card {
+  padding: 18px;
+}
+
+.full-road-leg-head,
+.full-road-fuel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.full-road-leg-empty,
+.full-road-fuel-empty,
+.full-road-empty {
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.84);
+  color: var(--muted);
+}
+
+.full-road-top-stop-grid {
+  margin-top: 6px;
+}
+
+.full-road-top-stop-card span,
+.full-road-fuel-stop-item span {
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.theme-dark .full-road-builder-panel,
+body.theme-dark .full-road-trip-strip-panel,
+body.theme-dark .full-road-control-panel,
+body.theme-dark .full-road-map-panel,
+body.theme-dark .full-road-fuel-panel,
+body.theme-dark .full-road-leg-card {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(19, 28, 48, 0.9));
+  border-color: rgba(71, 85, 105, 0.46);
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.36);
+}
+
+body.theme-dark .full-road-builder-grid input,
+body.theme-dark .full-road-builder-grid select,
+body.theme-dark .full-road-selected-vehicle article,
+body.theme-dark .full-road-live-grid article,
+body.theme-dark .full-road-leg-stop,
+body.theme-dark .full-road-top-stop-card,
+body.theme-dark .full-road-fuel-stop-item,
+body.theme-dark .full-road-trip-tab,
+body.theme-dark .full-road-empty,
+body.theme-dark .full-road-leg-empty,
+body.theme-dark .full-road-fuel-empty {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(71, 85, 105, 0.48);
+}
+
+@media (max-width: 1120px) {
+  .full-road-main-grid,
+  .full-road-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .full-road-wide-field {
+    grid-column: auto;
+  }
+
+  .full-road-map-stage {
+    min-height: 460px;
+  }
+}
+
+@media (max-width: 720px) {
+  .full-road-builder-actions,
+  .full-road-stage-actions,
+  .full-road-head-actions {
+    flex-direction: column;
+  }
+
+  .full-road-builder-actions .primary-button,
+  .full-road-builder-actions .secondary-button,
+  .full-road-stage-actions .primary-button,
+  .full-road-stage-actions .secondary-button,
+  .full-road-stage-actions .delete-button {
+    width: 100%;
+  }
+
+  .full-road-trip-strip {
+    grid-auto-columns: minmax(240px, 86vw);
+  }
+
+  .full-road-map-stage {
+    min-height: 380px;
+  }
+}

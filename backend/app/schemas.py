@@ -288,6 +288,40 @@ class LoadResponse(LoadBase):
     model_config = {"from_attributes": True}
 
 
+class FullRoadTripBase(BaseModel):
+    loadId: int | None = Field(default=None, ge=1)
+    vehicleId: int | None = Field(default=None, ge=1)
+    truckNumber: str = Field(default="", max_length=128)
+    driverName: str = Field(default="", max_length=255)
+    pickup: str = Field(default="", max_length=512)
+    delivery: str = Field(default="", max_length=512)
+    stage: str = Field(default="enroute_pickup", max_length=64)
+    tankCapacityGallons: float = Field(default=0, ge=0)
+    mpg: float = Field(default=0, ge=0)
+    currentFuelGallons: float = Field(default=0, ge=0)
+    fuelPercent: float | None = Field(default=None, ge=0, le=100)
+    toPickupPlan: dict[str, Any] = Field(default_factory=dict)
+    toDeliveryPlan: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    live: dict[str, Any] = Field(default_factory=dict)
+
+
+class FullRoadTripCreate(FullRoadTripBase):
+    pass
+
+
+class FullRoadTripUpdate(FullRoadTripBase):
+    pass
+
+
+class FullRoadTripResponse(FullRoadTripBase):
+    id: int
+    userId: int
+    isArchived: bool = False
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
 class RouteAssistantRequest(BaseModel):
     origin: str = Field(min_length=2, max_length=255)
     destination: str = Field(min_length=2, max_length=255)

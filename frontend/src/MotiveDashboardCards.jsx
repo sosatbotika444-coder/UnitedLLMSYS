@@ -38,7 +38,7 @@ function compactDate(value) {
   if (!value) return "Unknown";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
+  return new Intl.DateTimeFormat("en-US", { month: "short", dayа: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
 function normalizeText(value) {
