@@ -268,13 +268,14 @@ function stopLine(stop) {
   return `${stop.brand || stop.name} - ${formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}`;
 }
 
-function buildCombinedMapPlan(trip, vehicle = null) {
+function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
   if (!trip?.toPickupPlan || !trip?.toDeliveryPlan) return null;
-  const pickupBestRoute = trip.toPickupPlan.routes?.[0];
+  const pickupPlan = livePickupPlan || trip.toPickupPlan;
+  const pickupBestRoute = pickupPlan.routes?.[0];
   const deliveryBestRoute = trip.toDeliveryPlan.routes?.[0];
   if (!pickupBestRoute || !deliveryBestRoute) return null;
   const livePoint = locationPoint(vehicle);
-  const fallbackOrigin = trip.toPickupPlan.origin;
+  const fallbackOrigin = pickupPlan.origin || trip.toPickupPlan.origin;
   const routeStartPoint = pickupBestRoute.points?.[0];
   const resolvedOrigin = livePoint
     ? {
@@ -288,38 +289,14 @@ function buildCombinedMapPlan(trip, vehicle = null) {
       label: trip.pickup
     } : null));
   if (!resolvedOrigin || resolvedOrigin.lat === undefined || resolvedOrigin.lon === undefined) return null;
-  const pickupPoint = trip.toPickupPlan.destination;
-  const driftFromPickupRouteStart = livePoint && routeStartPoint
-    ? haversineMiles(
-      { lat: Number(routeStartPoint.lat), lon: Number(routeStartPoint.lon) },
-      { lat: livePoint.lat, lon: livePoint.lon }
-    )
-    : null;
-  const shouldPatchPickupLeg =
-    driftFromPickupRouteStart !== null
-    && Number.isFinite(driftFromPickupRouteStart)
-    && driftFromPickupRouteStart > FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES
-    && pickupPoint?.lat !== undefined
-    && pickupPoint?.lon !== undefined;
-  const pickupRouteForMap = shouldPatchPickupLeg
-    ? {
-      ...pickupBestRoute,
-      id: `${trip.id}-pickup-leg`,
-      label: "Truck to Pickup (live)",
-      points: [
-        { lat: livePoint.lat, lon: livePoint.lon },
-        { lat: Number(pickupPoint.lat), lon: Number(pickupPoint.lon) }
-      ],
-      fuel_stops: []
-    }
-    : {
-      ...pickupBestRoute,
-      id: `${trip.id}-pickup-leg`,
-      label: "Truck to Pickup"
-    };
+  const pickupRouteForMap = {
+    ...pickupBestRoute,
+    id: `${trip.id}-pickup-leg`,
+    label: livePickupPlan ? "Truck to Pickup (live route)" : "Truck to Pickup"
+  };
 
   const stopMap = new Map();
-  [...(trip.toPickupPlan.top_fuel_stops || []), ...(trip.toDeliveryPlan.top_fuel_stops || [])].forEach((stop) => {
+  [...(pickupPlan.top_fuel_stops || []), ...(trip.toDeliveryPlan.top_fuel_stops || [])].forEach((stop) => {
     if (!stopMap.has(stop.id)) {
       stopMap.set(stop.id, stop);
     }
@@ -557,6 +534,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   const [delivery, setDelivery] = useState("");
   const [activeTrips, setActiveTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState("");
+  const [livePickupPlan, setLivePickupPlan] = useState(null);
+  const [livePickupPlanLoading, setLivePickupPlanLoading] = useState(false);
   const activeTripsRef = useRef([]);
   const fleetSnapshotRef = useRef(null);
 
@@ -748,10 +727,107 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     () => vehicles.find((vehicle) => String(vehicle.id) === String(selectedTrip?.vehicleId)) || null,
     [selectedTrip?.vehicleId, vehicles]
   );
+  const selectedTripLivePoint = useMemo(
+    () => locationPoint(selectedTripVehicle),
+    [selectedTripVehicle?.location?.lat, selectedTripVehicle?.location?.lon]
+  );
+
+  useEffect(() => {
+    if (!active || !token || !selectedTrip || !selectedTripVehicle || !selectedTripLivePoint) {
+      setLivePickupPlan(null);
+      setLivePickupPlanLoading(false);
+      return undefined;
+    }
+
+    const pickupRouteStart = selectedTrip.toPickupPlan?.routes?.[0]?.points?.[0];
+    if (!pickupRouteStart) {
+      setLivePickupPlan(null);
+      setLivePickupPlanLoading(false);
+      return undefined;
+    }
+
+    const driftMiles = haversineMiles(
+      { lat: Number(pickupRouteStart.lat), lon: Number(pickupRouteStart.lon) },
+      { lat: selectedTripLivePoint.lat, lon: selectedTripLivePoint.lon }
+    );
+    if (!Number.isFinite(driftMiles) || driftMiles <= FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES) {
+      setLivePickupPlan(null);
+      setLivePickupPlanLoading(false);
+      return undefined;
+    }
+
+    const pickupDestinationPoint = selectedTrip.toPickupPlan?.destination;
+    const pickupDestinationQuery =
+      pickupDestinationPoint?.lat !== undefined && pickupDestinationPoint?.lon !== undefined
+        ? `${pickupDestinationPoint.lat}, ${pickupDestinationPoint.lon}`
+        : String(selectedTrip.pickup || "").trim();
+    if (!pickupDestinationQuery) {
+      setLivePickupPlan(null);
+      setLivePickupPlanLoading(false);
+      return undefined;
+    }
+
+    let ignore = false;
+    setLivePickupPlanLoading(true);
+    apiRequest(
+      "/navigation/route-assistant",
+      {
+        method: "POST",
+        timeoutMs: ROUTE_REQUEST_TIMEOUT_MS,
+        body: JSON.stringify({
+          origin: `${selectedTripLivePoint.lat}, ${selectedTripLivePoint.lon}`,
+          destination: pickupDestinationQuery,
+          vehicle_id: Number(selectedTripVehicle.id) || Number(selectedTrip.vehicleId) || null,
+          vehicle_number: selectedTrip.truckNumber || vehicleLabel(selectedTripVehicle),
+          driver_name: selectedTrip.driverName || vehicleDriverName(selectedTripVehicle),
+          vehicle_type: "Truck",
+          fuel_type: "Auto Diesel",
+          current_fuel_gallons: Math.max(0, Number(selectedTrip.currentFuelGallons) || DEFAULT_CURRENT_FUEL_GALLONS),
+          tank_capacity_gallons: Math.max(1, Number(selectedTrip.tankCapacityGallons) || DEFAULT_TANK_CAPACITY_GALLONS),
+          mpg: Math.max(0.1, Number(selectedTrip.mpg) || DEFAULT_TRUCK_MPG),
+          sort_by: "best"
+        })
+      },
+      token
+    )
+      .then((plan) => {
+        if (ignore) return;
+        setLivePickupPlan(plan?.routes?.[0] ? plan : null);
+      })
+      .catch(() => {
+        if (!ignore) {
+          setLivePickupPlan(null);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLivePickupPlanLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    active,
+    token,
+    selectedTrip?.id,
+    selectedTrip?.pickup,
+    selectedTrip?.vehicleId,
+    selectedTrip?.truckNumber,
+    selectedTrip?.driverName,
+    selectedTrip?.currentFuelGallons,
+    selectedTrip?.tankCapacityGallons,
+    selectedTrip?.mpg,
+    selectedTripVehicle?.id,
+    selectedTripLivePoint?.lat,
+    selectedTripLivePoint?.lon
+  ]);
+
   const openTrips = useMemo(() => activeTrips.filter((trip) => trip.stage !== "delivered"), [activeTrips]);
   const combinedMapPlan = useMemo(
-    () => buildCombinedMapPlan(selectedTrip, selectedTripVehicle),
-    [selectedTrip, selectedTripVehicle]
+    () => buildCombinedMapPlan(selectedTrip, selectedTripVehicle, livePickupPlan),
+    [selectedTrip, selectedTripVehicle, livePickupPlan]
   );
   const mapMarkers = useMemo(() => tripExtraMarkers(selectedTrip, selectedTripVehicle), [selectedTrip, selectedTripVehicle]);
   const selectedPreset = useMemo(() => (selectedVehicle ? deriveTruckPreset(selectedVehicle, loadRows) : null), [loadRows, selectedVehicle]);
@@ -1062,6 +1138,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             <SummaryCard label="Fuel Stops" value={metricValue(selectedTrip.metrics.fuelStopCount)} detail={formatCurrency(selectedTrip.metrics.estimatedFuelCost)} tone="dark" />
             <SummaryCard label="Live Next" value={nextDistance !== null && nextDistance !== undefined ? formatDistanceMiles(nextDistance) : "No GPS"} detail={nextEta ? `Last ETA ${formatDateTime(nextEta)}` : "Waiting on route"} tone="green" />
           </section>
+          {livePickupPlanLoading ? <div className="notice info inline-notice">Updating live truck-to-pickup road path...</div> : null}
 
           <section className="panel full-road-control-panel">
             <div className="panel-head compact-panel-head">
