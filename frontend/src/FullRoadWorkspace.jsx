@@ -61,6 +61,39 @@ async function apiRequest(path, options = {}, token = "") {
   }
 }
 
+function fileNameFromDisposition(headerValue, fallback = "full_road_trips.xlsx") {
+  if (!headerValue) return fallback;
+  const utf8Match = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+  const basicMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] || fallback;
+}
+
+async function downloadFile(path, token = "", fallbackFileName = "full_road_trips.xlsx") {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Download failed");
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileNameFromDisposition(response.headers.get("Content-Disposition"), fallbackFileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
+}
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -610,6 +643,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   const [selectedTripId, setSelectedTripId] = useState("");
   const [livePickupPlan, setLivePickupPlan] = useState(null);
   const [livePickupPlanLoading, setLivePickupPlanLoading] = useState(false);
+  const [tripExporting, setTripExporting] = useState(false);
   const activeTripsRef = useRef([]);
   const fleetSnapshotRef = useRef(null);
 
@@ -1069,6 +1103,21 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     }
   }
 
+  async function exportTripsExcel() {
+    if (!token) return;
+    setTripExporting(true);
+    setTripError("");
+    setMessage("");
+    try {
+      await downloadFile("/full-road-trips/export?include_archived=true", token, "full_road_trips.xlsx");
+      setMessage("Full Road trips exported to Excel.");
+    } catch (error) {
+      setTripError(error.message || "Full Road trips export failed.");
+    } finally {
+      setTripExporting(false);
+    }
+  }
+
   const livePickupDistance = selectedTrip?.live?.distanceToPickupMiles;
   const liveDeliveryDistance = selectedTrip?.live?.distanceToDeliveryMiles;
   const nextDistance = selectedTrip?.stage === "enroute_pickup" ? livePickupDistance : liveDeliveryDistance;
@@ -1085,6 +1134,14 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
           <div className="full-road-head-actions">
             <span className="full-road-head-chip">{metricValue(openTrips.length)} active trips</span>
             <span className="full-road-head-chip">{metricValue(vehicles.length)} fleet units</span>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={exportTripsExcel}
+              disabled={!token || tripExporting || tripsLoading}
+            >
+              {tripExporting ? "Exporting..." : "Export Trips Excel"}
+            </button>
           </div>
         </div>
 
