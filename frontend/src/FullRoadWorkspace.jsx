@@ -11,6 +11,7 @@ const DEFAULT_TRUCK_MPG = 6.0;
 const DEFAULT_CURRENT_FUEL_GALLONS = 100;
 const PICKUP_ARRIVAL_THRESHOLD_MILES = 1;
 const DELIVERY_COMPLETE_THRESHOLD_MILES = 1;
+const FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES = 8;
 const stageLabels = {
   enroute_pickup: "Truck to Pickup",
   at_pickup: "At Pickup",
@@ -267,11 +268,55 @@ function stopLine(stop) {
   return `${stop.brand || stop.name} - ${formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}`;
 }
 
-function buildCombinedMapPlan(trip) {
+function buildCombinedMapPlan(trip, vehicle = null) {
   if (!trip?.toPickupPlan || !trip?.toDeliveryPlan) return null;
   const pickupBestRoute = trip.toPickupPlan.routes?.[0];
   const deliveryBestRoute = trip.toDeliveryPlan.routes?.[0];
   if (!pickupBestRoute || !deliveryBestRoute) return null;
+  const livePoint = locationPoint(vehicle);
+  const fallbackOrigin = trip.toPickupPlan.origin;
+  const routeStartPoint = pickupBestRoute.points?.[0];
+  const resolvedOrigin = livePoint
+    ? {
+      lat: livePoint.lat,
+      lon: livePoint.lon,
+      label: vehicleLocationLabel(vehicle) || fallbackOrigin?.label || trip.pickup
+    }
+    : (fallbackOrigin || (routeStartPoint ? {
+      lat: routeStartPoint.lat,
+      lon: routeStartPoint.lon,
+      label: trip.pickup
+    } : null));
+  if (!resolvedOrigin || resolvedOrigin.lat === undefined || resolvedOrigin.lon === undefined) return null;
+  const pickupPoint = trip.toPickupPlan.destination;
+  const driftFromPickupRouteStart = livePoint && routeStartPoint
+    ? haversineMiles(
+      { lat: Number(routeStartPoint.lat), lon: Number(routeStartPoint.lon) },
+      { lat: livePoint.lat, lon: livePoint.lon }
+    )
+    : null;
+  const shouldPatchPickupLeg =
+    driftFromPickupRouteStart !== null
+    && Number.isFinite(driftFromPickupRouteStart)
+    && driftFromPickupRouteStart > FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES
+    && pickupPoint?.lat !== undefined
+    && pickupPoint?.lon !== undefined;
+  const pickupRouteForMap = shouldPatchPickupLeg
+    ? {
+      ...pickupBestRoute,
+      id: `${trip.id}-pickup-leg`,
+      label: "Truck to Pickup (live)",
+      points: [
+        { lat: livePoint.lat, lon: livePoint.lon },
+        { lat: Number(pickupPoint.lat), lon: Number(pickupPoint.lon) }
+      ],
+      fuel_stops: []
+    }
+    : {
+      ...pickupBestRoute,
+      id: `${trip.id}-pickup-leg`,
+      label: "Truck to Pickup"
+    };
 
   const stopMap = new Map();
   [...(trip.toPickupPlan.top_fuel_stops || []), ...(trip.toDeliveryPlan.top_fuel_stops || [])].forEach((stop) => {
@@ -281,10 +326,10 @@ function buildCombinedMapPlan(trip) {
   });
 
   return {
-    origin: trip.toPickupPlan.origin,
+    origin: resolvedOrigin,
     destination: trip.toDeliveryPlan.destination,
     routes: [
-      { ...pickupBestRoute, id: `${trip.id}-pickup-leg`, label: "Truck to Pickup" },
+      pickupRouteForMap,
       { ...deliveryBestRoute, id: `${trip.id}-delivery-leg`, label: "Pickup to Delivery" }
     ],
     top_fuel_stops: [...stopMap.values()],
@@ -704,7 +749,10 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     [selectedTrip?.vehicleId, vehicles]
   );
   const openTrips = useMemo(() => activeTrips.filter((trip) => trip.stage !== "delivered"), [activeTrips]);
-  const combinedMapPlan = useMemo(() => buildCombinedMapPlan(selectedTrip), [selectedTrip]);
+  const combinedMapPlan = useMemo(
+    () => buildCombinedMapPlan(selectedTrip, selectedTripVehicle),
+    [selectedTrip, selectedTripVehicle]
+  );
   const mapMarkers = useMemo(() => tripExtraMarkers(selectedTrip, selectedTripVehicle), [selectedTrip, selectedTripVehicle]);
   const selectedPreset = useMemo(() => (selectedVehicle ? deriveTruckPreset(selectedVehicle, loadRows) : null), [loadRows, selectedVehicle]);
 
@@ -1067,7 +1115,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                     <RouteMap
                       plan={combinedMapPlan}
                       active={active}
-                      startMarkerTitle={selectedTrip.toPickupPlan.origin.label || "Truck route start"}
+                      startMarkerTitle={combinedMapPlan.origin?.label || selectedTrip.toPickupPlan.origin.label || "Truck route start"}
                       endMarkerTitle={selectedTrip.toDeliveryPlan.destination.label || selectedTrip.delivery}
                       markers={mapMarkers}
                     />
