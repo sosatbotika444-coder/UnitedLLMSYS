@@ -899,7 +899,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
         </div>
 
         <div className="full-road-builder-grid">
-          <label>
+          <label className="full-road-field-load">
             Use saved load
             <select value={selectedLoadId} onChange={(event) => setSelectedLoadId(event.target.value)}>
               <option value="">Manual trip</option>
@@ -910,19 +910,19 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               ))}
             </select>
           </label>
-          <label>
+          <label className="full-road-field-pickup">
             Pickup
             <input type="text" value={pickup} onChange={(event) => setPickup(event.target.value)} placeholder="Pickup address or city" />
           </label>
-          <label>
+          <label className="full-road-field-delivery">
             Delivery
             <input type="text" value={delivery} onChange={(event) => setDelivery(event.target.value)} placeholder="Delivery address or city" />
           </label>
-          <label className="full-road-wide-field">
+          <label className="full-road-wide-field full-road-field-search">
             Search truck or driver
             <input type="text" value={vehicleSearch} onChange={(event) => setVehicleSearch(event.target.value)} placeholder="Truck, driver, city" />
           </label>
-          <label className="full-road-wide-field">
+          <label className="full-road-wide-field full-road-field-vehicle">
             Assign truck / driver
             <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)}>
               <option value="">Select live unit</option>
