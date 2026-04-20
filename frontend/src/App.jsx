@@ -17,6 +17,7 @@ const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
+const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
@@ -155,6 +156,17 @@ function normalizeRow(row) {
 
 function ModuleLoader({ label = "Loading workspace module..." }) {
   return <div className="module-loader">{label}</div>;
+}
+
+function readStoredUser() {
+  try {
+    const rawValue = localStorage.getItem(USER_KEY);
+    if (!rawValue) return null;
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 async function apiRequest(path, options = {}, token = "") {
@@ -520,12 +532,12 @@ export default function App() {
   const [registerForm, setRegisterForm] = useState(emptyRegister);
   const [loginForm, setLoginForm] = useState(emptyLogin);
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
+  const [user, setUser] = useState(() => readStoredUser());
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || "light");
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
     const savedDepartment = localStorage.getItem(PRODUCT_KEY);
     return departmentOptions.some((option) => option.id === savedDepartment) ? savedDepartment : "fuel";
   });
-  const [user, setUser] = useState(null);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -540,6 +552,7 @@ export default function App() {
 
   useEffect(() => {
     if (!token) {
+      localStorage.removeItem(USER_KEY);
       setUser(null);
       setRows([]);
       return;
@@ -551,17 +564,23 @@ export default function App() {
       try {
         const me = await apiRequest("/auth/me", {}, token);
         if (!ignore) {
+          localStorage.setItem(USER_KEY, JSON.stringify(me));
           setUser(me);
           setSelectedDepartment(me.department);
           setError("");
         }
       } catch (fetchError) {
         if (!ignore) {
-          localStorage.removeItem(TOKEN_KEY);
-          setToken("");
-          setUser(null);
-          setRows([]);
-          setError(fetchError.message);
+          if (user) {
+            setError("Session check failed, but your workspace stayed on screen.");
+          } else {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(USER_KEY);
+            setToken("");
+            setUser(null);
+            setRows([]);
+            setError("Session check failed. Please sign in again.");
+          }
         }
       }
     }
@@ -714,6 +733,7 @@ export default function App() {
 
   function handleAuthenticated(data, successMessage = "Signed in.") {
     localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setToken(data.access_token);
     setUser(data.user);
     setSelectedDepartment(data.user.department);
@@ -807,6 +827,7 @@ export default function App() {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setToken("");
     setUser(null);
     setRows([]);

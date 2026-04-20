@@ -41,8 +41,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: int) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": str(user_id), "exp": expire}
+    payload = {"sub": str(user_id)}
+    if settings.access_token_expire_minutes > 0:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+        payload["exp"] = expire
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
 
@@ -113,11 +115,17 @@ def get_current_user(
 ) -> User:
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token",
+        detail="Session is no longer valid.",
     )
 
     try:
-        payload = jwt.decode(credentials.credentials, settings.secret_key, algorithms=["HS256"])
+        decode_options = {"verify_exp": settings.access_token_expire_minutes > 0}
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=["HS256"],
+            options=decode_options,
+        )
         user_id = int(payload.get("sub", "0"))
     except (JWTError, ValueError):
         raise unauthorized
