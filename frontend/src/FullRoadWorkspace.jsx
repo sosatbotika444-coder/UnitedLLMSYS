@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 const RouteMap = lazy(() => import("./RouteMap"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const TOMTOM_ROUTING_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const ROUTE_REQUEST_TIMEOUT_MS = 120000;
 const FLEET_REFRESH_INTERVAL_MS = 45000;
 const TRIPS_REFRESH_INTERVAL_MS = 60000;
@@ -268,6 +269,72 @@ function stopLine(stop) {
   return `${stop.brand || stop.name} - ${formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}`;
 }
 
+async function fetchTruckToPickupRoadPlan(originPoint, destinationPoint) {
+  if (!originPoint || !destinationPoint || !TOMTOM_ROUTING_KEY) return null;
+  const originLat = Number(originPoint.lat);
+  const originLon = Number(originPoint.lon);
+  const destinationLat = Number(destinationPoint.lat);
+  const destinationLon = Number(destinationPoint.lon);
+  if (!Number.isFinite(originLat) || !Number.isFinite(originLon) || !Number.isFinite(destinationLat) || !Number.isFinite(destinationLon)) {
+    return null;
+  }
+
+  const routePoints = `${originLat},${originLon}:${destinationLat},${destinationLon}`;
+  const params = new URLSearchParams({
+    key: TOMTOM_ROUTING_KEY,
+    travelMode: "truck",
+    routeRepresentation: "polyline",
+    computeTravelTimeFor: "all",
+    maxAlternatives: "0"
+  });
+
+  const response = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/${routePoints}/json?${params.toString()}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.detailedError?.message || payload?.error?.description || "Could not build live truck road route.");
+  }
+
+  const route = payload?.routes?.[0];
+  if (!route) return null;
+  const points = [];
+  (route.legs || []).forEach((leg) => {
+    (leg.points || []).forEach((point) => {
+      const lat = Number(point?.latitude);
+      const lon = Number(point?.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        points.push({ lat, lon });
+      }
+    });
+  });
+  if (points.length < 2) return null;
+
+  const summary = route.summary || {};
+  return {
+    origin: {
+      label: originPoint.label || `${originLat}, ${originLon}`,
+      lat: originLat,
+      lon: originLon
+    },
+    destination: {
+      label: destinationPoint.label || `${destinationLat}, ${destinationLon}`,
+      lat: destinationLat,
+      lon: destinationLon
+    },
+    routes: [{
+      id: "live-pickup-route",
+      label: "Truck to Pickup (live route)",
+      distance_meters: Number(summary.lengthInMeters) || 0,
+      travel_time_seconds: Number(summary.travelTimeInSeconds) || 0,
+      traffic_delay_seconds: Number(summary.trafficDelayInSeconds) || 0,
+      points,
+      fuel_stops: []
+    }],
+    top_fuel_stops: [],
+    selected_stop: null,
+    fuel_strategy: null
+  };
+}
+
 function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
   if (!trip?.toPickupPlan || !trip?.toDeliveryPlan) return null;
   const pickupPlan = livePickupPlan || trip.toPickupPlan;
@@ -277,7 +344,14 @@ function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
   const livePoint = locationPoint(vehicle);
   const fallbackOrigin = pickupPlan.origin || trip.toPickupPlan.origin;
   const routeStartPoint = pickupBestRoute.points?.[0];
-  const resolvedOrigin = livePoint
+  const routeStart = routeStartPoint ? { lat: Number(routeStartPoint.lat), lon: Number(routeStartPoint.lon) } : null;
+  const driftFromRouteStart = livePoint && routeStart && Number.isFinite(routeStart.lat) && Number.isFinite(routeStart.lon)
+    ? haversineMiles(routeStart, { lat: livePoint.lat, lon: livePoint.lon })
+    : null;
+  const shouldUseLiveOrigin =
+    Boolean(livePoint)
+    && (Boolean(livePickupPlan) || driftFromRouteStart === null || driftFromRouteStart <= FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES);
+  const resolvedOrigin = shouldUseLiveOrigin
     ? {
       lat: livePoint.lat,
       lon: livePoint.lon,
@@ -757,11 +831,9 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     }
 
     const pickupDestinationPoint = selectedTrip.toPickupPlan?.destination;
-    const pickupDestinationQuery =
-      pickupDestinationPoint?.lat !== undefined && pickupDestinationPoint?.lon !== undefined
-        ? `${pickupDestinationPoint.lat}, ${pickupDestinationPoint.lon}`
-        : String(selectedTrip.pickup || "").trim();
-    if (!pickupDestinationQuery) {
+    const pickupDestinationLat = Number(pickupDestinationPoint?.lat);
+    const pickupDestinationLon = Number(pickupDestinationPoint?.lon);
+    if (!Number.isFinite(pickupDestinationLat) || !Number.isFinite(pickupDestinationLon)) {
       setLivePickupPlan(null);
       setLivePickupPlanLoading(false);
       return undefined;
@@ -769,30 +841,21 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
 
     let ignore = false;
     setLivePickupPlanLoading(true);
-    apiRequest(
-      "/navigation/route-assistant",
+    fetchTruckToPickupRoadPlan(
       {
-        method: "POST",
-        timeoutMs: ROUTE_REQUEST_TIMEOUT_MS,
-        body: JSON.stringify({
-          origin: `${selectedTripLivePoint.lat}, ${selectedTripLivePoint.lon}`,
-          destination: pickupDestinationQuery,
-          vehicle_id: Number(selectedTripVehicle.id) || Number(selectedTrip.vehicleId) || null,
-          vehicle_number: selectedTrip.truckNumber || vehicleLabel(selectedTripVehicle),
-          driver_name: selectedTrip.driverName || vehicleDriverName(selectedTripVehicle),
-          vehicle_type: "Truck",
-          fuel_type: "Auto Diesel",
-          current_fuel_gallons: Math.max(0, Number(selectedTrip.currentFuelGallons) || DEFAULT_CURRENT_FUEL_GALLONS),
-          tank_capacity_gallons: Math.max(1, Number(selectedTrip.tankCapacityGallons) || DEFAULT_TANK_CAPACITY_GALLONS),
-          mpg: Math.max(0.1, Number(selectedTrip.mpg) || DEFAULT_TRUCK_MPG),
-          sort_by: "best"
-        })
+        lat: selectedTripLivePoint.lat,
+        lon: selectedTripLivePoint.lon,
+        label: vehicleLocationLabel(selectedTripVehicle) || selectedTrip.truckNumber
       },
-      token
+      {
+        lat: pickupDestinationLat,
+        lon: pickupDestinationLon,
+        label: pickupDestinationPoint?.label || selectedTrip.pickup
+      }
     )
       .then((plan) => {
         if (ignore) return;
-        setLivePickupPlan(plan?.routes?.[0] ? plan : null);
+        setLivePickupPlan(plan);
       })
       .catch(() => {
         if (!ignore) {
@@ -820,6 +883,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     selectedTrip?.tankCapacityGallons,
     selectedTrip?.mpg,
     selectedTripVehicle?.id,
+    selectedTripVehicle?.location?.address,
     selectedTripLivePoint?.lat,
     selectedTripLivePoint?.lon
   ]);
