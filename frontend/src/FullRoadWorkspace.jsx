@@ -13,12 +13,21 @@ const DEFAULT_CURRENT_FUEL_GALLONS = 100;
 const PICKUP_ARRIVAL_THRESHOLD_MILES = 1;
 const DELIVERY_COMPLETE_THRESHOLD_MILES = 1;
 const FULL_ROAD_MAP_ORIGIN_DRIFT_THRESHOLD_MILES = 8;
+const FULL_ROAD_NOTES_STORAGE_KEY = "unitedlane_fullroad_notes";
+const FULL_ROAD_CHECKLIST_STORAGE_KEY = "unitedlane_fullroad_checklists";
 const stageLabels = {
   enroute_pickup: "Truck to Pickup",
   at_pickup: "At Pickup",
   enroute_delivery: "Pickup to Delivery",
   delivered: "Delivered"
 };
+const fullRoadStages = ["enroute_pickup", "at_pickup", "enroute_delivery", "delivered"];
+const fullRoadChecklistItems = [
+  { id: "driver_contacted", label: "Driver contacted" },
+  { id: "pickup_confirmed", label: "Pickup confirmed" },
+  { id: "fuel_plan_shared", label: "Fuel plan shared" },
+  { id: "delivery_eta_shared", label: "Delivery ETA shared" }
+];
 
 async function apiRequest(path, options = {}, token = "") {
   const { timeoutMs = 20000, ...fetchOptions } = options;
@@ -157,6 +166,40 @@ function formatFuelPrice(value) {
 
 function metricValue(value) {
   return new Intl.NumberFormat("en-US").format(Number(value) || 0);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readStoredObject(key) {
+  if (typeof window === "undefined") return {};
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) return {};
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredObject(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function defaultChecklistState() {
+  return Object.fromEntries(fullRoadChecklistItems.map((item) => [item.id, false]));
+}
+
+function normalizeChecklistState(value) {
+  return {
+    ...defaultChecklistState(),
+    ...(value && typeof value === "object" ? value : {})
+  };
 }
 
 function vehicleDriver(vehicle) {
@@ -300,6 +343,235 @@ function bestRouteMetrics(plan) {
 function stopLine(stop) {
   if (!stop) return "";
   return `${stop.brand || stop.name} - ${formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}`;
+}
+
+function formatRelativePing(value) {
+  if (!value) return "No live ping";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Live ping unavailable";
+  const minutesAgo = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 60000));
+  if (minutesAgo < 1) return "Live now";
+  if (minutesAgo < 60) return `${minutesAgo}m ago`;
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  const remainingMinutes = minutesAgo % 60;
+  if (!remainingMinutes) return `${hoursAgo}h ago`;
+  return `${hoursAgo}h ${remainingMinutes}m ago`;
+}
+
+function nextFuelStopForTrip(trip) {
+  if (!trip) return null;
+  const pickupStops = trip.toPickupPlan?.fuel_strategy?.stops || [];
+  const deliveryStops = trip.toDeliveryPlan?.fuel_strategy?.stops || [];
+  if (trip.stage === "enroute_delivery") {
+    return deliveryStops[0]?.stop || null;
+  }
+  if (trip.stage === "delivered") {
+    return null;
+  }
+  return pickupStops[0]?.stop || deliveryStops[0]?.stop || null;
+}
+
+function projectedFuelState(trip, vehicle = null) {
+  if (!trip) {
+    return {
+      currentGallons: 0,
+      projectedReserveGallons: 0,
+      projectedReservePercent: 0
+    };
+  }
+
+  const tankCapacity = Math.max(1, Number(trip.tankCapacityGallons) || DEFAULT_TANK_CAPACITY_GALLONS);
+  const mpg = Math.max(0.1, Number(trip.mpg) || DEFAULT_TRUCK_MPG);
+  const liveFuelPercent = vehicleFuelPercent(vehicle);
+  const storedFuelPercent = Number(trip.live?.fuelPercent);
+  const resolvedFuelPercent = Number.isFinite(liveFuelPercent) ? liveFuelPercent : (Number.isFinite(storedFuelPercent) ? storedFuelPercent : null);
+  const currentGallons = resolvedFuelPercent !== null
+    ? (tankCapacity * resolvedFuelPercent) / 100
+    : Math.max(0, Number(trip.currentFuelGallons) || 0);
+  const pickupFuel = (trip.toPickupPlan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item.gallons_to_buy) || 0), 0);
+  const deliveryFuel = (trip.toDeliveryPlan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item.gallons_to_buy) || 0), 0);
+  let remainingMiles = 0;
+  let plannedGallons = 0;
+
+  if (trip.stage === "delivered") {
+    remainingMiles = 0;
+    plannedGallons = 0;
+  } else if (trip.stage === "enroute_delivery" || trip.stage === "at_pickup") {
+    remainingMiles = trip.live?.distanceToDeliveryMiles ?? trip.metrics?.toDeliveryMiles ?? 0;
+    plannedGallons = deliveryFuel;
+  } else {
+    remainingMiles = (trip.live?.distanceToPickupMiles ?? trip.metrics?.toPickupMiles ?? 0) + (trip.metrics?.toDeliveryMiles ?? 0);
+    plannedGallons = pickupFuel + deliveryFuel;
+  }
+
+  const projectedReserveGallons = Math.max(0, currentGallons + plannedGallons - (remainingMiles / mpg));
+  return {
+    currentGallons,
+    projectedReserveGallons,
+    projectedReservePercent: clamp((projectedReserveGallons / tankCapacity) * 100, 0, 100)
+  };
+}
+
+function tripProgressPercent(trip) {
+  if (!trip) return 0;
+  if (trip.stage === "delivered") return 100;
+  if (trip.stage === "enroute_delivery") {
+    const totalMiles = Math.max(1, Number(trip.metrics?.toDeliveryMiles) || 1);
+    const remainingMiles = Math.max(0, Number(trip.live?.distanceToDeliveryMiles ?? trip.metrics?.toDeliveryMiles) || 0);
+    const legProgress = clamp(((totalMiles - remainingMiles) / totalMiles) * 45, 0, 45);
+    return clamp(55 + legProgress, 55, 98);
+  }
+  if (trip.stage === "at_pickup") return 50;
+  const pickupMiles = Math.max(1, Number(trip.metrics?.toPickupMiles) || 1);
+  const remainingToPickup = Math.max(0, Number(trip.live?.distanceToPickupMiles ?? trip.metrics?.toPickupMiles) || 0);
+  const pickupProgress = clamp(((pickupMiles - remainingToPickup) / pickupMiles) * 45, 0, 45);
+  return clamp(5 + pickupProgress, 5, 48);
+}
+
+function buildTripInsights(trip, vehicle = null, livePickupPlan = null) {
+  if (!trip) return null;
+
+  const nextDistanceMiles = trip.stage === "enroute_pickup"
+    ? trip.live?.distanceToPickupMiles
+    : trip.live?.distanceToDeliveryMiles;
+  const nextEta = trip.stage === "enroute_pickup" ? trip.metrics?.etaToPickup : trip.metrics?.etaToDelivery;
+  const liveFuelPercent = vehicleFuelPercent(vehicle);
+  const resolvedFuelPercent = Number.isFinite(liveFuelPercent) ? liveFuelPercent : Number(trip.live?.fuelPercent);
+  const driveSeconds = Number(trip.live?.driveSeconds);
+  const pingTime = trip.live?.locatedAt ? new Date(trip.live.locatedAt) : null;
+  const pingAgeMinutes = pingTime && !Number.isNaN(pingTime.getTime())
+    ? Math.max(0, Math.round((Date.now() - pingTime.getTime()) / 60000))
+    : null;
+  const isGpsStale = Boolean(trip.live?.isStale) || (pingAgeMinutes !== null && pingAgeMinutes >= 20);
+  const fuelProjection = projectedFuelState(trip, vehicle);
+  const alertItems = [];
+  let healthScore = 100;
+
+  if (!Number.isFinite(Number(nextDistanceMiles))) {
+    healthScore -= 16;
+    alertItems.push({ tone: "blue", label: "Waiting on live GPS distance" });
+  }
+
+  if (isGpsStale) {
+    healthScore -= 18;
+    alertItems.push({ tone: "amber", label: `GPS stale (${formatRelativePing(trip.live?.locatedAt)})` });
+  }
+
+  if (Number.isFinite(resolvedFuelPercent) && resolvedFuelPercent < 20) {
+    healthScore -= 22;
+    alertItems.push({ tone: "red", label: `Fuel low at ${resolvedFuelPercent.toFixed(0)}%` });
+  } else if (Number.isFinite(resolvedFuelPercent) && resolvedFuelPercent < 35) {
+    healthScore -= 10;
+    alertItems.push({ tone: "amber", label: `Fuel watch at ${resolvedFuelPercent.toFixed(0)}%` });
+  }
+
+  if (fuelProjection.projectedReserveGallons < 20) {
+    healthScore -= 14;
+    alertItems.push({ tone: "red", label: `Projected reserve ${formatGallons(fuelProjection.projectedReserveGallons)}` });
+  }
+
+  if (Number.isFinite(driveSeconds) && driveSeconds <= 7200) {
+    healthScore -= 16;
+    alertItems.push({ tone: "amber", label: `Drive time low (${formatDuration(driveSeconds)})` });
+  } else if (Number.isFinite(driveSeconds) && driveSeconds <= 14400) {
+    healthScore -= 8;
+    alertItems.push({ tone: "blue", label: `Drive time watch (${formatDuration(driveSeconds)})` });
+  }
+
+  if (trip.stage === "enroute_pickup" && Number(trip.metrics?.toPickupMiles) >= 180) {
+    healthScore -= 8;
+    alertItems.push({ tone: "blue", label: `Long deadhead (${formatDistanceMiles(trip.metrics.toPickupMiles)})` });
+  }
+
+  if (livePickupPlan) {
+    healthScore -= 8;
+    alertItems.push({ tone: "amber", label: "Truck moved off original pickup route" });
+  }
+
+  healthScore = clamp(Math.round(healthScore), 12, 100);
+  const healthTone = healthScore >= 80 ? "green" : (healthScore >= 60 ? "amber" : "dark");
+  let nextAction = "Monitor live trip and update ops notes.";
+
+  if (isGpsStale) {
+    nextAction = "Refresh Motive or call the driver for a live position check.";
+  } else if (fuelProjection.projectedReserveGallons < 20 || (Number.isFinite(resolvedFuelPercent) && resolvedFuelPercent < 20)) {
+    nextAction = "Share updated fuel instructions before the truck reaches the next leg.";
+  } else if (Number.isFinite(driveSeconds) && driveSeconds <= 7200) {
+    nextAction = "Review HOS and confirm the next stop plan with dispatch.";
+  } else if (trip.stage === "enroute_pickup" && Number.isFinite(Number(nextDistanceMiles)) && Number(nextDistanceMiles) <= 15) {
+    nextAction = "Confirm pickup appointment, reference numbers, and dock details.";
+  } else if (trip.stage === "at_pickup") {
+    nextAction = "Send departure guidance and verify the delivery ETA.";
+  } else if (trip.stage === "enroute_delivery" && Number.isFinite(Number(nextDistanceMiles)) && Number(nextDistanceMiles) <= 40) {
+    nextAction = "Prepare the delivery handoff and final arrival update.";
+  }
+
+  return {
+    healthScore,
+    healthTone,
+    nextDistanceMiles,
+    nextEta,
+    nextAction,
+    pingLabel: formatRelativePing(trip.live?.locatedAt),
+    isGpsStale,
+    projectedReserveGallons: fuelProjection.projectedReserveGallons,
+    projectedReservePercent: fuelProjection.projectedReservePercent,
+    progressPercent: tripProgressPercent(trip),
+    alertItems
+  };
+}
+
+function buildDispatchSummary(trip, vehicle = null, insights = null) {
+  if (!trip) return "";
+  const nextStop = nextFuelStopForTrip(trip);
+  const liveLocation = vehicle ? vehicleLocationLabel(vehicle) : (trip.live?.locationLabel || "Location unavailable");
+  const nextDistance = insights?.nextDistanceMiles;
+  const lines = [
+    `Full Road Dispatch Summary`,
+    `Truck: ${trip.truckNumber}`,
+    `Driver: ${trip.driverName}`,
+    `Stage: ${stageLabels[trip.stage] || "Trip"}`,
+    `Pickup: ${trip.pickup}`,
+    `Delivery: ${trip.delivery}`,
+    `Live location: ${liveLocation}`,
+    `Last ping: ${formatDateTime(trip.live?.locatedAt)} (${insights?.pingLabel || formatRelativePing(trip.live?.locatedAt)})`,
+    `Next distance: ${Number.isFinite(Number(nextDistance)) ? formatDistanceMiles(nextDistance) : "Waiting on live GPS"}`,
+    `ETA pickup: ${formatDateTime(trip.metrics?.etaToPickup)}`,
+    `ETA delivery: ${formatDateTime(trip.metrics?.etaToDelivery)}`,
+    `Projected fuel reserve: ${insights ? `${formatGallons(insights.projectedReserveGallons)} (${insights.projectedReservePercent.toFixed(0)}%)` : "Unknown"}`,
+    `Next action: ${insights?.nextAction || "Monitor trip"}`
+  ];
+
+  if (nextStop) {
+    lines.push(`Next fuel stop: ${nextStop.brand || nextStop.name} | ${formatFuelPrice(nextStop.auto_diesel_price ?? nextStop.diesel_price ?? nextStop.price)} | ${nextStop.address}`);
+  }
+
+  return lines.join("\n");
+}
+
+async function copyTextToClipboard(value) {
+  if (!value) return false;
+  if (navigator?.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {}
+  }
+
+  try {
+    const element = document.createElement("textarea");
+    element.value = value;
+    element.setAttribute("readonly", "true");
+    element.style.position = "absolute";
+    element.style.left = "-9999px";
+    document.body.appendChild(element);
+    element.select();
+    const copied = document.execCommand("copy");
+    element.remove();
+    return copied;
+  } catch {
+    return false;
+  }
 }
 
 async function fetchTruckToPickupRoadPlan(originPoint, destinationPoint) {
@@ -635,6 +907,9 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   const [tripError, setTripError] = useState("");
   const [message, setMessage] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
+  const [tripSearch, setTripSearch] = useState("");
+  const [tripStageFilter, setTripStageFilter] = useState("all");
+  const [tripSort, setTripSort] = useState("attention");
   const [selectedLoadId, setSelectedLoadId] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [pickup, setPickup] = useState("");
@@ -644,6 +919,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   const [livePickupPlan, setLivePickupPlan] = useState(null);
   const [livePickupPlanLoading, setLivePickupPlanLoading] = useState(false);
   const [tripExporting, setTripExporting] = useState(false);
+  const [tripNotesById, setTripNotesById] = useState(() => readStoredObject(FULL_ROAD_NOTES_STORAGE_KEY));
+  const [tripChecklistsById, setTripChecklistsById] = useState(() => readStoredObject(FULL_ROAD_CHECKLIST_STORAGE_KEY));
   const activeTripsRef = useRef([]);
   const fleetSnapshotRef = useRef(null);
 
@@ -654,6 +931,14 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   useEffect(() => {
     fleetSnapshotRef.current = fleetSnapshot;
   }, [fleetSnapshot]);
+
+  useEffect(() => {
+    writeStoredObject(FULL_ROAD_NOTES_STORAGE_KEY, tripNotesById);
+  }, [tripNotesById]);
+
+  useEffect(() => {
+    writeStoredObject(FULL_ROAD_CHECKLIST_STORAGE_KEY, tripChecklistsById);
+  }, [tripChecklistsById]);
 
   useEffect(() => {
     if (!activeTrips.length) {
@@ -929,6 +1214,77 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   );
   const mapMarkers = useMemo(() => tripExtraMarkers(selectedTrip, selectedTripVehicle), [selectedTrip, selectedTripVehicle]);
   const selectedPreset = useMemo(() => (selectedVehicle ? deriveTruckPreset(selectedVehicle, loadRows) : null), [loadRows, selectedVehicle]);
+  const vehiclesById = useMemo(
+    () => new Map(vehicles.map((vehicle) => [String(vehicle.id), vehicle])),
+    [vehicles]
+  );
+  const tripInsightsById = useMemo(() => {
+    const nextMap = {};
+    openTrips.forEach((trip) => {
+      const tripVehicle = vehiclesById.get(String(trip.vehicleId)) || null;
+      nextMap[String(trip.id)] = buildTripInsights(
+        trip,
+        tripVehicle,
+        String(selectedTripId) === String(trip.id) ? livePickupPlan : null
+      );
+    });
+    return nextMap;
+  }, [livePickupPlan, openTrips, selectedTripId, vehiclesById]);
+  const visibleTrips = useMemo(() => {
+    const term = normalizeText(tripSearch);
+    const stageFilter = tripStageFilter;
+    const nextTrips = openTrips.filter((trip) => {
+      if (stageFilter !== "all" && trip.stage !== stageFilter) return false;
+      if (!term) return true;
+      const vehicle = vehiclesById.get(String(trip.vehicleId));
+      const haystack = [
+        trip.truckNumber,
+        trip.driverName,
+        trip.pickup,
+        trip.delivery,
+        stageLabels[trip.stage],
+        vehicle ? vehicleLocationLabel(vehicle) : "",
+        vehicle ? vehicleDriverName(vehicle) : ""
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(term);
+    });
+
+    nextTrips.sort((left, right) => {
+      const leftInsights = tripInsightsById[String(left.id)];
+      const rightInsights = tripInsightsById[String(right.id)];
+      if (tripSort === "eta") {
+        return new Date(left.metrics?.etaToDelivery || 0).getTime() - new Date(right.metrics?.etaToDelivery || 0).getTime();
+      }
+      if (tripSort === "distance") {
+        return (Number(leftInsights?.nextDistanceMiles) || Number.POSITIVE_INFINITY) - (Number(rightInsights?.nextDistanceMiles) || Number.POSITIVE_INFINITY);
+      }
+      if (tripSort === "truck") {
+        return String(left.truckNumber || "").localeCompare(String(right.truckNumber || ""));
+      }
+      const healthDelta = (leftInsights?.healthScore ?? 0) - (rightInsights?.healthScore ?? 0);
+      if (healthDelta !== 0) return healthDelta;
+      return new Date(left.updatedAt || 0).getTime() - new Date(right.updatedAt || 0).getTime();
+    });
+
+    return nextTrips;
+  }, [openTrips, tripInsightsById, tripSearch, tripSort, tripStageFilter, vehiclesById]);
+  const selectedTripInsights = useMemo(
+    () => (selectedTrip ? tripInsightsById[String(selectedTrip.id)] || buildTripInsights(selectedTrip, selectedTripVehicle, livePickupPlan) : null),
+    [livePickupPlan, selectedTrip, selectedTripVehicle, tripInsightsById]
+  );
+  const selectedTripChecklist = useMemo(
+    () => normalizeChecklistState(selectedTrip ? tripChecklistsById[String(selectedTrip.id)] : null),
+    [selectedTrip, tripChecklistsById]
+  );
+  const completedChecklistCount = useMemo(
+    () => fullRoadChecklistItems.filter((item) => selectedTripChecklist[item.id]).length,
+    [selectedTripChecklist]
+  );
+  const selectedTripNote = selectedTrip ? String(tripNotesById[String(selectedTrip.id)] || "") : "";
+  const dispatchSummary = useMemo(
+    () => buildDispatchSummary(selectedTrip, selectedTripVehicle, selectedTripInsights),
+    [selectedTrip, selectedTripInsights, selectedTripVehicle]
+  );
 
   function upsertTripState(savedTrip) {
     setActiveTrips((current) => {
@@ -1118,6 +1474,49 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     }
   }
 
+  async function copyDispatchSummary() {
+    if (!selectedTrip) return;
+    setTripError("");
+    const copied = await copyTextToClipboard(dispatchSummary);
+    if (copied) {
+      setMessage("Dispatch summary copied.");
+    } else {
+      setTripError("Clipboard copy failed.");
+    }
+  }
+
+  function updateSelectedTripNote(value) {
+    if (!selectedTrip) return;
+    const tripKey = String(selectedTrip.id);
+    setTripNotesById((current) => ({
+      ...current,
+      [tripKey]: value
+    }));
+  }
+
+  function appendQuickNote(template) {
+    if (!selectedTrip) return;
+    const timestamp = formatDateTime(new Date().toISOString());
+    const snippet = `[${timestamp}] ${template}`;
+    const currentValue = selectedTripNote.trim();
+    updateSelectedTripNote(currentValue ? `${currentValue}\n${snippet}` : snippet);
+  }
+
+  function toggleChecklistItem(itemId) {
+    if (!selectedTrip) return;
+    const tripKey = String(selectedTrip.id);
+    setTripChecklistsById((current) => {
+      const currentChecklist = normalizeChecklistState(current[tripKey]);
+      return {
+        ...current,
+        [tripKey]: {
+          ...currentChecklist,
+          [itemId]: !currentChecklist[itemId]
+        }
+      };
+    });
+  }
+
   const livePickupDistance = selectedTrip?.live?.distanceToPickupMiles;
   const liveDeliveryDistance = selectedTrip?.live?.distanceToDeliveryMiles;
   const nextDistance = selectedTrip?.stage === "enroute_pickup" ? livePickupDistance : liveDeliveryDistance;
@@ -1229,11 +1628,37 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
         <div className="panel-head compact-panel-head">
           <div>
             <h2>Active Trips</h2>
-            <span>Trips stay here until the truck reaches Delivery.</span>
+            <span>{visibleTrips.length} of {openTrips.length} trip(s) match the queue filters.</span>
           </div>
         </div>
+        <div className="full-road-queue-toolbar">
+          <label>
+            Search queue
+            <input type="text" value={tripSearch} onChange={(event) => setTripSearch(event.target.value)} placeholder="Truck, driver, pickup, delivery" />
+          </label>
+          <label>
+            Stage
+            <select value={tripStageFilter} onChange={(event) => setTripStageFilter(event.target.value)}>
+              <option value="all">All open stages</option>
+              {fullRoadStages.filter((stage) => stage !== "delivered").map((stage) => (
+                <option key={stage} value={stage}>{stageLabels[stage]}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sort
+            <select value={tripSort} onChange={(event) => setTripSort(event.target.value)}>
+              <option value="attention">Needs attention</option>
+              <option value="eta">Earliest ETA</option>
+              <option value="distance">Closest next stop</option>
+              <option value="truck">Truck number</option>
+            </select>
+          </label>
+        </div>
         <div className="full-road-trip-strip">
-          {openTrips.length ? openTrips.map((trip) => (
+          {visibleTrips.length ? visibleTrips.map((trip) => {
+            const insights = tripInsightsById[String(trip.id)];
+            return (
             <button
               key={trip.id}
               type="button"
@@ -1241,11 +1666,18 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               onClick={() => loadTripIntoForm(trip)}
             >
               <span className={`full-road-trip-stage tone-${stageTone(trip.stage)}`}>{stageLabels[trip.stage] || "Trip"}</span>
-              <strong>{trip.truckNumber}</strong>
+              <div className="full-road-trip-tab-topline">
+                <strong>{trip.truckNumber}</strong>
+                <span className={`full-road-health-badge tone-${insights?.healthTone || "blue"}`}>Health {insights?.healthScore ?? "--"}</span>
+              </div>
               <small>{trip.pickup} to {trip.delivery}</small>
               <em>{trip.live?.distanceToDeliveryMiles !== null && trip.live?.distanceToDeliveryMiles !== undefined ? `${trip.live.distanceToDeliveryMiles.toFixed(1)} mi to delivery` : "Waiting on live GPS"}</em>
+              <div className="full-road-trip-tab-foot">
+                <small>{insights?.alertItems?.[0]?.label || insights?.nextAction || "Live tracking active"}</small>
+              </div>
             </button>
-          )) : <div className="full-road-empty">No active Full Road trips yet.</div>}
+            );
+          }) : <div className="full-road-empty">{openTrips.length ? "No trips match the current queue filters." : "No active Full Road trips yet."}</div>}
         </div>
       </section>
 
@@ -1253,10 +1685,12 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
         <>
           <section className="full-road-summary-grid">
             <SummaryCard label="Truck" value={selectedTrip.truckNumber} detail={selectedTrip.driverName} tone="blue" />
+            <SummaryCard label="Trip Health" value={metricValue(selectedTripInsights?.healthScore)} detail={selectedTripInsights?.nextAction || "Live monitoring"} tone={selectedTripInsights?.healthTone || "dark"} />
             <SummaryCard label="Total Miles" value={formatDistanceMiles(selectedTrip.metrics.totalMiles)} detail={`${formatDistanceMiles(selectedTrip.metrics.toPickupMiles)} to PU + ${formatDistanceMiles(selectedTrip.metrics.toDeliveryMiles)} to DEL`} tone="green" />
             <SummaryCard label="ETA Pickup" value={formatDateTime(selectedTrip.metrics.etaToPickup)} detail={formatDuration(selectedTrip.metrics.toPickupDurationSeconds)} tone="amber" />
             <SummaryCard label="ETA Delivery" value={formatDateTime(selectedTrip.metrics.etaToDelivery)} detail={formatDuration(selectedTrip.metrics.totalDurationSeconds)} tone="violet" />
             <SummaryCard label="Fuel Stops" value={metricValue(selectedTrip.metrics.fuelStopCount)} detail={formatCurrency(selectedTrip.metrics.estimatedFuelCost)} tone="dark" />
+            <SummaryCard label="Fuel Reserve" value={formatGallons(selectedTripInsights?.projectedReserveGallons)} detail={`${selectedTripInsights?.projectedReservePercent?.toFixed(0) || "0"}% projected on arrival`} tone="blue" />
             <SummaryCard label="Live Next" value={nextDistance !== null && nextDistance !== undefined ? formatDistanceMiles(nextDistance) : "No GPS"} detail={nextEta ? `Last ETA ${formatDateTime(nextEta)}` : "Waiting on route"} tone="green" />
           </section>
           {livePickupPlanLoading ? <div className="notice info inline-notice">Updating live truck-to-pickup road path...</div> : null}
@@ -1297,6 +1731,102 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 <small>{selectedTrip.live?.isMoving ? "Moving" : "Stopped"}</small>
               </article>
             </div>
+          </section>
+
+          <section className="full-road-ops-grid">
+            <section className="panel full-road-intel-panel">
+              <div className="panel-head compact-panel-head">
+                <div>
+                  <h2>Trip Intelligence</h2>
+                  <span>Health score, live risk checks, and the next recommended dispatcher action.</span>
+                </div>
+              </div>
+              <div className="full-road-health-hero">
+                <strong>{selectedTripInsights?.healthScore ?? "--"}</strong>
+                <div>
+                  <span>Health score</span>
+                  <p>{selectedTripInsights?.nextAction || "Live monitoring active."}</p>
+                </div>
+              </div>
+              <div className="full-road-progress">
+                <div className="full-road-progress-bar" aria-hidden="true">
+                  <span style={{ width: `${selectedTripInsights?.progressPercent ?? 0}%` }} />
+                </div>
+                <small>{metricValue(selectedTripInsights?.progressPercent)}% route progress</small>
+              </div>
+              <div className="full-road-stage-track">
+                {fullRoadStages.map((stage, index) => {
+                  const currentIndex = fullRoadStages.indexOf(selectedTrip.stage);
+                  const completed = index < currentIndex || selectedTrip.stage === "delivered";
+                  const current = stage === selectedTrip.stage;
+                  return (
+                    <div key={stage} className={`full-road-stage-node ${completed ? "is-complete" : ""} ${current ? "is-current" : ""}`.trim()}>
+                      <strong>{index + 1}</strong>
+                      <span>{stageLabels[stage]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="full-road-alert-list">
+                {selectedTripInsights?.alertItems?.length ? selectedTripInsights.alertItems.map((item) => (
+                  <span key={item.label} className={`full-road-insight-pill tone-${item.tone}`}>{item.label}</span>
+                )) : <div className="full-road-empty">No active risk alerts on this trip.</div>}
+              </div>
+            </section>
+
+            <section className="panel full-road-dispatch-panel">
+              <div className="panel-head compact-panel-head">
+                <div>
+                  <h2>Dispatch Summary</h2>
+                  <span>One-click shareable summary for dispatch, driver, or after-hours support.</span>
+                </div>
+                <button className="secondary-button" type="button" onClick={copyDispatchSummary}>
+                  Copy Summary
+                </button>
+              </div>
+              <div className="full-road-dispatch-meta">
+                <article>
+                  <span>Next action</span>
+                  <strong>{selectedTripInsights?.nextAction || "Monitor trip"}</strong>
+                </article>
+                <article>
+                  <span>Last ping</span>
+                  <strong>{selectedTripInsights?.pingLabel || "Live ping unavailable"}</strong>
+                </article>
+              </div>
+              <pre className="full-road-dispatch-preview">{dispatchSummary}</pre>
+            </section>
+
+            <section className="panel full-road-notes-panel">
+              <div className="panel-head compact-panel-head">
+                <div>
+                  <h2>Ops Notes & Checklist</h2>
+                  <span>{completedChecklistCount}/{fullRoadChecklistItems.length} dispatcher checks done for this trip.</span>
+                </div>
+              </div>
+              <div className="full-road-checklist">
+                {fullRoadChecklistItems.map((item) => (
+                  <label key={item.id} className={`full-road-checklist-item ${selectedTripChecklist[item.id] ? "is-done" : ""}`.trim()}>
+                    <input type="checkbox" checked={Boolean(selectedTripChecklist[item.id])} onChange={() => toggleChecklistItem(item.id)} />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="full-road-quick-notes">
+                <button className="secondary-button" type="button" onClick={() => appendQuickNote("Driver called and live ETA confirmed.")}>Driver Called</button>
+                <button className="secondary-button" type="button" onClick={() => appendQuickNote("Pickup appointment and reference number verified.")}>Pickup Ready</button>
+                <button className="secondary-button" type="button" onClick={() => appendQuickNote("Fuel instructions sent to the driver.")}>Fuel Shared</button>
+                <button className="secondary-button" type="button" onClick={() => appendQuickNote("Delivery receiver updated with the latest ETA.")}>ETA Shared</button>
+              </div>
+              <label className="full-road-notes-field">
+                Operations notes
+                <textarea
+                  value={selectedTripNote}
+                  onChange={(event) => updateSelectedTripNote(event.target.value)}
+                  placeholder="Gate codes, pickup numbers, delay reasons, driver callback notes, special handling..."
+                />
+              </label>
+            </section>
           </section>
 
           <section className="full-road-main-grid">
