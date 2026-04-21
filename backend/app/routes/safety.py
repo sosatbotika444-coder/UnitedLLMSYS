@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import require_user_department
+from app.auth import get_current_user, require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.driver_identity import parse_driver_vehicle_id
@@ -315,7 +315,7 @@ def list_safety_investigations(current_user: User = Depends(require_user_departm
 
 
 @router.post("/investigations", response_model=SafetyInvestigationResponse, status_code=status.HTTP_201_CREATED)
-def create_safety_investigation(payload: SafetyInvestigationCreate, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
+def create_safety_investigation(payload: SafetyInvestigationCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = SafetyInvestigationCase(user_id=current_user.id)
     _apply_investigation_payload(case, payload)
     db.add(case)

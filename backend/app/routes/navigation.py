@@ -24,7 +24,7 @@ from app.ai_settings import (
     generate_unitedlane_chat_reply,
     generate_unitedlane_route_guidance,
 )
-from app.auth import is_admin, require_user_department
+from app.auth import require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.models import RoutingFuelStop, RoutingRequest, RoutingRoute, User
@@ -1747,7 +1747,6 @@ def build_route_history_item(
     user: User,
     route_rows: list[RoutingRoute],
     stop_rows: list[RoutingFuelStop],
-    include_email: bool = False,
 ) -> RouteHistoryItem:
     raw_request = route_history_raw_request(record)
     summary = route_history_summary(record)
@@ -1764,7 +1763,7 @@ def build_route_history_item(
         user=RouteHistoryUser(
             id=user.id,
             full_name=user.full_name,
-            email=user.email if include_email else "",
+            email=user.email,
             username=user.username,
             department=user.department,
         ),
@@ -1806,8 +1805,6 @@ def route_history(
     db: Session = Depends(get_db),
 ):
     statement = select(RoutingRequest, User).join(User, RoutingRequest.user_id == User.id)
-    if not is_admin(current_user):
-        statement = statement.where(RoutingRequest.user_id == current_user.id)
     if date_from:
         statement = statement.where(RoutingRequest.created_at >= datetime.combine(date_from, time.min))
     if date_to:
@@ -1844,7 +1841,6 @@ def route_history(
             user=owner,
             route_rows=routes_by_request.get(record.id, []),
             stop_rows=stops_by_request.get(record.id, []),
-            include_email=is_admin(current_user),
         ))
 
     return RouteHistoryResponse(total=len(matched_items), returned=min(len(matched_items), limit), items=matched_items[:limit])

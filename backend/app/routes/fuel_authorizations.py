@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import is_admin, require_user_department
+from app.auth import require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.models import FuelAuthorization, User
@@ -446,19 +446,8 @@ def reconcile_record(db: Session, record: FuelAuthorization, snapshot: dict) -> 
     )
 
 
-def _scope_authorization_statement(statement, current_user: User):
-    if is_admin(current_user):
-        return statement
-    return statement.where(FuelAuthorization.user_id == current_user.id)
-
-
-def get_authorization_or_404(db: Session, authorization_id: int, current_user: User) -> FuelAuthorization:
-    record = db.scalar(
-        _scope_authorization_statement(
-            select(FuelAuthorization).where(FuelAuthorization.id == authorization_id),
-            current_user,
-        )
-    )
+def get_authorization_or_404(db: Session, authorization_id: int) -> FuelAuthorization:
+    record = db.get(FuelAuthorization, authorization_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fuel authorization not found")
     return record
@@ -471,7 +460,7 @@ def list_fuel_authorizations(
     current_user: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    query = _scope_authorization_statement(select(FuelAuthorization), current_user).order_by(FuelAuthorization.created_at.desc()).limit(limit)
+    query = select(FuelAuthorization).order_by(FuelAuthorization.created_at.desc()).limit(limit)
     normalized = normalize_text(status_filter)
     if normalized in {"open", "active"}:
         query = query.where(FuelAuthorization.status.in_(sorted(OPEN_STATUSES)))
@@ -505,7 +494,7 @@ def reconcile_open_authorizations(
 ):
     snapshot = motive_client.fetch_snapshot(force_refresh=refresh, allow_stale=True)
     records = db.scalars(
-        _scope_authorization_statement(select(FuelAuthorization), current_user)
+        select(FuelAuthorization)
         .where(FuelAuthorization.status.in_(sorted(OPEN_STATUSES)))
         .order_by(FuelAuthorization.created_at.asc())
         .limit(100)
@@ -527,7 +516,7 @@ def update_fuel_authorization(
     current_user: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = get_authorization_or_404(db, authorization_id, current_user)
+    record = get_authorization_or_404(db, authorization_id)
     updates = payload.model_dump(exclude_unset=True)
     if "status" in updates and updates["status"]:
         record.status = updates["status"]
@@ -555,7 +544,7 @@ def mark_fuel_authorization_sent(
     current_user: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = get_authorization_or_404(db, authorization_id, current_user)
+    record = get_authorization_or_404(db, authorization_id)
     if record.status in TERMINAL_STATUSES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Terminal fuel authorizations cannot be marked sent.")
     record.status = "sent"
@@ -577,7 +566,7 @@ def cancel_fuel_authorization(
     current_user: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = get_authorization_or_404(db, authorization_id, current_user)
+    record = get_authorization_or_404(db, authorization_id)
     if record.status == "used":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Used fuel authorizations cannot be cancelled.")
     record.status = "cancelled"
@@ -596,7 +585,7 @@ def reconcile_fuel_authorization(
     current_user: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = get_authorization_or_404(db, authorization_id, current_user)
+    record = get_authorization_or_404(db, authorization_id)
     snapshot = motive_client.fetch_snapshot(force_refresh=refresh, allow_stale=True)
     return reconcile_record(db, record, snapshot)
 

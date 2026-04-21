@@ -1,8 +1,6 @@
 import re
-from threading import Lock
-from time import monotonic
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -10,18 +8,15 @@ from sqlalchemy.orm import Session
 from app.auth import assert_user_can_authenticate, create_access_token, hash_password, mark_user_login, require_user_department, verify_password
 from app.config import get_settings
 from app.database import get_db
-from app.driver_identity import make_driver_email, normalize_driver_name, parse_driver_vehicle_id
+from app.driver_identity import make_driver_email, parse_driver_vehicle_id
 from app.models import User
 from app.motive import MotiveClient
-from app.schemas import DriverLogin, DriverProfile, DriverRegister, DriverVehicleLookup, DriverVehicleMatch, TokenResponse
+from app.schemas import DriverLogin, DriverProfile, DriverRegister, DriverVehicleMatch, TokenResponse
 
 
 router = APIRouter(prefix="/driver", tags=["driver"])
 settings = get_settings()
 motive_client = MotiveClient(settings)
-RATE_LIMIT_WINDOW_SECONDS = 60.0
-PUBLIC_RATE_LIMITS: dict[str, list[float]] = {}
-PUBLIC_RATE_LIMIT_LOCK = Lock()
 
 
 def _vehicle_driver(vehicle: dict) -> dict | None:
@@ -132,16 +127,6 @@ def _vehicle_match(vehicle: dict, matched: str = "") -> DriverVehicleMatch:
     )
 
 
-def _vehicle_lookup(vehicle: dict, matched: str = "") -> DriverVehicleLookup:
-    label = _vehicle_label(vehicle)
-    return DriverVehicleLookup(
-        vehicleId=int(vehicle.get("id") or 0),
-        truckNumber=label,
-        vehicleLabel=label,
-        matched=matched,
-    )
-
-
 def _find_vehicle(snapshot: dict, vehicle_id: int) -> dict | None:
     for vehicle in snapshot.get("vehicles") or []:
         if str(vehicle.get("id")) == str(vehicle_id):
@@ -153,22 +138,6 @@ def _validate_truck_selection(vehicle: dict, truck_number: str) -> None:
     if _truck_match(vehicle, truck_number):
         return
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected Motive truck does not match this truck number")
-
-
-def _validate_driver_assignment(vehicle: dict, driver_name: str) -> str:
-    assigned_name = normalize_driver_name(_driver_name(vehicle))
-    provided_name = normalize_driver_name(driver_name)
-    if not assigned_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This Motive truck is not assigned to a driver yet. Contact dispatch before creating a driver account.",
-        )
-    if assigned_name != provided_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Driver name does not match the Motive assignment for this truck.",
-        )
-    return _driver_name(vehicle)
 
 
 def _driver_profile_name(vehicle: dict, fallback: str) -> str:
@@ -197,50 +166,31 @@ def _filtered_snapshot(snapshot: dict, vehicle: dict) -> dict:
     }
 
 
-def _enforce_public_rate_limit(request: Request, bucket: str, limit: int, window_seconds: float = RATE_LIMIT_WINDOW_SECONDS) -> None:
-    client_host = request.client.host if request.client else "unknown"
-    key = f"{bucket}:{client_host}"
-    current_time = monotonic()
-    with PUBLIC_RATE_LIMIT_LOCK:
-        recent_hits = [stamp for stamp in PUBLIC_RATE_LIMITS.get(key, []) if current_time - stamp < window_seconds]
-        if len(recent_hits) >= limit:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many driver authentication requests. Please wait a minute and try again.",
-            )
-        recent_hits.append(current_time)
-        PUBLIC_RATE_LIMITS[key] = recent_hits
-
-
-@router.get("/matches", response_model=list[DriverVehicleLookup])
+@router.get("/matches", response_model=list[DriverVehicleMatch])
 def driver_matches(
-    request: Request,
-    q: str = Query(min_length=2, max_length=255),
+    q: str = Query(min_length=1, max_length=255),
     limit: int = Query(default=6, ge=1, le=10),
 ):
-    _enforce_public_rate_limit(request, "matches", limit=20)
     snapshot = motive_client.fetch_snapshot(force_refresh=False)
-    matches: list[tuple[int, DriverVehicleLookup]] = []
+    matches: list[tuple[int, DriverVehicleMatch]] = []
     for vehicle in snapshot.get("vehicles") or []:
         match = _truck_match(vehicle, q)
         if not match:
             continue
         score, matched = match
-        matches.append((score, _vehicle_lookup(vehicle, matched)))
+        matches.append((score, _vehicle_match(vehicle, matched)))
 
-    matches.sort(key=lambda item: (item[0], item[1].truckNumber, item[1].vehicleId))
+    matches.sort(key=lambda item: (item[0], item[1].truckNumber, item[1].driverName))
     return [item for _, item in matches[:limit]]
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register_driver(payload: DriverRegister, request: Request, db: Session = Depends(get_db)):
-    _enforce_public_rate_limit(request, "register", limit=8)
+def register_driver(payload: DriverRegister, db: Session = Depends(get_db)):
     snapshot = motive_client.fetch_snapshot(force_refresh=False)
     vehicle = _find_vehicle(snapshot, payload.vehicleId)
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Motive vehicle not found")
     _validate_truck_selection(vehicle, payload.truckNumber)
-    motive_driver_name = _validate_driver_assignment(vehicle, payload.driverName)
 
     email = make_driver_email(payload.vehicleId)
     existing_user = db.scalar(select(User).where(User.email == email))
@@ -249,7 +199,7 @@ def register_driver(payload: DriverRegister, request: Request, db: Session = Dep
 
     user = User(
         email=email,
-        full_name=_driver_profile_name(vehicle, motive_driver_name),
+        full_name=_driver_profile_name(vehicle, _vehicle_label(vehicle)),
         department="driver",
         hashed_password=hash_password(payload.password),
     )
@@ -267,8 +217,7 @@ def register_driver(payload: DriverRegister, request: Request, db: Session = Dep
 
 
 @router.post("/login", response_model=TokenResponse)
-def login_driver(payload: DriverLogin, request: Request, db: Session = Depends(get_db)):
-    _enforce_public_rate_limit(request, "login", limit=12)
+def login_driver(payload: DriverLogin, db: Session = Depends(get_db)):
     snapshot = motive_client.fetch_snapshot(force_refresh=False)
     vehicle = _find_vehicle(snapshot, payload.vehicleId)
     if not vehicle:

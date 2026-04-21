@@ -147,8 +147,8 @@ export default function RouteHistoryPanel({ token, active = true }) {
       <header className="route-history-head">
         <div>
           <span className="eyebrow">Route History</span>
-          <h2>Saved route builds</h2>
-          <p>Search saved routing runs by driver, truck, origin, destination, or date.</p>
+          <h2>All route builds</h2>
+          <p>Search every saved routing run by account, driver, truck, origin, destination, or date.</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => setRefreshTick((current) => current + 1)} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
@@ -166,7 +166,7 @@ export default function RouteHistoryPanel({ token, active = true }) {
       <div className="route-history-filters">
         <label>
           <span>Search</span>
-          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Driver, truck, origin, destination" />
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Driver, truck, account, origin, destination" />
         </label>
         <label>
           <span>From date</span>
@@ -222,7 +222,7 @@ export default function RouteHistoryPanel({ token, active = true }) {
               </div>
 
               <div className="route-history-detail-grid">
-                <span><strong>Saved by</strong>{accountName(selectedItem.user)}</span>
+                <span><strong>Account</strong>{selectedItem.user?.email || "Unknown email"}</span>
                 <span><strong>Department</strong>{selectedItem.user?.department || "Unknown"}</span>
                 <span><strong>Driver</strong>{selectedItem.driver_name || "Not captured"}</span>
                 <span><strong>Truck</strong>{selectedItem.vehicle_number || "Not captured"}</span>

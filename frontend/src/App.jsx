@@ -944,7 +944,7 @@ export default function App() {
                         type={selectedDepartment === "admin" ? "text" : "email"}
                         value={loginForm.email}
                         onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
-                        placeholder={selectedDepartment === "admin" ? "admin-username" : "name@company.com"}
+                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
                         required
                       />
                     </label>
@@ -986,7 +986,7 @@ export default function App() {
                         type={selectedDepartment === "admin" ? "text" : "email"}
                         value={registerForm.email}
                         onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
-                        placeholder={selectedDepartment === "admin" ? "admin-username" : "name@company.com"}
+                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
                         required
                       />
                     </label>

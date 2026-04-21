@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.auth import is_admin, require_user_department
+from app.auth import require_user_department
 from app.database import get_db
 from app.models import FullRoadTrip, User
 from app.schemas import FullRoadTripCreate, FullRoadTripResponse, FullRoadTripUpdate
@@ -41,14 +41,8 @@ def _serialize_trip(record: FullRoadTrip) -> FullRoadTripResponse:
     )
 
 
-def _scope_trip_statement(statement, current_user: User):
-    if is_admin(current_user):
-        return statement
-    return statement.where(FullRoadTrip.user_id == current_user.id)
-
-
-def _get_trip_or_404(db: Session, trip_id: int, current_user: User) -> FullRoadTrip:
-    trip = db.scalar(_scope_trip_statement(select(FullRoadTrip).where(FullRoadTrip.id == trip_id), current_user))
+def _get_trip_or_404(db: Session, trip_id: int) -> FullRoadTrip:
+    trip = db.get(FullRoadTrip, trip_id)
     if not trip:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Full Road trip not found")
     return trip
@@ -186,10 +180,10 @@ def list_full_road_trips(
     include_archived: bool = Query(default=False),
     search: str = Query(default="", max_length=255),
     limit: int = Query(default=150, ge=1, le=500),
-    current_user: User = Depends(require_user_department("fuel")),
+    _: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    statement = _scope_trip_statement(select(FullRoadTrip), current_user)
+    statement = select(FullRoadTrip)
     if not include_archived:
         statement = statement.where(FullRoadTrip.is_archived.is_(False))
 
@@ -214,10 +208,10 @@ def list_full_road_trips(
 def export_full_road_trips(
     include_archived: bool = Query(default=True),
     search: str = Query(default="", max_length=255),
-    current_user: User = Depends(require_user_department("fuel")),
+    _: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    statement = _scope_trip_statement(select(FullRoadTrip), current_user)
+    statement = select(FullRoadTrip)
     if not include_archived:
         statement = statement.where(FullRoadTrip.is_archived.is_(False))
 
@@ -244,10 +238,10 @@ def export_full_road_trips(
 @router.get("/{trip_id}", response_model=FullRoadTripResponse)
 def get_full_road_trip(
     trip_id: int,
-    current_user: User = Depends(require_user_department("fuel")),
+    _: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    return _serialize_trip(_get_trip_or_404(db, trip_id, current_user))
+    return _serialize_trip(_get_trip_or_404(db, trip_id))
 
 
 @router.post("", response_model=FullRoadTripResponse, status_code=status.HTTP_201_CREATED)
@@ -285,10 +279,10 @@ def create_full_road_trip(
 def update_full_road_trip(
     trip_id: int,
     payload: FullRoadTripUpdate,
-    current_user: User = Depends(require_user_department("fuel")),
+    _: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = _get_trip_or_404(db, trip_id, current_user)
+    record = _get_trip_or_404(db, trip_id)
     record.load_id = payload.loadId
     record.vehicle_id = payload.vehicleId
     record.truck_number = payload.truckNumber.strip()
@@ -312,10 +306,10 @@ def update_full_road_trip(
 @router.post("/{trip_id}/archive", response_model=FullRoadTripResponse)
 def archive_full_road_trip(
     trip_id: int,
-    current_user: User = Depends(require_user_department("fuel")),
+    _: User = Depends(require_user_department("fuel")),
     db: Session = Depends(get_db),
 ):
-    record = _get_trip_or_404(db, trip_id, current_user)
+    record = _get_trip_or_404(db, trip_id)
     record.is_archived = True
     db.commit()
     db.refresh(record)

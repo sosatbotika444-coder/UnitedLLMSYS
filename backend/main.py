@@ -47,10 +47,6 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    allowed_origins = settings.cors_origin_list
-    if not allowed_origins:
-        raise RuntimeError("CORS_ORIGINS must include at least one explicit origin.")
-
     app = FastAPI(
         title="United Lane System API",
         version="1.0.0",
@@ -59,7 +55,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
+        allow_origins=settings.cors_origin_list or ["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
