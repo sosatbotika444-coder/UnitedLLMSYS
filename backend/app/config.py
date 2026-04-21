@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-oss-120b:free"
     openrouter_chat_model: str = "openai/gpt-4.1-mini"
-    openrouter_chat_max_output_tokens: int = 300
+    openrouter_chat_max_output_tokens: int = 900
     openrouter_app_name: str = "UnitedLLMSYS"
     openrouter_app_url: str = "http://localhost:8000"
     route_guidance_ai_enabled: bool = False
