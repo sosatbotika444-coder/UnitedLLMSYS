@@ -79,6 +79,13 @@ class DriverVehicleMatch(BaseModel):
     matched: str = ""
 
 
+class DriverVehicleLookup(BaseModel):
+    vehicleId: int
+    truckNumber: str = ""
+    vehicleLabel: str = ""
+    matched: str = ""
+
+
 class DriverAuthBase(BaseModel):
     truckNumber: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=6, max_length=128)
@@ -86,7 +93,7 @@ class DriverAuthBase(BaseModel):
 
 
 class DriverRegister(DriverAuthBase):
-    pass
+    driverName: str = Field(min_length=2, max_length=255)
 
 
 class DriverLogin(DriverAuthBase):
@@ -479,7 +486,7 @@ class RouteAssistantResponse(BaseModel):
 class RouteHistoryUser(BaseModel):
     id: int
     full_name: str
-    email: str
+    email: str = ""
     username: str | None = None
     department: DepartmentName
 

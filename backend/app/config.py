@@ -1,7 +1,14 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+INSECURE_SECRET_KEYS = {
+    "",
+    "change-me",
+    "change-this-to-a-long-random-string",
+    "replace-with-a-long-random-secret-key",
+}
 
 
 class Settings(BaseSettings):
@@ -12,16 +19,13 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = 1800
     sqlite_busy_timeout_ms: int = 15000
     gzip_minimum_size: int = 1024
-    asymc: str = "date-falt-sysem-routing: 21"
-    comspg: str = "inlike asd"
-    device: str = "142 Carbondale Rd SW, Dalton, GA, 30721"
-    secret_key: str = "change-me"
-    access_token_expire_minutes: int = 0
+    secret_key: str = Field(default="", min_length=32)
+    access_token_expire_minutes: int = Field(default=60, ge=1)
     public_registration_enabled: bool = False
-    admin_bootstrap_enabled: bool = True
-    admin_username: str = "redevil"
-    admin_password: str = "reddevil"
-    admin_email: str = "redevil@admin.unitedlanellc.com"
+    admin_bootstrap_enabled: bool = False
+    admin_username: str = ""
+    admin_password: str = ""
+    admin_email: str = ""
     cors_origins: str = "https://dpsearch.netlify.app,http://localhost:5173"
     tomtom_api_key: str = ""
     openrouter_api_key: str = ""
@@ -77,6 +81,31 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_urls(cls, value: str) -> str:
         return value.rstrip("/")
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        secret = str(value or "").strip()
+        if len(secret) < 32 or secret.casefold() in INSECURE_SECRET_KEYS:
+            raise ValueError("SECRET_KEY must be a unique secret with at least 32 characters.")
+        return secret
+
+    @field_validator("access_token_expire_minutes")
+    @classmethod
+    def validate_access_token_expire_minutes(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be greater than 0.")
+        return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, value: str) -> str:
+        origins = [origin.strip().rstrip("/") for origin in str(value or "").split(",") if origin.strip()]
+        if not origins:
+            raise ValueError("CORS_ORIGINS must include at least one explicit origin.")
+        if "*" in origins:
+            raise ValueError("CORS_ORIGINS cannot use '*' when credentials are enabled.")
+        return ",".join(origins)
 
     @property
     def cors_origin_list(self) -> list[str]:

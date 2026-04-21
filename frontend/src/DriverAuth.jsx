@@ -30,16 +30,12 @@ async function apiRequest(path, options = {}, token = '') {
 }
 
 function matchLabel(match) {
-  return [match?.truckNumber, match?.driverName].filter(Boolean).join(' | ') || 'Motive truck';
-}
-
-function fuelLabel(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'Fuel not reported';
-  return `${Number(value).toFixed(1)}% fuel`;
+  return match?.truckNumber || match?.vehicleLabel || 'Motive truck';
 }
 
 export default function DriverAuth({ mode = 'login', loading = false, onBusyChange, onAuthenticated, onError, onMessage }) {
   const [truckNumber, setTruckNumber] = useState('');
+  const [driverName, setDriverName] = useState('');
   const [password, setPassword] = useState('');
   const [matches, setMatches] = useState([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
@@ -48,13 +44,14 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
   const [matchRetryTick, setMatchRetryTick] = useState(0);
 
   const trimmedTruckNumber = truckNumber.trim();
+  const trimmedDriverName = driverName.trim();
   const selectedMatch = useMemo(
     () => matches.find((match) => String(match.vehicleId) === String(selectedVehicleId)) || null,
     [matches, selectedVehicleId]
   );
 
   useEffect(() => {
-    if (trimmedTruckNumber.length < 1) {
+    if (trimmedTruckNumber.length < 2) {
       setMatches([]);
       setSelectedVehicleId('');
       setMatchError('');
@@ -71,11 +68,15 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
         const data = await apiRequest(`/driver/matches?q=${encodeURIComponent(trimmedTruckNumber)}`);
         if (ignore) return;
         setMatches(data || []);
-        if ((data || []).length === 1) {
-          setSelectedVehicleId(String(data[0].vehicleId));
-        } else if (selectedVehicleId && !(data || []).some((item) => String(item.vehicleId) === String(selectedVehicleId))) {
-          setSelectedVehicleId('');
-        }
+        setSelectedVehicleId((current) => {
+          if ((data || []).length === 1) {
+            return String(data[0].vehicleId);
+          }
+          if (current && !(data || []).some((item) => String(item.vehicleId) === String(current))) {
+            return '';
+          }
+          return current;
+        });
       } catch (fetchError) {
         if (!ignore) {
           setMatches([]);
@@ -93,14 +94,14 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       ignore = true;
       window.clearTimeout(timer);
     };
-  }, [matchRetryTick, selectedVehicleId, trimmedTruckNumber]);
+  }, [matchRetryTick, trimmedTruckNumber]);
 
   useEffect(() => {
     setMatchRetryTick(0);
   }, [trimmedTruckNumber]);
 
   useEffect(() => {
-    if (trimmedTruckNumber.length < 1 || matches.length || matchError || matchLoading || matchRetryTick >= 8) {
+    if (trimmedTruckNumber.length < 2 || matches.length || matchError || matchLoading || matchRetryTick >= 8) {
       return undefined;
     }
     const timer = window.setTimeout(() => {
@@ -118,16 +119,24 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       onError?.('Select your Motive truck first.');
       return;
     }
+    if (mode === 'register' && !trimmedDriverName) {
+      onError?.('Enter your assigned driver name from Motive.');
+      return;
+    }
 
     onBusyChange?.(true);
     try {
+      const payload = {
+        truckNumber: trimmedTruckNumber,
+        password,
+        vehicleId: selectedMatch.vehicleId
+      };
+      if (mode === 'register') {
+        payload.driverName = trimmedDriverName;
+      }
       const data = await apiRequest(`/driver/${mode === 'register' ? 'register' : 'login'}`, {
         method: 'POST',
-        body: JSON.stringify({
-          truckNumber: trimmedTruckNumber,
-          password,
-          vehicleId: selectedMatch.vehicleId
-        })
+        body: JSON.stringify(payload)
       });
       onAuthenticated?.(data, mode === 'register' ? 'Driver workspace created.' : 'Signed in.');
     } catch (submitError) {
@@ -153,7 +162,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       <div className='driver-match-panel'>
         <div className='driver-match-panel-head'>
           <strong>Motive truck match</strong>
-          <span>{matchLoading ? 'Searching...' : matches.length ? `${matches.length} found` : 'Type truck number'}</span>
+          <span>{matchLoading ? 'Searching...' : matches.length ? `${matches.length} found` : 'Type at least 2 characters'}</span>
         </div>
         {matchError ? <div className='notice error inline-notice'>{matchError}</div> : null}
         <div className='driver-match-list'>
@@ -165,15 +174,28 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
               onClick={() => setSelectedVehicleId(String(match.vehicleId))}
             >
               <strong>{matchLabel(match)}</strong>
-              <span>{match.locationLabel || 'Location unavailable'}</span>
-              <small>{fuelLabel(match.fuelLevelPercent)} | {match.matched || 'Motive truck profile'}</small>
+              <span>{match.vehicleLabel || 'Motive vehicle'}</span>
+              <small>{match.matched || 'Motive truck profile'}</small>
             </button>
           ))}
-          {!matchLoading && trimmedTruckNumber.length >= 1 && !matches.length && !matchError ? (
+          {!matchLoading && trimmedTruckNumber.length >= 2 && !matches.length && !matchError ? (
             <div className='driver-match-empty'>{matchRetryTick < 8 ? 'No Motive truck match yet. Searching again while fleet sync finishes.' : 'No Motive truck match yet.'}</div>
           ) : null}
         </div>
       </div>
+
+      {mode === 'register' ? (
+        <label>
+          Driver Name
+          <input
+            type='text'
+            value={driverName}
+            onChange={(event) => setDriverName(event.target.value)}
+            placeholder='Assigned driver name in Motive'
+            required
+          />
+        </label>
+      ) : null}
 
       <label>
         Password

@@ -40,11 +40,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
+def is_admin(user: User | None) -> bool:
+    return bool(user and str(getattr(user, "department", "") or "").strip().casefold() == "admin")
+
+
 def create_access_token(user_id: int) -> str:
-    payload = {"sub": str(user_id)}
-    if settings.access_token_expire_minutes > 0:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-        payload["exp"] = expire
+    issued_at = datetime.now(timezone.utc)
+    expire = issued_at + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {
+        "sub": str(user_id),
+        "iat": issued_at,
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
 
@@ -64,31 +71,34 @@ def ensure_admin_user(db: Session) -> User | None:
     if not settings.admin_bootstrap_enabled:
         return None
 
-    username = normalize_username(settings.admin_username) or "redevil"
+    existing_admin = db.scalar(select(User).where(func.lower(User.department) == "admin").order_by(User.id.asc()))
+    if existing_admin:
+        return existing_admin
+
+    username = normalize_username(settings.admin_username)
+    password = str(settings.admin_password or "").strip()
+    if not username or not password:
+        raise RuntimeError("Admin bootstrap is enabled, but ADMIN_USERNAME and ADMIN_PASSWORD are not fully configured.")
+
     email = normalize_email(settings.admin_email or f"{username}@admin.unitedlanellc.com")
-    password = settings.admin_password or "reddevil"
+    conflicting_user = db.scalar(
+        select(User).where(or_(func.lower(User.username) == username, func.lower(User.email) == email))
+    )
+    if conflicting_user:
+        if is_admin(conflicting_user):
+            return conflicting_user
+        raise RuntimeError("Admin bootstrap identifiers already belong to a non-admin account.")
 
-    user = db.scalar(select(User).where(or_(func.lower(User.username) == username, func.lower(User.email) == email)))
-    if not user:
-        user = User(
-            email=email,
-            username=username,
-            full_name="Admin",
-            department="admin",
-            hashed_password=hash_password(password),
-            is_banned=False,
-            ban_reason="",
-        )
-        db.add(user)
-    else:
-        user.email = email
-        user.username = username
-        user.department = "admin"
-        user.full_name = user.full_name or "Admin"
-        user.hashed_password = hash_password(password)
-        user.is_banned = False
-        user.ban_reason = ""
-
+    user = User(
+        email=email,
+        username=username,
+        full_name="Admin",
+        department="admin",
+        hashed_password=hash_password(password),
+        is_banned=False,
+        ban_reason="",
+    )
+    db.add(user)
     db.commit()
     db.refresh(user)
     return user
@@ -119,12 +129,10 @@ def get_current_user(
     )
 
     try:
-        decode_options = {"verify_exp": settings.access_token_expire_minutes > 0}
         payload = jwt.decode(
             credentials.credentials,
             settings.secret_key,
             algorithms=["HS256"],
-            options=decode_options,
         )
         user_id = int(payload.get("sub", "0"))
     except (JWTError, ValueError):
@@ -141,7 +149,7 @@ def require_user_department(*allowed_departments: str):
     allowed = {department.strip().lower() for department in allowed_departments if department.strip()}
 
     def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.department == "admin":
+        if is_admin(current_user):
             return current_user
         if current_user.department not in allowed:
             allowed_labels = ", ".join(DEPARTMENT_LABELS.get(item, item.title()) for item in sorted(allowed))
