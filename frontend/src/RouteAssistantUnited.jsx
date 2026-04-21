@@ -1219,7 +1219,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
                   </div>
                   
                 </div>
-                {routePlan.selected_stop ? (
+                {fuelStrategy?.status !== "direct" && routePlan.selected_stop ? (
                   <div className="unitedlane-stop-summary">
                     <strong>{routePlan.selected_stop.brand || routePlan.selected_stop.name}</strong>
                     <span>{routePlan.selected_stop.address}</span>

@@ -1601,7 +1601,20 @@ def save_route_audit(
     db.refresh(request_record)
     return request_record
 
-def build_unitedlane_message(origin: GeocodedPoint, destination: GeocodedPoint, stop: FuelStop | None, fuel_type: str, station_map_link: str | None) -> str:
+def build_unitedlane_message(
+    origin: GeocodedPoint,
+    destination: GeocodedPoint,
+    stop: FuelStop | None,
+    fuel_type: str,
+    station_map_link: str | None,
+    fuel_strategy: FuelStrategy | None = None,
+) -> str:
+    if fuel_strategy and fuel_strategy.status == "direct":
+        return (
+            f"Hello, this is {UNITEDLANE_IDENTITY}, your AI route and fuel assistant. "
+            f"Your current fuel plan shows enough range to travel from {origin.label} to {destination.label} without buying {fuel_type.lower()} on this trip. "
+            "Keep the live route open, stay with the planned path, and continue monitoring fuel level, traffic, and any operating changes while en route."
+        )
     if not stop or not station_map_link:
         return (
             f"Hello, this is {UNITEDLANE_IDENTITY}, your AI route and fuel assistant. "
@@ -1898,9 +1911,21 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
 
     top_fuel_stops = sort_stops(list(combined_stops.values()), payload.sort_by)[:24]
     fuel_strategy = choose_best_fuel_strategy(payload, origin, destination, routes)
-    selected_stop = fuel_strategy.stops[0].stop if fuel_strategy and fuel_strategy.stops else (top_fuel_stops[0] if top_fuel_stops else None)
+    if fuel_strategy and fuel_strategy.status == "planned" and fuel_strategy.stops:
+        selected_stop = fuel_strategy.stops[0].stop
+    elif fuel_strategy and fuel_strategy.status == "direct":
+        selected_stop = None
+    else:
+        selected_stop = top_fuel_stops[0] if top_fuel_stops else None
     station_map_link = build_station_map_link(origin, selected_stop) if selected_stop else None
-    assistant_message = build_unitedlane_message(origin, destination, selected_stop, payload.fuel_type, station_map_link)
+    assistant_message = build_unitedlane_message(
+        origin,
+        destination,
+        selected_stop,
+        payload.fuel_type,
+        station_map_link,
+        fuel_strategy=fuel_strategy,
+    )
     price_support = "UnitedLane uses the cached official Love's/Pilot station catalog for fast routing, then refreshes live official fuel prices for priority route stops within a short time budget and queues the rest in the background."
     if payload.price_target:
         price_support += f" Smart routing also tries to stay at or below ${payload.price_target:.3f}/gal and only goes above that target when the route cannot be completed safely or efficiently otherwise."

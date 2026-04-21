@@ -303,6 +303,57 @@ function toMilesFromMeters(value) {
   return parsed / 1609.344;
 }
 
+function stopDetourMiles(stop) {
+  const detourMeters = Number(stop?.detour_distance_meters);
+  if (Number.isFinite(detourMeters) && detourMeters > 0) {
+    return toMilesFromMeters(detourMeters);
+  }
+  const offRouteMiles = Number(stop?.off_route_miles);
+  if (Number.isFinite(offRouteMiles) && offRouteMiles > 0) {
+    return offRouteMiles * 2;
+  }
+  return 0;
+}
+
+function planRouteMiles(plan) {
+  const strategyMiles = Number(plan?.fuel_strategy?.total_route_miles);
+  if (Number.isFinite(strategyMiles) && strategyMiles > 0) {
+    return strategyMiles;
+  }
+  return toMilesFromMeters(plan?.routes?.[0]?.distance_meters);
+}
+
+function clampRouteProgressMiles(totalMiles, remainingMiles) {
+  const total = Number(totalMiles);
+  const remaining = Number(remainingMiles);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(remaining)) {
+    return 0;
+  }
+  return clamp(total - remaining, 0, total);
+}
+
+function remainingStrategyStops(plan, progressMiles = 0) {
+  const strategyStops = plan?.fuel_strategy?.stops || [];
+  const progress = Math.max(0, Number(progressMiles) || 0);
+  return strategyStops.filter((item) => {
+    const routeMiles = Number(item?.route_miles);
+    if (!Number.isFinite(routeMiles)) return true;
+    return routeMiles + 0.5 >= progress;
+  });
+}
+
+function remainingPlannedGallons(plan, progressMiles = 0) {
+  return remainingStrategyStops(plan, progressMiles).reduce((sum, item) => sum + (Number(item?.gallons_to_buy) || 0), 0);
+}
+
+function remainingPlannedDriveMiles(plan, progressMiles = 0) {
+  const totalRouteMiles = planRouteMiles(plan);
+  const progress = Math.max(0, Number(progressMiles) || 0);
+  const remainingRouteMiles = Math.max(0, totalRouteMiles - progress);
+  const remainingDetourMiles = remainingStrategyStops(plan, progress).reduce((sum, item) => sum + stopDetourMiles(item?.stop), 0);
+  return remainingRouteMiles + remainingDetourMiles;
+}
+
 function haversineMiles(left, right) {
   if (!left || !right) return null;
   const toRadians = (value) => (value * Math.PI) / 180;
@@ -322,10 +373,8 @@ function estimateRemainingFuelGallons(plan, startingGallons, mpg) {
     return DEFAULT_CURRENT_FUEL_GALLONS;
   }
 
-  const bestRoute = plan?.routes?.[0];
-  const routeMiles = plan?.fuel_strategy?.total_route_miles || toMilesFromMeters(bestRoute?.distance_meters);
-  const purchasedGallons = (plan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item.gallons_to_buy) || 0), 0);
-  const consumedGallons = routeMiles / economy;
+  const purchasedGallons = remainingPlannedGallons(plan, 0);
+  const consumedGallons = remainingPlannedDriveMiles(plan, 0) / economy;
   return Math.max(0, start + purchasedGallons - consumedGallons);
 }
 
@@ -388,23 +437,30 @@ function projectedFuelState(trip, vehicle = null) {
   const currentGallons = resolvedFuelPercent !== null
     ? (tankCapacity * resolvedFuelPercent) / 100
     : Math.max(0, Number(trip.currentFuelGallons) || 0);
-  const pickupFuel = (trip.toPickupPlan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item.gallons_to_buy) || 0), 0);
-  const deliveryFuel = (trip.toDeliveryPlan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item.gallons_to_buy) || 0), 0);
-  let remainingMiles = 0;
+  const pickupRouteMiles = planRouteMiles(trip.toPickupPlan);
+  const deliveryRouteMiles = planRouteMiles(trip.toDeliveryPlan);
+  const pickupProgressMiles = clampRouteProgressMiles(pickupRouteMiles, trip.live?.distanceToPickupMiles);
+  const deliveryProgressMiles = clampRouteProgressMiles(deliveryRouteMiles, trip.live?.distanceToDeliveryMiles);
+  let remainingDriveMiles = 0;
   let plannedGallons = 0;
 
   if (trip.stage === "delivered") {
-    remainingMiles = 0;
+    remainingDriveMiles = 0;
     plannedGallons = 0;
   } else if (trip.stage === "enroute_delivery" || trip.stage === "at_pickup") {
-    remainingMiles = trip.live?.distanceToDeliveryMiles ?? trip.metrics?.toDeliveryMiles ?? 0;
-    plannedGallons = deliveryFuel;
+    const deliveryProgress = trip.stage === "enroute_delivery" ? deliveryProgressMiles : 0;
+    remainingDriveMiles = remainingPlannedDriveMiles(trip.toDeliveryPlan, deliveryProgress);
+    plannedGallons = remainingPlannedGallons(trip.toDeliveryPlan, deliveryProgress);
   } else {
-    remainingMiles = (trip.live?.distanceToPickupMiles ?? trip.metrics?.toPickupMiles ?? 0) + (trip.metrics?.toDeliveryMiles ?? 0);
-    plannedGallons = pickupFuel + deliveryFuel;
+    remainingDriveMiles =
+      remainingPlannedDriveMiles(trip.toPickupPlan, pickupProgressMiles)
+      + remainingPlannedDriveMiles(trip.toDeliveryPlan, 0);
+    plannedGallons =
+      remainingPlannedGallons(trip.toPickupPlan, pickupProgressMiles)
+      + remainingPlannedGallons(trip.toDeliveryPlan, 0);
   }
 
-  const projectedReserveGallons = Math.max(0, currentGallons + plannedGallons - (remainingMiles / mpg));
+  const projectedReserveGallons = Math.max(0, currentGallons + plannedGallons - (remainingDriveMiles / mpg));
   return {
     currentGallons,
     projectedReserveGallons,
@@ -642,8 +698,10 @@ async function fetchTruckToPickupRoadPlan(originPoint, destinationPoint) {
 
 function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
   if (!trip?.toPickupPlan || !trip?.toDeliveryPlan) return null;
-  const pickupPlan = livePickupPlan || trip.toPickupPlan;
+  const pickupReferencePlan = trip.toPickupPlan;
+  const pickupPlan = livePickupPlan || pickupReferencePlan;
   const pickupBestRoute = pickupPlan.routes?.[0];
+  const pickupReferenceRoute = pickupReferencePlan.routes?.[0];
   const deliveryBestRoute = trip.toDeliveryPlan.routes?.[0];
   if (!pickupBestRoute || !deliveryBestRoute) return null;
   const livePoint = locationPoint(vehicle);
@@ -671,15 +729,21 @@ function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
   const pickupRouteForMap = {
     ...pickupBestRoute,
     id: `${trip.id}-pickup-leg`,
-    label: livePickupPlan ? "Truck to Pickup (live route)" : "Truck to Pickup"
+    label: livePickupPlan ? "Truck to Pickup (live route)" : "Truck to Pickup",
+    fuel_stops: pickupBestRoute.fuel_stops?.length ? pickupBestRoute.fuel_stops : (pickupReferenceRoute?.fuel_stops || [])
   };
 
   const stopMap = new Map();
-  [...(pickupPlan.top_fuel_stops || []), ...(trip.toDeliveryPlan.top_fuel_stops || [])].forEach((stop) => {
+  [...(pickupReferencePlan.top_fuel_stops || []), ...(trip.toDeliveryPlan.top_fuel_stops || [])].forEach((stop) => {
     if (!stopMap.has(stop.id)) {
       stopMap.set(stop.id, stop);
     }
   });
+
+  const combinedStrategyStops = [
+    ...(pickupReferencePlan.fuel_strategy?.stops || []),
+    ...(trip.toDeliveryPlan.fuel_strategy?.stops || [])
+  ];
 
   return {
     origin: resolvedOrigin,
@@ -689,7 +753,7 @@ function buildCombinedMapPlan(trip, vehicle = null, livePickupPlan = null) {
       { ...deliveryBestRoute, id: `${trip.id}-delivery-leg`, label: "Pickup to Delivery" }
     ],
     top_fuel_stops: [...stopMap.values()],
-    fuel_strategy: null
+    fuel_strategy: combinedStrategyStops.length ? { stops: combinedStrategyStops } : null
   };
 }
 
@@ -858,7 +922,7 @@ function SummaryCard({ label, value, detail, tone = "neutral" }) {
 function LegSummary({ title, plan, nextLabel }) {
   const route = plan?.routes?.[0];
   const strategy = plan?.fuel_strategy;
-  const selectedStop = plan?.selected_stop;
+  const selectedStop = strategy?.status === "direct" ? null : plan?.selected_stop;
 
   return (
     <article className="full-road-leg-card">
