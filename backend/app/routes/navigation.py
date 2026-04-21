@@ -92,6 +92,8 @@ MAX_STRATEGY_CANDIDATES = 40
 AUDIT_ROUTE_STOP_LIMIT = 30
 STRATEGY_ROUTE_BANDS = 8
 STRATEGY_BAND_KEEP = 3
+CHEAP_STRATEGY_GLOBAL_KEEP = 24
+CHEAP_STRATEGY_EDGE_KEEP = 4
 FUEL_SAFETY_BUFFER_RATIO = 0.05
 FUEL_SAFETY_BUFFER_MIN_MILES = 10.0
 FUEL_SAFETY_BUFFER_MAX_MILES = 35.0
@@ -1007,6 +1009,18 @@ def stop_choice_key(stop: FuelStop, position: float, mpg: float = DEFAULT_TRUCK_
     return (adjusted_price, price, detour_seconds, position)
 
 
+def stop_low_price_key(stop: FuelStop) -> tuple[bool, float, float, float, str]:
+    price = stop_auto_diesel_price(stop)
+    position = stop_route_miles(stop)
+    return (
+        price is None,
+        price if price is not None else float("inf"),
+        stop_detour_total_miles(stop),
+        position if position is not None else float("inf"),
+        (stop.brand or stop.name or "").lower(),
+    )
+
+
 def drive_miles_between(from_stop: FuelStop | None, from_route_miles: float, to_stop: FuelStop | None, to_route_miles: float) -> float:
     exit_miles = stop_access_miles(from_stop) if from_stop else 0.0
     entry_miles = stop_access_miles(to_stop) if to_stop else 0.0
@@ -1071,6 +1085,7 @@ def strategy_candidate_stops(
     if len(stops) <= MAX_STRATEGY_CANDIDATES:
         return stops
 
+    prefers_low_price = strategy_prefers_low_price(sort_by)
     selected: list[FuelStop] = []
     seen: set[str] = set()
 
@@ -1080,6 +1095,10 @@ def strategy_candidate_stops(
             return
         seen.add(key)
         selected.append(stop)
+
+    if prefers_low_price:
+        for stop in sorted(stops, key=stop_low_price_key)[:CHEAP_STRATEGY_GLOBAL_KEEP]:
+            add(stop)
 
     for stop in stops[:8]:
         add(stop)
@@ -1092,7 +1111,8 @@ def strategy_candidate_stops(
             stop for stop in stops
             if band_start <= (stop_route_miles(stop) or 0) < band_end
         ]
-        for stop in sorted(band_stops, key=lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))[:STRATEGY_BAND_KEEP]:
+        band_sort_key = stop_low_price_key if prefers_low_price else (lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))
+        for stop in sorted(band_stops, key=band_sort_key)[:STRATEGY_BAND_KEEP]:
             add(stop)
 
     full_range_miles = tank_capacity * mpg
@@ -1105,15 +1125,10 @@ def strategy_candidate_stops(
     for stop in sorted(stops, key=lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))[:16]:
         add(stop)
 
-    if strategy_prefers_low_price(sort_by):
+    if prefers_low_price:
         for stop in sorted(
             stops,
-            key=lambda item: (
-                stop_auto_diesel_price(item) is None,
-                stop_auto_diesel_price(item) if stop_auto_diesel_price(item) is not None else float("inf"),
-                stop_detour_total_miles(item),
-                stop_route_miles(item) or float("inf"),
-            ),
+            key=stop_low_price_key,
         )[:16]:
             add(stop)
 
@@ -1124,7 +1139,42 @@ def strategy_candidate_stops(
     for stop in stops[-4:]:
         add(stop)
 
-    return sorted(selected[:MAX_STRATEGY_CANDIDATES], key=lambda item: stop_route_miles(item) or 0)
+    if len(selected) <= MAX_STRATEGY_CANDIDATES:
+        return sorted(selected, key=lambda item: stop_route_miles(item) or 0)
+
+    if not prefers_low_price:
+        return sorted(selected[:MAX_STRATEGY_CANDIDATES], key=lambda item: stop_route_miles(item) or 0)
+
+    trimmed: list[FuelStop] = []
+    trimmed_seen: set[str] = set()
+
+    def add_trimmed(stop: FuelStop):
+        key = stop.id or f"{stop.lat},{stop.lon}"
+        if key in trimmed_seen or len(trimmed) >= MAX_STRATEGY_CANDIDATES:
+            return
+        trimmed_seen.add(key)
+        trimmed.append(stop)
+
+    route_sorted_selected = sorted(selected, key=lambda item: stop_route_miles(item) or 0)
+    for stop in route_sorted_selected[:CHEAP_STRATEGY_EDGE_KEEP]:
+        add_trimmed(stop)
+    for stop in route_sorted_selected[-CHEAP_STRATEGY_EDGE_KEEP:]:
+        add_trimmed(stop)
+
+    for band_index in range(STRATEGY_ROUTE_BANDS):
+        band_start = band_index * band_size
+        band_end = route_miles + 1 if band_index == STRATEGY_ROUTE_BANDS - 1 else (band_index + 1) * band_size
+        band_stops = [
+            stop for stop in route_sorted_selected
+            if band_start <= (stop_route_miles(stop) or 0) < band_end
+        ]
+        if band_stops:
+            add_trimmed(sorted(band_stops, key=stop_low_price_key)[0])
+
+    for stop in sorted(selected, key=stop_low_price_key):
+        add_trimmed(stop)
+
+    return sorted(trimmed, key=lambda item: stop_route_miles(item) or 0)
 
 def strategy_stop_sequences(stops: list[FuelStop]):
     max_count = min(MAX_SMART_FUEL_STOPS, len(stops))
@@ -1418,15 +1468,25 @@ def choose_best_fuel_strategy(payload: RouteAssistantRequest, origin: GeocodedPo
 
 
 
-def priority_live_price_candidates(route_contexts: list[RouteStationContext], limit: int = 36) -> list:
+def priority_live_price_candidates(route_contexts: list[RouteStationContext], sort_by: str = "", limit: int = 36) -> list:
     candidates = [item for context in route_contexts for item in context.shortlisted_stations]
-    candidates.sort(key=lambda item: (
-        -(item[0].overall_score or 0),
-        item[0].off_route_miles if item[0].off_route_miles is not None else 9999,
-        item[0].origin_miles if item[0].origin_miles is not None else 9999,
-        item[0].brand,
-        item[0].name,
-    ))
+    if strategy_prefers_low_price(sort_by):
+        candidates.sort(key=lambda item: (
+            stop_auto_diesel_price(item[0]) is None,
+            stop_auto_diesel_price(item[0]) if stop_auto_diesel_price(item[0]) is not None else float("inf"),
+            stop_detour_total_miles(item[0]),
+            stop_route_miles(item[0]) if stop_route_miles(item[0]) is not None else float("inf"),
+            item[0].brand,
+            item[0].name,
+        ))
+    else:
+        candidates.sort(key=lambda item: (
+            -(item[0].overall_score or 0),
+            item[0].off_route_miles if item[0].off_route_miles is not None else 9999,
+            item[0].origin_miles if item[0].origin_miles is not None else 9999,
+            item[0].brand,
+            item[0].name,
+        ))
     return candidates[:limit]
 
 
@@ -1811,7 +1871,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     with ThreadPoolExecutor(max_workers=min(3, len(route_contexts) or 1)) as executor:
         route_contexts = list(executor.map(refine_context_detours, route_contexts))
 
-    priority_price_candidates = priority_live_price_candidates(route_contexts)
+    priority_price_candidates = priority_live_price_candidates(route_contexts, payload.sort_by)
     refresh_shortlisted_live_prices(priority_price_candidates, payload.fuel_type)
     refresh_shortlisted_live_prices(
         [item for context in route_contexts for item in context.shortlisted_stations],
