@@ -910,7 +910,42 @@ def price_target_overage(price: float | None, price_target: float | None) -> flo
     return max(0.0, price - price_target)
 
 
-def strategy_rank_key(item: FuelStrategy, price_target: float | None = None) -> tuple:
+def strategy_prefers_low_price(sort_by: str = "") -> bool:
+    return SORT_CODE_MAP.get((sort_by or "").lower(), "score") == "price"
+
+
+def strategy_average_price(item: FuelStrategy) -> float:
+    gallons = parse_float_input(item.required_purchase_gallons) or 0.0
+    if gallons <= FUEL_EPSILON:
+        return 0.0
+    return (parse_float_input(item.estimated_fuel_cost) or 0.0) / gallons
+
+
+def strategy_peak_stop_price(item: FuelStrategy) -> float:
+    prices = [
+        price
+        for price in (parse_float_input(stop.auto_diesel_price) for stop in item.stops)
+        if price is not None
+    ]
+    return max(prices) if prices else 0.0
+
+
+def strategy_rank_key(item: FuelStrategy, price_target: float | None = None, sort_by: str = "") -> tuple:
+    prefers_low_price = strategy_prefers_low_price(sort_by)
+    if price_target is not None and prefers_low_price:
+        return (
+            0 if item.price_target_breach_count == 0 else 1,
+            item.price_target_breach_count,
+            item.price_target_total_overage,
+            item.price_target_max_overage,
+            item.estimated_fuel_cost,
+            strategy_average_price(item),
+            strategy_peak_stop_price(item),
+            item.stop_count,
+            item.estimated_total_time_seconds,
+            item.decision_score,
+            item.total_route_miles,
+        )
     if price_target is not None:
         return (
             0 if item.price_target_breach_count == 0 else 1,
@@ -921,6 +956,16 @@ def strategy_rank_key(item: FuelStrategy, price_target: float | None = None) -> 
             item.estimated_fuel_cost,
             item.stop_count,
             item.estimated_total_time_seconds,
+            item.total_route_miles,
+        )
+    if prefers_low_price:
+        return (
+            item.estimated_fuel_cost,
+            strategy_average_price(item),
+            strategy_peak_stop_price(item),
+            item.stop_count,
+            item.estimated_total_time_seconds,
+            item.decision_score,
             item.total_route_miles,
         )
     return (
@@ -1018,6 +1063,7 @@ def strategy_candidate_stops(
     stops: list[FuelStop],
     route_miles: float,
     price_target: float | None,
+    sort_by: str,
     current_fuel: float,
     tank_capacity: float,
     mpg: float,
@@ -1058,6 +1104,18 @@ def strategy_candidate_stops(
 
     for stop in sorted(stops, key=lambda item: stop_choice_key(item, stop_route_miles(item) or 0, mpg))[:16]:
         add(stop)
+
+    if strategy_prefers_low_price(sort_by):
+        for stop in sorted(
+            stops,
+            key=lambda item: (
+                stop_auto_diesel_price(item) is None,
+                stop_auto_diesel_price(item) if stop_auto_diesel_price(item) is not None else float("inf"),
+                stop_detour_total_miles(item),
+                stop_route_miles(item) or float("inf"),
+            ),
+        )[:16]:
+            add(stop)
 
     if price_target is not None:
         for stop in sorted(stops, key=lambda item: (price_target_overage(stop_auto_diesel_price(item), price_target), stop_choice_key(item, stop_route_miles(item) or 0, mpg)))[:16]:
@@ -1135,6 +1193,7 @@ def simulate_fuel_sequence(
         chosen_leg_miles = drive_miles_between(current_stop, current_position, None, route_miles)
         reason = "Buy enough Auto Diesel to reach destination with a small safety buffer."
 
+        best_future_key: tuple[float, float, float, int] | None = None
         for future_index in range(target_index, len(sequence_stops)):
             future_stop = sequence_stops[future_index]
             future_price = stop_auto_diesel_price(future_stop)
@@ -1143,13 +1202,21 @@ def simulate_fuel_sequence(
             if future_leg_miles > tank_capacity * mpg + FUEL_EPSILON:
                 break
             if future_price is not None and future_price < current_price - FUEL_EPSILON:
+                candidate_key = (
+                    future_price,
+                    stop_detour_total_miles(future_stop),
+                    -future_position,
+                    future_index,
+                )
+                if best_future_key is not None and candidate_key >= best_future_key:
+                    continue
+                best_future_key = candidate_key
                 chosen_target_index = future_index
                 chosen_target_stop = future_stop
                 chosen_target_position = future_position
                 chosen_target_label = future_stop.brand or future_stop.name
                 chosen_leg_miles = future_leg_miles
-                reason = "Buy only enough to reach a cheaper Auto Diesel stop ahead, with a small reserve."
-                break
+                reason = "Buy only enough to reach the lowest-priced reachable Auto Diesel stop ahead, with a small reserve."
 
         if chosen_target_stop is None and chosen_leg_miles > tank_capacity * mpg + FUEL_EPSILON:
             if target_index >= len(sequence_stops):
@@ -1307,7 +1374,7 @@ def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest
         )
 
     stops = priced_route_stops(route, route_miles)
-    stops = strategy_candidate_stops(stops, route_miles, price_target, current_fuel, tank_capacity, mpg)
+    stops = strategy_candidate_stops(stops, route_miles, price_target, payload.sort_by, current_fuel, tank_capacity, mpg)
     if not stops:
         return FuelStrategy(status="unreachable", warnings=warnings + ["No published Auto Diesel stops were found on this route."], **base)
 
@@ -1316,7 +1383,7 @@ def build_route_fuel_strategy(route: RouteOption, payload: RouteAssistantRequest
     for sequence in strategy_stop_sequences(stops):
         strategy = simulate_fuel_sequence(route, stops, sequence, current_fuel, tank_capacity, mpg, route_miles, price_target, origin, destination, warnings)
         if strategy and strategy.status in {"planned", "direct"} and strategy.stop_count <= MAX_SMART_FUEL_STOPS:
-            strategy_key = strategy_rank_key(strategy, price_target)
+            strategy_key = strategy_rank_key(strategy, price_target, payload.sort_by)
             if best_key is None or strategy_key < best_key:
                 best_strategy = strategy
                 best_key = strategy_key
@@ -1346,8 +1413,8 @@ def choose_best_fuel_strategy(payload: RouteAssistantRequest, origin: GeocodedPo
     strategies = [build_route_fuel_strategy(route, payload, origin, destination) for route in routes]
     feasible = [strategy for strategy in strategies if strategy.status in {"planned", "direct"}]
     if feasible:
-        return min(feasible, key=lambda item: strategy_rank_key(item, price_target))
-    return min(strategies, key=lambda item: strategy_rank_key(item, price_target) + (item.total_route_miles, item.route_label or ""))
+        return min(feasible, key=lambda item: strategy_rank_key(item, price_target, payload.sort_by))
+    return min(strategies, key=lambda item: strategy_rank_key(item, price_target, payload.sort_by) + (item.total_route_miles, item.route_label or ""))
 
 
 

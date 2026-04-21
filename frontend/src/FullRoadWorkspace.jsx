@@ -1345,7 +1345,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             current_fuel_gallons: preset.currentFuelGallons,
             tank_capacity_gallons: preset.tankCapacityGallons,
             mpg: preset.mpg,
-            sort_by: "best"
+            sort_by: "cheapest"
           })
         },
         token
@@ -1368,7 +1368,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             current_fuel_gallons: remainingAtPickup,
             tank_capacity_gallons: preset.tankCapacityGallons,
             mpg: preset.mpg,
-            sort_by: "best"
+            sort_by: "cheapest"
           })
         },
         token
@@ -1864,7 +1864,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             <div className="panel-head compact-panel-head">
               <div>
                 <h2>Fuel Management</h2>
-                <span>Smart fuel plan across both legs with the best available official stops.</span>
+                <span>Smart fuel plan across both legs using the lowest official Auto Diesel prices that still keep the trip reachable.</span>
               </div>
             </div>
             <div className="full-road-fuel-grid">
