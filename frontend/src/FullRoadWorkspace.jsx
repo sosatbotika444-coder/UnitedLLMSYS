@@ -135,6 +135,16 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
+function formatMinutes(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "0m";
+  const hours = Math.floor(parsed / 60);
+  const minutes = Math.round(parsed % 60);
+  if (!hours) return `${minutes}m`;
+  if (!minutes) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 function formatDateTime(value) {
   if (!value) return "Unknown";
   const parsed = new Date(value);
