@@ -138,6 +138,50 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, parsed));
 }
 
+function toPositiveNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function formatMpg(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "MPG unknown";
+  return `${parsed.toFixed(1)} MPG`;
+}
+
+function resolveVehicleMpgInfo(vehicle) {
+  const directMpg = toPositiveNumber(vehicle?.mpg);
+  if (directMpg !== null) {
+    return {
+      value: directMpg,
+      source: vehicle?.mpg_source || "Motive truck MPG"
+    };
+  }
+
+  const totalDistanceMiles = toPositiveNumber(vehicle?.utilization_summary?.total_distance_miles);
+  const totalFuelGallons = toPositiveNumber(vehicle?.utilization_summary?.total_fuel);
+  if (totalDistanceMiles !== null && totalFuelGallons !== null) {
+    return {
+      value: totalDistanceMiles / totalFuelGallons,
+      source: "Motive 7-day total distance vs total fuel"
+    };
+  }
+
+  const drivingDistanceMiles = toPositiveNumber(vehicle?.driving_summary?.distance_miles);
+  const drivingFuelGallons = toPositiveNumber(vehicle?.utilization_summary?.driving_fuel);
+  if (drivingDistanceMiles !== null && drivingFuelGallons !== null) {
+    return {
+      value: drivingDistanceMiles / drivingFuelGallons,
+      source: "Motive 7-day driving distance vs driving fuel"
+    };
+  }
+
+  return {
+    value: null,
+    source: ""
+  };
+}
+
 function resolveFuelPercent(vehicle) {
   const location = vehicle?.location || {};
   return clampPercent(
@@ -219,12 +263,13 @@ function truckOptionLabel(vehicle) {
     parts.push(driverName);
   }
   parts.push(fuelOptionText(vehicle));
+  parts.push(formatMpg(resolveVehicleMpgInfo(vehicle).value));
   return parts.join(" - ");
 }
 
 function driverOptionLabel(vehicle) {
   const driverName = vehicleDriverName(vehicle);
-  const parts = [driverName === "Unassigned" ? "Unassigned" : driverName, vehicleLabel(vehicle), fuelOptionText(vehicle)];
+  const parts = [driverName === "Unassigned" ? "Unassigned" : driverName, vehicleLabel(vehicle), fuelOptionText(vehicle), formatMpg(resolveVehicleMpgInfo(vehicle).value)];
   return parts.join(" - ");
 }
 
@@ -257,8 +302,9 @@ function deriveTruckPreset(vehicle, loadRows) {
   const currentFuelGallons = effectiveFuelPercent !== null
     ? (DEFAULT_TANK_CAPACITY_GALLONS * effectiveFuelPercent) / 100
     : DEFAULT_CURRENT_FUEL_GALLONS;
-  const matchedMpg = Number(matchedLoad?.mpg);
-  const mpg = Number.isFinite(matchedMpg) && matchedMpg > 0 ? matchedMpg : DEFAULT_TRUCK_MPG;
+  const motiveMpg = resolveVehicleMpgInfo(vehicle);
+  const matchedMpg = toPositiveNumber(matchedLoad?.mpg);
+  const mpg = motiveMpg.value ?? matchedMpg ?? DEFAULT_TRUCK_MPG;
 
   let fuelSource = `Fallback ${DEFAULT_CURRENT_FUEL_GALLONS} gal preset`;
   if (fuelPercent !== null) {
@@ -276,7 +322,11 @@ function deriveTruckPreset(vehicle, loadRows) {
     hasSensorOnlyFuel,
     fuelSource,
     mpg,
-    mpgSource: Number.isFinite(matchedMpg) && matchedMpg > 0 ? "MPG matched from Loads board" : `Default truck MPG ${DEFAULT_TRUCK_MPG.toFixed(1)}`,
+    mpgSource: motiveMpg.value !== null
+      ? motiveMpg.source
+      : matchedMpg !== null
+        ? "MPG matched from Loads board"
+        : `Default truck MPG ${DEFAULT_TRUCK_MPG.toFixed(1)}`,
     matchedLoad,
   };
 }

@@ -121,6 +121,44 @@ function formatCoordinates(location) {
   return `${Number(location.lat).toFixed(4)}, ${Number(location.lon).toFixed(4)}`;
 }
 
+function positiveNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function vehicleMpgInfo(vehicle) {
+  const directMpg = positiveNumber(vehicle?.mpg);
+  if (directMpg !== null) {
+    return {
+      value: directMpg,
+      source: vehicle?.mpg_source || "Motive truck MPG"
+    };
+  }
+
+  const totalDistanceMiles = positiveNumber(vehicle?.utilization_summary?.total_distance_miles);
+  const totalFuelGallons = positiveNumber(vehicle?.utilization_summary?.total_fuel);
+  if (totalDistanceMiles !== null && totalFuelGallons !== null) {
+    return {
+      value: totalDistanceMiles / totalFuelGallons,
+      source: "Motive 7-day total distance vs total fuel"
+    };
+  }
+
+  const drivingDistanceMiles = positiveNumber(vehicle?.driving_summary?.distance_miles);
+  const drivingFuelGallons = positiveNumber(vehicle?.utilization_summary?.driving_fuel);
+  if (drivingDistanceMiles !== null && drivingFuelGallons !== null) {
+    return {
+      value: drivingDistanceMiles / drivingFuelGallons,
+      source: "Motive 7-day driving distance vs driving fuel"
+    };
+  }
+
+  return {
+    value: null,
+    source: ""
+  };
+}
+
 function hasCoordinates(vehicle) {
   return (
     vehicle?.location &&
@@ -379,6 +417,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
   const historyPoints = detail?.history?.points || [];
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
+  const currentVehicleMpg = vehicleMpgInfo(currentVehicle);
   const currentEldHours = currentVehicle?.eld_hours || {};
   const canFocusStreet = hasCoordinates(currentVehicle);
   const selectedLocationLabel = vehicleLocationTitle(currentVehicle);
@@ -496,7 +535,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               {currentVehicle ? (
                 <>
                   <div className="motive-detail-card-grid">
-                    <DetailCard label="Fuel" value={currentVehicle.location?.fuel_level_percent !== null && currentVehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(currentVehicle.location.fuel_level_percent)}%` : "Unknown"} detail={currentVehicle.fuel_type || "Fuel type unknown"} />
+                    <DetailCard label="Fuel" value={currentVehicle.location?.fuel_level_percent !== null && currentVehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(currentVehicle.location.fuel_level_percent)}%` : "Unknown"} detail={[currentVehicle.fuel_type || "Fuel type unknown", currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : null].filter(Boolean).join(" | ")} />
+                    <DetailCard label="MPG" value={currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : "Unknown"} detail={currentVehicleMpg.source || "Motive fuel efficiency unavailable"} />
                     <DetailCard label="Odometer" value={currentVehicle.location?.true_odometer ? `${metricValue(currentVehicle.location.true_odometer)} mi` : currentVehicle.location?.odometer ? `${metricValue(currentVehicle.location.odometer)} mi` : "Unknown"} detail="Latest telematics reading" />
                     <DetailCard label="Engine Hours" value={currentVehicle.location?.true_engine_hours ? decimalValue(currentVehicle.location.true_engine_hours) : currentVehicle.location?.engine_hours ? decimalValue(currentVehicle.location.engine_hours) : "Unknown"} detail="Engine runtime" />
                     <DetailCard label="Faults" value={metricValue(currentVehicle.fault_summary?.active_count)} detail={`${metricValue(currentVehicle.fault_summary?.count)} total recent`} />
@@ -582,7 +622,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 filteredVehicles.map((vehicle) => (
                   <button key={`${vehicle.id}-${vehicle.number}`} type="button" className={`motive-vehicle-row motive-vehicle-row-wide ${currentVehicle?.id === vehicle.id ? "selected" : ""}`} onClick={() => handleVehicleSelect(vehicle.id)}>
                     <span><strong>{vehicle.number}</strong><small>{vehicle.vin || [vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</small></span>
-                    <span><strong>{vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(vehicle.location.fuel_level_percent)}%` : "-"}</strong><small>{vehicle.fuel_type || "Fuel n/a"}</small></span>
+                    <span><strong>{vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(vehicle.location.fuel_level_percent)}%` : "-"}</strong><small>{[vehicle.fuel_type || "Fuel n/a", vehicleMpgInfo(vehicle).value !== null ? `${decimalValue(vehicleMpgInfo(vehicle).value)} MPG` : null].filter(Boolean).join(" | ")}</small></span>
                     <span><strong>{metricValue(vehicle.fault_summary?.active_count)}</strong><small>{metricValue(vehicle.fault_summary?.count)} total</small></span>
                     <span><strong>{vehicle.utilization_summary?.utilization_percentage !== null && vehicle.utilization_summary?.utilization_percentage !== undefined ? `${decimalValue(vehicle.utilization_summary.utilization_percentage)}%` : "-"}</strong><small>{decimalValue((vehicle.idle_summary?.duration_seconds || 0) / 3600)} idle h</small></span>
                     <span><strong>{metricValue(vehicle.driving_summary?.distance_miles)} mi</strong><small>{formatHosClock(vehicle.eld_hours, "drive_seconds")} drive left</small></span>

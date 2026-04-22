@@ -1450,6 +1450,29 @@ class MotiveClient:
             "message": first_text(item.get("message")),
         }
 
+    def _build_vehicle_mpg_summary(self, utilization: dict | None, driving_summary: dict | None) -> tuple[float | None, str]:
+        utilization_summary = utilization or {}
+        driving_totals = driving_summary or {}
+        candidates = [
+            (
+                as_float(utilization_summary.get("total_distance_miles")),
+                as_float(utilization_summary.get("total_fuel")),
+                "Motive 7-day total distance vs total fuel",
+            ),
+            (
+                as_float(driving_totals.get("distance_miles")),
+                as_float(utilization_summary.get("driving_fuel")),
+                "Motive 7-day driving distance vs driving fuel",
+            ),
+        ]
+        for distance_miles, fuel_gallons, source in candidates:
+            if distance_miles is None or fuel_gallons is None or distance_miles <= 0 or fuel_gallons <= 0:
+                continue
+            mpg = round(distance_miles / fuel_gallons, 2)
+            if mpg > 0:
+                return mpg, source
+        return None, ""
+
     def _normalize_idle_event(self, raw: dict) -> dict:
         item = unwrap_record(raw)
         vehicle = unwrap_record(item.get("vehicle"))
@@ -1699,6 +1722,7 @@ class MotiveClient:
             "last_origin": first_text(driving_periods[0].get("origin")) if driving_periods else None,
             "last_destination": first_text(driving_periods[0].get("destination")) if driving_periods else None,
         }
+        mpg, mpg_source = self._build_vehicle_mpg_summary(utilization_summary, driving_summary)
         behaviors: list[str] = []
         pending_review_count = 0
         for event in performance_events:
@@ -1749,6 +1773,8 @@ class MotiveClient:
             "year": first_text(base.get("year"), current_v2.get("year")),
             "vin": first_text(base.get("vin"), current_v2.get("vin")),
             "fuel_type": first_text(base.get("fuel_type"), current_v2.get("fuel_type")),
+            "mpg": mpg,
+            "mpg_source": mpg_source,
             "license_plate_number": first_text(base.get("license_plate_number")),
             "license_plate_state": first_text(base.get("license_plate_state")),
             "registration_expiry_date": first_text(base.get("registration_expiry_date")),

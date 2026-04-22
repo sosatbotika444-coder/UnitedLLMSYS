@@ -164,6 +164,50 @@ function formatFuelPrice(value) {
   return `$${parsed.toFixed(3)}/gal`;
 }
 
+function positiveNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function formatMpgValue(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "MPG unknown";
+  return `${parsed.toFixed(1)} MPG`;
+}
+
+function vehicleMpgInfo(vehicle) {
+  const directMpg = positiveNumber(vehicle?.mpg);
+  if (directMpg !== null) {
+    return {
+      value: directMpg,
+      source: vehicle?.mpg_source || "Motive truck MPG"
+    };
+  }
+
+  const totalDistanceMiles = positiveNumber(vehicle?.utilization_summary?.total_distance_miles);
+  const totalFuelGallons = positiveNumber(vehicle?.utilization_summary?.total_fuel);
+  if (totalDistanceMiles !== null && totalFuelGallons !== null) {
+    return {
+      value: totalDistanceMiles / totalFuelGallons,
+      source: "Motive 7-day total distance vs total fuel"
+    };
+  }
+
+  const drivingDistanceMiles = positiveNumber(vehicle?.driving_summary?.distance_miles);
+  const drivingFuelGallons = positiveNumber(vehicle?.utilization_summary?.driving_fuel);
+  if (drivingDistanceMiles !== null && drivingFuelGallons !== null) {
+    return {
+      value: drivingDistanceMiles / drivingFuelGallons,
+      source: "Motive 7-day driving distance vs driving fuel"
+    };
+  }
+
+  return {
+    value: null,
+    source: ""
+  };
+}
+
 function metricValue(value) {
   return new Intl.NumberFormat("en-US").format(Number(value) || 0);
 }
@@ -283,7 +327,9 @@ function deriveTruckPreset(vehicle, loadRows) {
   const loadFuelPercent = Number(row?.fuel_level);
   const resolvedFuelPercent = Number.isFinite(fuelPercent) ? fuelPercent : (Number.isFinite(loadFuelPercent) ? loadFuelPercent : null);
   const tankCapacityGallons = Math.max(1, Number(row?.tank_capacity) || DEFAULT_TANK_CAPACITY_GALLONS);
-  const mpg = Math.max(0.1, Number(row?.mpg) || DEFAULT_TRUCK_MPG);
+  const motiveMpg = vehicleMpgInfo(vehicle);
+  const loadMpg = positiveNumber(row?.mpg);
+  const mpg = Math.max(0.1, motiveMpg.value ?? loadMpg ?? DEFAULT_TRUCK_MPG);
   const currentFuelGallons = resolvedFuelPercent !== null
     ? (tankCapacityGallons * resolvedFuelPercent) / 100
     : DEFAULT_CURRENT_FUEL_GALLONS;
@@ -292,6 +338,11 @@ function deriveTruckPreset(vehicle, loadRows) {
     matchedLoadId: row?.id || null,
     tankCapacityGallons,
     mpg,
+    mpgSource: motiveMpg.value !== null
+      ? motiveMpg.source
+      : loadMpg !== null
+        ? "MPG matched from Loads board"
+        : `Default truck MPG ${DEFAULT_TRUCK_MPG.toFixed(1)}`,
     fuelPercent: resolvedFuelPercent,
     currentFuelGallons
   };
@@ -1638,7 +1689,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <option value="">Select live unit</option>
               {filteredVehicles.map((vehicle) => (
                 <option key={vehicle.id} value={vehicle.id}>
-                  {vehicleLabel(vehicle)} | {vehicleDriverName(vehicle)} | {formatFuelPercent(vehicleFuelPercent(vehicle))} | {vehicleLocationLabel(vehicle)}
+                  {vehicleLabel(vehicle)} | {vehicleDriverName(vehicle)} | {formatFuelPercent(vehicleFuelPercent(vehicle))} | {formatMpgValue(vehicleMpgInfo(vehicle).value)} | {vehicleLocationLabel(vehicle)}
                 </option>
               ))}
             </select>
@@ -1656,6 +1707,11 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <span>Live fuel</span>
               <strong>{formatFuelPercent(vehicleFuelPercent(selectedVehicle))}</strong>
               <small>{selectedPreset ? `${formatGallons(selectedPreset.currentFuelGallons)} available` : "Fuel preset ready"}</small>
+            </article>
+            <article>
+              <span>MPG</span>
+              <strong>{selectedPreset ? formatMpgValue(selectedPreset.mpg) : formatMpgValue(null)}</strong>
+              <small>{selectedPreset?.mpgSource || "Routing preset"}</small>
             </article>
             <article>
               <span>HOS drive</span>
