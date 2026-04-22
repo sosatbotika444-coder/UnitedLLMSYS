@@ -146,7 +146,11 @@ const emptyRow = {
   detention_rate_per_hour: "50",
   lumper_cost: "0",
   toll_cost: "0",
-  other_accessorials: "0"
+  other_accessorials: "0",
+  manual_fuel_cost: "0",
+  manual_total_miles: "0",
+  manual_deadhead_miles: "0",
+  manual_loaded_miles: "0"
 };
 
 function getDepartmentMeta(departmentId) {
@@ -450,6 +454,10 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
         <label>Lumper<input value={row.lumper_cost} onChange={(event) => onUpdate(row.id, "lumper_cost", event.target.value)} onBlur={(event) => onSave({ ...row, lumper_cost: event.target.value })} /></label>
         <label>Tolls<input value={row.toll_cost} onChange={(event) => onUpdate(row.id, "toll_cost", event.target.value)} onBlur={(event) => onSave({ ...row, toll_cost: event.target.value })} /></label>
         <label>Accessorials<input value={row.other_accessorials} onChange={(event) => onUpdate(row.id, "other_accessorials", event.target.value)} onBlur={(event) => onSave({ ...row, other_accessorials: event.target.value })} /></label>
+        <label>Manual Fuel<input value={row.manual_fuel_cost} onChange={(event) => onUpdate(row.id, "manual_fuel_cost", event.target.value)} onBlur={(event) => onSave({ ...row, manual_fuel_cost: event.target.value })} /></label>
+        <label>Total Miles<input value={row.manual_total_miles} onChange={(event) => onUpdate(row.id, "manual_total_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_total_miles: event.target.value })} /></label>
+        <label>Deadhead<input value={row.manual_deadhead_miles} onChange={(event) => onUpdate(row.id, "manual_deadhead_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_deadhead_miles: event.target.value })} /></label>
+        <label>Loaded Miles<input value={row.manual_loaded_miles} onChange={(event) => onUpdate(row.id, "manual_loaded_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_loaded_miles: event.target.value })} /></label>
         <label>1st Stop<textarea value={row.stop1} onChange={(event) => onUpdate(row.id, "stop1", event.target.value)} onBlur={(event) => onSave({ ...row, stop1: event.target.value })} /></label>
         <label>2nd Stop<textarea value={row.stop2} onChange={(event) => onUpdate(row.id, "stop2", event.target.value)} onBlur={(event) => onSave({ ...row, stop2: event.target.value })} /></label>
         <label>3rd Stop<textarea value={row.stop3} onChange={(event) => onUpdate(row.id, "stop3", event.target.value)} onBlur={(event) => onSave({ ...row, stop3: event.target.value })} /></label>
@@ -1631,6 +1639,10 @@ export default function App() {
                         <th>Lumper</th>
                         <th>Tolls</th>
                         <th>Accessorials</th>
+                        <th>Fuel Cost</th>
+                        <th>Total Mi</th>
+                        <th>Deadhead Mi</th>
+                        <th>Loaded Mi</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1831,6 +1843,34 @@ export default function App() {
                                   onBlur={(event) => saveRow({ ...row, other_accessorials: event.target.value })}
                                 />
                               </td>
+                              <td>
+                                <input
+                                  value={row.manual_fuel_cost}
+                                  onChange={(event) => updateLocalRow(row.id, "manual_fuel_cost", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, manual_fuel_cost: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.manual_total_miles}
+                                  onChange={(event) => updateLocalRow(row.id, "manual_total_miles", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, manual_total_miles: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.manual_deadhead_miles}
+                                  onChange={(event) => updateLocalRow(row.id, "manual_deadhead_miles", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, manual_deadhead_miles: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.manual_loaded_miles}
+                                  onChange={(event) => updateLocalRow(row.id, "manual_loaded_miles", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, manual_loaded_miles: event.target.value })}
+                                />
+                              </td>
                               <td className="action-cell">
                                 <button className="delete-button" onClick={() => deleteRow(row.id)}>
                                   Delete
@@ -1841,7 +1881,7 @@ export default function App() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="26" className="empty-state-cell">
+                          <td colSpan="30" className="empty-state-cell">
                             {gridLoading ? "Loading data..." : "No loads yet."}
                           </td>
                         </tr>

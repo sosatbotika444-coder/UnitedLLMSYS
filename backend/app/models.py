@@ -128,6 +128,10 @@ class Load(Base):
     lumper_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     toll_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     other_accessorials: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    manual_fuel_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    manual_total_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    manual_deadhead_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    manual_loaded_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
 
 
 class FullRoadTrip(Base):

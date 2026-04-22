@@ -4,7 +4,6 @@ import {
   buildTripProfitabilitySnapshot,
   getTripStageTimeline,
   recordTripTimelineEvent,
-  resolveLoadForTrip,
 } from "./profitability";
 
 const RouteMap = lazy(() => import("./RouteMap"));
@@ -1259,7 +1258,11 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     [activeTrips, selectedTripId]
   );
   const selectedTripLoadRow = useMemo(
-    () => (selectedTrip ? resolveLoadForTrip(selectedTrip, loadRows) : null),
+    () => (
+      selectedTrip?.loadId
+        ? loadRows.find((row) => String(row.id) === String(selectedTrip.loadId)) || null
+        : null
+    ),
     [loadRows, selectedTrip]
   );
   const selectedTripTimeline = useMemo(
@@ -1985,14 +1988,14 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <div className="panel-head compact-panel-head">
                 <div>
                   <h2>Trip Profitability</h2>
-                  <span>Projected revenue, route fuel, and lane margin for this exact load.</span>
+                  <span>Manual load economics for this exact load, with Full Road only used for monitoring.</span>
                 </div>
               </div>
               <div className="full-road-financial-grid">
                 <article>
                   <span>Load</span>
                   <strong>{selectedTripLoadRow?.load_number || selectedTrip.truckNumber}</strong>
-                  <small>{selectedTripLoadRow?.customer_name || "Customer not linked yet"}</small>
+                  <small>{selectedTripLoadRow?.customer_name || "Link a saved load to monitor manual profitability"}</small>
                 </article>
                 <article>
                   <span>Lane</span>
@@ -2007,12 +2010,12 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 <article>
                   <span>Total Cost</span>
                   <strong>{formatCurrency(selectedTripProfitability?.projectedCost)}</strong>
-                  <small>Fuel {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} + driver/tolls/lumper</small>
+                  <small>Manual fuel {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} + driver/tolls/lumper</small>
                 </article>
                 <article>
                   <span>Projected Margin</span>
                   <strong>{formatCurrency(selectedTripProfitability?.projectedMargin)}</strong>
-                  <small>{selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined ? `${formatCurrency(selectedTripProfitability.projectedMarginPerMile)} per mile` : "Waiting on routed miles"}</small>
+                  <small>{selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined ? `${formatCurrency(selectedTripProfitability.projectedMarginPerMile)} per mile` : "Enter manual miles in Loads"}</small>
                 </article>
                 <article>
                   <span>Detention Recoverable</span>

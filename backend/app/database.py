@@ -102,6 +102,10 @@ def ensure_runtime_schema() -> None:
         add_load_column("lumper_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("toll_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("other_accessorials", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("manual_fuel_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("manual_total_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("manual_deadhead_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("manual_loaded_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
 
         _execute_schema_statements(load_statements)
 

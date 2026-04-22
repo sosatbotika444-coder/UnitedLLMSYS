@@ -129,27 +129,8 @@ function computeDetentionWindow(arrivalAt, departureAt, freeMinutes, ratePerHour
 export function resolveLoadForTrip(trip, loadRows = []) {
   if (!trip || !Array.isArray(loadRows) || !loadRows.length) return null;
 
-  if (trip.loadId) {
-    const byId = loadRows.find((row) => String(row?.id) === String(trip.loadId));
-    if (byId) return byId;
-  }
-
-  const tripTruck = normalizeText(trip.truckNumber);
-  const tripDriver = normalizeText(trip.driverName);
-  const tripPickup = normalizeText(trip.pickup);
-  const tripDelivery = normalizeText(trip.delivery);
-
-  return loadRows.find((row) => {
-    const rowTruck = normalizeText(row?.truck);
-    const rowDriver = normalizeText(row?.driver);
-    const rowPickup = normalizeText(row?.pickup_city);
-    const rowDelivery = normalizeText(row?.delivery_city);
-
-    const sameTruck = rowTruck && tripTruck && (rowTruck === tripTruck || rowTruck.includes(tripTruck) || tripTruck.includes(rowTruck));
-    const sameDriver = rowDriver && tripDriver && (rowDriver === tripDriver || rowDriver.includes(tripDriver) || tripDriver.includes(rowDriver));
-    const sameRoute = rowPickup && rowDelivery && tripPickup && tripDelivery && rowPickup === tripPickup && rowDelivery === tripDelivery;
-    return sameTruck || sameDriver || sameRoute;
-  }) || null;
+  if (!trip.loadId) return null;
+  return loadRows.find((row) => String(row?.id) === String(trip.loadId)) || null;
 }
 
 export function buildTripProfitabilitySnapshot(trip, loadRow = null, nowTs = Date.now()) {
@@ -166,10 +147,10 @@ export function buildTripProfitabilitySnapshot(trip, loadRow = null, nowTs = Dat
   const driverCost = numericValue(safeLoad.driver_pay_total) ?? 0;
   const lumperCost = numericValue(safeLoad.lumper_cost) ?? 0;
   const tollCost = numericValue(safeLoad.toll_cost) ?? 0;
-  const estimatedFuelCost = numericValue(safeTrip?.metrics?.estimatedFuelCost) ?? 0;
-  const totalMiles = numericValue(safeTrip?.metrics?.totalMiles);
-  const deadheadMiles = numericValue(safeTrip?.metrics?.toPickupMiles);
-  const loadedMiles = numericValue(safeTrip?.metrics?.toDeliveryMiles);
+  const estimatedFuelCost = numericValue(safeLoad.manual_fuel_cost) ?? 0;
+  const totalMiles = numericValue(safeLoad.manual_total_miles);
+  const deadheadMiles = numericValue(safeLoad.manual_deadhead_miles);
+  const loadedMiles = numericValue(safeLoad.manual_loaded_miles);
   const projectedRevenue = revenueBase + accessorials + detentionAmount;
   const projectedCost = driverCost + lumperCost + tollCost + estimatedFuelCost;
   const projectedMargin = projectedRevenue - projectedCost;
@@ -200,6 +181,7 @@ export function buildTripProfitabilitySnapshot(trip, loadRow = null, nowTs = Dat
     lumperCost,
     tollCost,
     estimatedFuelCost,
+    fuelSource: estimatedFuelCost > 0 ? "manual_load" : "manual_missing",
     projectedRevenue,
     projectedCost,
     projectedMargin,

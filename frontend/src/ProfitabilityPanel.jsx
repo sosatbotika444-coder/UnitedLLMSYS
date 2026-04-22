@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   buildTripProfitabilitySnapshot,
   normalizeText,
-  resolveLoadForTrip,
 } from "./profitability";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -153,30 +152,18 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
   }, [active, token]);
 
   const records = useMemo(() => {
-    const tripRecords = trips.map((trip) => {
-      const matchedLoad = resolveLoadForTrip(trip, loadRows);
-      return buildTripProfitabilitySnapshot(trip, matchedLoad);
+    return (loadRows || []).map((row) => {
+      const linkedTrip = trips.find((trip) => String(trip?.loadId || "") === String(row?.id || "")) || null;
+      return buildTripProfitabilitySnapshot(linkedTrip, row);
     });
-
-    const usedLoadIds = new Set(
-      tripRecords
-        .map((record) => String(record.loadId || ""))
-        .filter(Boolean),
-    );
-
-    const loadOnlyRecords = (loadRows || [])
-      .filter((row) => !usedLoadIds.has(String(row?.id || "")))
-      .map((row) => buildTripProfitabilitySnapshot(null, row));
-
-    return [...tripRecords, ...loadOnlyRecords];
   }, [loadRows, trips]);
 
   const filteredRecords = useMemo(() => {
     const term = normalizeText(search);
     return records
       .filter((record) => {
-        if (sourceFilter === "routed" && !record.hasLiveTrip) return false;
-        if (sourceFilter === "load_only" && record.hasLiveTrip) return false;
+        if (sourceFilter === "linked" && !record.hasLiveTrip) return false;
+        if (sourceFilter === "unlinked" && record.hasLiveTrip) return false;
         if (!term) return true;
         const haystack = [
           record.loadNumber,
@@ -199,7 +186,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
       });
   }, [records, search, sourceFilter, view]);
 
-  const routedRecords = useMemo(() => filteredRecords.filter((record) => record.hasLiveTrip), [filteredRecords]);
+  const monitoredRecords = useMemo(() => filteredRecords.filter((record) => record.hasLiveTrip), [filteredRecords]);
   const detentionQueue = useMemo(
     () => filteredRecords.filter((record) => record.detentionStatus !== "clear"),
     [filteredRecords],
@@ -208,7 +195,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
   const laneRows = useMemo(() => {
     const laneMap = new Map();
 
-    routedRecords.forEach((record) => {
+    filteredRecords.forEach((record) => {
       const existing = laneMap.get(record.laneKey) || {
         laneKey: record.laneKey,
         loadCount: 0,
@@ -239,20 +226,20 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
         customersLabel: [...lane.customers].slice(0, 3).join(", "),
       }))
       .sort((left, right) => right.totalMargin - left.totalMargin);
-  }, [routedRecords]);
+  }, [filteredRecords]);
 
   const summary = useMemo(() => {
-    const margins = routedRecords.map((record) => record.projectedMargin);
+    const margins = filteredRecords.map((record) => record.projectedMargin);
     return {
       totalRecords: filteredRecords.length,
-      routedCount: routedRecords.length,
-      totalMargin: sumBy(routedRecords, (record) => record.projectedMargin),
+      monitoredCount: monitoredRecords.length,
+      totalMargin: sumBy(filteredRecords, (record) => record.projectedMargin),
       totalDetention: sumBy(filteredRecords, (record) => record.detentionAmount),
       runningDetention: detentionQueue.filter((record) => record.detentionStatus.startsWith("running")).length,
-      avgMarginPerMile: average(routedRecords.map((record) => record.projectedMarginPerMile)),
+      avgMarginPerMile: average(filteredRecords.map((record) => record.projectedMarginPerMile)),
       lossLoads: margins.filter((value) => Number(value) < 0).length,
     };
-  }, [detentionQueue, filteredRecords, routedRecords]);
+  }, [detentionQueue, filteredRecords, monitoredRecords]);
 
   return (
     <section className="profitability-panel">
@@ -260,11 +247,11 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
         <div className="panel-head compact-panel-head">
           <div>
             <h2>Detention + Lane Profitability</h2>
-            <span>Projected margin, detention recovery, and lane performance from Loads plus Full Road.</span>
+            <span>Manual load economics with optional Full Road monitoring for stage and detention.</span>
           </div>
           <div className="fleet-statistics-head-meta">
             <small>{summary.totalRecords} record(s)</small>
-            <small>{summary.routedCount} routed with fuel cost</small>
+            <small>{summary.monitoredCount} linked to Full Road</small>
           </div>
         </div>
 
@@ -277,8 +264,8 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
             Source
             <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
               <option value="all">All records</option>
-              <option value="routed">Only routed trips</option>
-              <option value="load_only">Only load-sheet rows</option>
+              <option value="linked">Only monitored loads</option>
+              <option value="unlinked">Only load-sheet rows</option>
             </select>
           </label>
           <div className="statistics-quick-tabs workspace-inline-tabs">
@@ -294,7 +281,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <article className={`metric-card metric-card-${marginMetricTone(summary.totalMargin)}`}>
             <span>Projected Margin</span>
             <strong>{formatCurrency(summary.totalMargin)}</strong>
-            <small>Across routed trips in the current view</small>
+            <small>Across manual load rows in the current view</small>
           </article>
           <article className={`metric-card metric-card-${summary.runningDetention ? "amber" : "green"}`}>
             <span>Detention Recoverable</span>
@@ -304,7 +291,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <article className="metric-card metric-card-blue">
             <span>Avg Margin / Mile</span>
             <strong>{summary.avgMarginPerMile !== null ? formatCurrency(summary.avgMarginPerMile) : "$0.00"}</strong>
-            <small>Based on routed trips with mileage</small>
+            <small>Based on manual miles you entered</small>
           </article>
           <article className={`metric-card metric-card-${summary.lossLoads ? "amber" : "green"}`}>
             <span>Loss Loads</span>
@@ -322,7 +309,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <div className="workspace-table-toolbar">
             <div>
               <h2>Load Profitability</h2>
-              <span>Each load with projected fuel, detention, and margin.</span>
+              <span>Each load from your manual inputs, with optional Full Road monitoring.</span>
             </div>
           </div>
           <div className="sheet-frame">
@@ -355,15 +342,15 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                       </td>
                       <td>
                         <strong>{stageLabel(record.stage)}</strong>
-                        <small>{record.hasLiveTrip ? "Full Road linked" : "Load sheet only"}</small>
+                        <small>{record.hasLiveTrip ? "Full Road linked" : "Waiting for monitoring link"}</small>
                       </td>
                       <td>
                         <strong>{formatCurrency(record.projectedRevenue)}</strong>
-                        <small>Rate {formatCurrency(record.revenueBase)} + acc {formatCurrency(record.accessorials)}</small>
+                        <small>Manual rate {formatCurrency(record.revenueBase)} + acc {formatCurrency(record.accessorials)}</small>
                       </td>
                       <td>
                         <strong>{formatCurrency(record.estimatedFuelCost)}</strong>
-                        <small>{record.hasLiveTrip ? "Estimated from route" : "No Full Road fuel yet"}</small>
+                        <small>{record.estimatedFuelCost > 0 ? "Manual fuel entry" : "Enter fuel cost in Loads"}</small>
                       </td>
                       <td>
                         <strong>{formatCurrency((record.driverCost || 0) + (record.lumperCost || 0) + (record.tollCost || 0))}</strong>
@@ -375,15 +362,15 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                       </td>
                       <td className={`profitability-tone-${marginTone(record.projectedMargin)}`}>
                         <strong>{formatCurrency(record.projectedMargin)}</strong>
-                        <small>{record.totalMiles ? `${formatMiles(record.totalMiles)} total` : "Miles pending"}</small>
+                        <small>{record.totalMiles ? `${formatMiles(record.totalMiles)} total` : "Enter total miles in Loads"}</small>
                       </td>
                       <td>
                         <strong>{record.projectedMarginPerMile !== null ? formatCurrency(record.projectedMarginPerMile) : "$0.00"}</strong>
-                        <small>{record.projectedMarginPerMile !== null ? "Projected" : "Need routed miles"}</small>
+                        <small>{record.projectedMarginPerMile !== null ? "Projected" : "Need manual miles"}</small>
                       </td>
                       <td>
                         <strong>{record.deadheadMiles ? formatMiles(record.deadheadMiles) : "n/a"}</strong>
-                        <small>{record.loadedMiles ? `${formatMiles(record.loadedMiles)} loaded` : "Loaded miles pending"}</small>
+                        <small>{record.loadedMiles ? `${formatMiles(record.loadedMiles)} loaded` : "Enter loaded miles"}</small>
                       </td>
                     </tr>
                   )) : (
@@ -403,7 +390,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <div className="workspace-table-toolbar">
             <div>
               <h2>Lane Profitability</h2>
-              <span>Grouped from routed Full Road trips so fuel cost and deadhead stay in the math.</span>
+              <span>Grouped from your manual load rows, with Full Road only used for monitoring when linked.</span>
             </div>
           </div>
           <div className="sheet-frame">
@@ -435,7 +422,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="8" className="empty-state-cell">No routed lane profitability rows yet.</td>
+                      <td colSpan="8" className="empty-state-cell">No manual lane profitability rows yet.</td>
                     </tr>
                   )}
                 </tbody>

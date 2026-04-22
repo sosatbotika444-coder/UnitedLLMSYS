@@ -283,6 +283,10 @@ class LoadBase(BaseModel):
     lumper_cost: str = Field(default="0", max_length=32)
     toll_cost: str = Field(default="0", max_length=32)
     other_accessorials: str = Field(default="0", max_length=32)
+    manual_fuel_cost: str = Field(default="0", max_length=32)
+    manual_total_miles: str = Field(default="0", max_length=32)
+    manual_deadhead_miles: str = Field(default="0", max_length=32)
+    manual_loaded_miles: str = Field(default="0", max_length=32)
 
 
 class LoadCreate(LoadBase):
