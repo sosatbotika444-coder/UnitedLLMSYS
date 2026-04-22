@@ -259,6 +259,7 @@ class TeamChatMessageResponse(BaseModel):
     editedAt: datetime | None = None
 
 class LoadBase(BaseModel):
+    vehicle_id: int | None = Field(default=None, ge=1)
     driver: str = Field(default="", max_length=255)
     truck: str = Field(default="", max_length=64)
     mpg: str = Field(default="6.0", max_length=32)
@@ -284,6 +285,8 @@ class LoadBase(BaseModel):
     toll_cost: str = Field(default="0", max_length=32)
     other_accessorials: str = Field(default="0", max_length=32)
     manual_fuel_cost: str = Field(default="0", max_length=32)
+    baseline_fuel_cost: str = Field(default="0", max_length=32)
+    smart_service_savings: str = Field(default="0", max_length=32)
     manual_total_miles: str = Field(default="0", max_length=32)
     manual_deadhead_miles: str = Field(default="0", max_length=32)
     manual_loaded_miles: str = Field(default="0", max_length=32)

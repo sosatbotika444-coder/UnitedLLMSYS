@@ -313,6 +313,11 @@ function locationPoint(vehicle) {
 
 function findVehicleForLoad(loadRow, vehicles) {
   if (!loadRow || !Array.isArray(vehicles)) return null;
+  const loadVehicleId = Number(loadRow.vehicle_id);
+  if (Number.isFinite(loadVehicleId) && loadVehicleId > 0) {
+    const directMatch = vehicles.find((vehicle) => Number(vehicle?.id) === loadVehicleId);
+    if (directMatch) return directMatch;
+  }
   const truckTerm = normalizeText(loadRow.truck);
   const driverTerm = normalizeText(loadRow.driver);
 
@@ -327,6 +332,11 @@ function findVehicleForLoad(loadRow, vehicles) {
 
 function matchedLoadRow(vehicle, loadRows) {
   if (!vehicle || !Array.isArray(loadRows)) return null;
+  const vehicleId = Number(vehicle?.id);
+  if (Number.isFinite(vehicleId) && vehicleId > 0) {
+    const directMatch = loadRows.find((row) => Number(row?.vehicle_id) === vehicleId);
+    if (directMatch) return directMatch;
+  }
   return loadRows.find((row) => {
     const truckText = normalizeText(row.truck);
     const driverText = normalizeText(row.driver);
@@ -1891,6 +1901,12 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             <SummaryCard label="ETA Delivery" value={formatDateTime(selectedTrip.metrics.etaToDelivery)} detail={formatDuration(selectedTrip.metrics.totalDurationSeconds)} tone="violet" />
             <SummaryCard label="Fuel Stops" value={metricValue(selectedTrip.metrics.fuelStopCount)} detail={formatCurrency(selectedTrip.metrics.estimatedFuelCost)} tone="dark" />
             <SummaryCard
+              label="Fuel Service Delta"
+              value={formatCurrency(selectedTripProfitability?.smartServiceSavings)}
+              detail={selectedTripProfitability ? `Without service margin ${formatCurrency(selectedTripProfitability.projectedMarginWithoutService)}` : "Run Smart Fill on the linked load"}
+              tone={selectedTripProfitability?.smartServiceSavings < 0 ? "amber" : "green"}
+            />
+            <SummaryCard
               label="Projected Margin"
               value={selectedTripProfitability ? formatCurrency(selectedTripProfitability.projectedMargin) : "$0.00"}
               detail={selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined
@@ -1988,7 +2004,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <div className="panel-head compact-panel-head">
                 <div>
                   <h2>Trip Profitability</h2>
-                  <span>Manual load economics for this exact load, with Full Road only used for monitoring.</span>
+                  <span>Smart-filled load economics for this exact load, with Full Road only used for monitoring.</span>
                 </div>
               </div>
               <div className="full-road-financial-grid">
@@ -2010,12 +2026,22 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 <article>
                   <span>Total Cost</span>
                   <strong>{formatCurrency(selectedTripProfitability?.projectedCost)}</strong>
-                  <small>Manual fuel {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} + driver/tolls/lumper</small>
+                  <small>Smart fuel {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} + driver/tolls/lumper</small>
                 </article>
                 <article>
                   <span>Projected Margin</span>
                   <strong>{formatCurrency(selectedTripProfitability?.projectedMargin)}</strong>
                   <small>{selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined ? `${formatCurrency(selectedTripProfitability.projectedMarginPerMile)} per mile` : "Enter manual miles in Loads"}</small>
+                </article>
+                <article>
+                  <span>Without Service</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.projectedMarginWithoutService)}</strong>
+                  <small>Average corridor fuel baseline</small>
+                </article>
+                <article>
+                  <span>Fuel Service Delta</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.smartServiceSavings)}</strong>
+                  <small>{formatCurrency(selectedTripProfitability?.baselineFuelCost)} baseline fuel vs {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} smart fuel</small>
                 </article>
                 <article>
                   <span>Detention Recoverable</span>
@@ -2027,8 +2053,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 <strong>{selectedTripProfitability && selectedTripProfitability.projectedMargin < 0 ? "Margin risk" : "Profitability outlook"}</strong>
                 <p>
                   {selectedTripProfitability && selectedTripProfitability.projectedMargin < 0
-                    ? "This trip is currently underwater on projected numbers. Check rate, deadhead, fuel plan, and detention recovery before closing it."
-                    : "This trip is carrying a positive projected margin. Keep detention timestamps accurate so billed revenue does not leak out at pickup or delivery."}
+                    ? "This trip is currently underwater on projected numbers. Check rate, deadhead, smart fuel plan, and detention recovery before closing it."
+                    : "This trip is carrying a positive projected margin. Smart Route savings and accurate detention timestamps are both feeding the projected outcome."}
                 </p>
               </div>
             </section>

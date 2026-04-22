@@ -148,13 +148,18 @@ export function buildTripProfitabilitySnapshot(trip, loadRow = null, nowTs = Dat
   const lumperCost = numericValue(safeLoad.lumper_cost) ?? 0;
   const tollCost = numericValue(safeLoad.toll_cost) ?? 0;
   const estimatedFuelCost = numericValue(safeLoad.manual_fuel_cost) ?? 0;
+  const baselineFuelCost = numericValue(safeLoad.baseline_fuel_cost) ?? estimatedFuelCost;
   const totalMiles = numericValue(safeLoad.manual_total_miles);
   const deadheadMiles = numericValue(safeLoad.manual_deadhead_miles);
   const loadedMiles = numericValue(safeLoad.manual_loaded_miles);
   const projectedRevenue = revenueBase + accessorials + detentionAmount;
   const projectedCost = driverCost + lumperCost + tollCost + estimatedFuelCost;
+  const projectedCostWithoutService = driverCost + lumperCost + tollCost + baselineFuelCost;
   const projectedMargin = projectedRevenue - projectedCost;
+  const projectedMarginWithoutService = projectedRevenue - projectedCostWithoutService;
   const projectedMarginPerMile = totalMiles && totalMiles > 0 ? projectedMargin / totalMiles : null;
+  const projectedMarginPerMileWithoutService = totalMiles && totalMiles > 0 ? projectedMarginWithoutService / totalMiles : null;
+  const smartServiceSavings = numericValue(safeLoad.smart_service_savings) ?? (baselineFuelCost - estimatedFuelCost);
   const detentionStatus = (pickupDetention.isRunning || deliveryDetention.isRunning)
     ? (pickupDetention.hasBillableTime || deliveryDetention.hasBillableTime ? "running_billable" : "running")
     : detentionAmount > 0
@@ -181,11 +186,16 @@ export function buildTripProfitabilitySnapshot(trip, loadRow = null, nowTs = Dat
     lumperCost,
     tollCost,
     estimatedFuelCost,
-    fuelSource: estimatedFuelCost > 0 ? "manual_load" : "manual_missing",
+    baselineFuelCost,
+    smartServiceSavings,
+    fuelSource: estimatedFuelCost > 0 ? (baselineFuelCost > 0 ? "smart_route_fill" : "load_entry") : "missing",
     projectedRevenue,
     projectedCost,
+    projectedCostWithoutService,
     projectedMargin,
+    projectedMarginWithoutService,
     projectedMarginPerMile,
+    projectedMarginPerMileWithoutService,
     totalMiles,
     deadheadMiles,
     loadedMiles,

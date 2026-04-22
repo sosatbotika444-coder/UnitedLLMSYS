@@ -90,6 +90,7 @@ def ensure_runtime_schema() -> None:
             if name not in load_columns:
                 load_statements.append(f"ALTER TABLE loads ADD COLUMN {name} {definition}")
 
+        add_load_column("vehicle_id", "INTEGER")
         add_load_column("customer_name", "VARCHAR(255) NOT NULL DEFAULT ''")
         add_load_column("broker_name", "VARCHAR(255) NOT NULL DEFAULT ''")
         add_load_column("load_number", "VARCHAR(128) NOT NULL DEFAULT ''")
@@ -103,6 +104,8 @@ def ensure_runtime_schema() -> None:
         add_load_column("toll_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("other_accessorials", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("manual_fuel_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("baseline_fuel_cost", "VARCHAR(32) NOT NULL DEFAULT '0'")
+        add_load_column("smart_service_savings", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("manual_total_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("manual_deadhead_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
         add_load_column("manual_loaded_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")

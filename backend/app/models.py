@@ -104,6 +104,7 @@ class Load(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    vehicle_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
     driver: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     truck: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     mpg: Mapped[str] = mapped_column(String(32), default="6.0", nullable=False)
@@ -129,6 +130,8 @@ class Load(Base):
     toll_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     other_accessorials: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     manual_fuel_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    baseline_fuel_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    smart_service_savings: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     manual_total_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     manual_deadhead_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
     manual_loaded_miles: Mapped[str] = mapped_column(String(32), default="0", nullable=False)

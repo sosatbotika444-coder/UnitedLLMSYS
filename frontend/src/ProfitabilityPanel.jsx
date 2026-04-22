@@ -201,7 +201,9 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
         loadCount: 0,
         totalRevenue: 0,
         totalMargin: 0,
+        totalMarginWithoutService: 0,
         totalDetention: 0,
+        totalServiceSavings: 0,
         totalMiles: 0,
         customers: new Set(),
       };
@@ -209,7 +211,9 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
       existing.loadCount += 1;
       existing.totalRevenue += Number(record.projectedRevenue) || 0;
       existing.totalMargin += Number(record.projectedMargin) || 0;
+      existing.totalMarginWithoutService += Number(record.projectedMarginWithoutService) || 0;
       existing.totalDetention += Number(record.detentionAmount) || 0;
+      existing.totalServiceSavings += Number(record.smartServiceSavings) || 0;
       existing.totalMiles += Number(record.totalMiles) || 0;
       if (record.customerName) {
         existing.customers.add(record.customerName);
@@ -221,6 +225,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
       .map((lane) => ({
         ...lane,
         avgMarginPerLoad: lane.loadCount ? lane.totalMargin / lane.loadCount : 0,
+        avgMarginWithoutServicePerLoad: lane.loadCount ? lane.totalMarginWithoutService / lane.loadCount : 0,
         avgDetentionPerLoad: lane.loadCount ? lane.totalDetention / lane.loadCount : 0,
         marginPerMile: lane.totalMiles > 0 ? lane.totalMargin / lane.totalMiles : null,
         customersLabel: [...lane.customers].slice(0, 3).join(", "),
@@ -234,7 +239,9 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
       totalRecords: filteredRecords.length,
       monitoredCount: monitoredRecords.length,
       totalMargin: sumBy(filteredRecords, (record) => record.projectedMargin),
+      totalMarginWithoutService: sumBy(filteredRecords, (record) => record.projectedMarginWithoutService),
       totalDetention: sumBy(filteredRecords, (record) => record.detentionAmount),
+      totalServiceSavings: sumBy(filteredRecords, (record) => record.smartServiceSavings),
       runningDetention: detentionQueue.filter((record) => record.detentionStatus.startsWith("running")).length,
       avgMarginPerMile: average(filteredRecords.map((record) => record.projectedMarginPerMile)),
       lossLoads: margins.filter((value) => Number(value) < 0).length,
@@ -247,7 +254,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
         <div className="panel-head compact-panel-head">
           <div>
             <h2>Detention + Lane Profitability</h2>
-            <span>Manual load economics with optional Full Road monitoring for stage and detention.</span>
+            <span>Truck-selected Smart Route economics with optional Full Road monitoring for stage and detention.</span>
           </div>
           <div className="fleet-statistics-head-meta">
             <small>{summary.totalRecords} record(s)</small>
@@ -279,9 +286,19 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
 
         <section className="full-road-summary-grid profitability-summary-grid">
           <article className={`metric-card metric-card-${marginMetricTone(summary.totalMargin)}`}>
-            <span>Projected Margin</span>
+            <span>Margin With Service</span>
             <strong>{formatCurrency(summary.totalMargin)}</strong>
-            <small>Across manual load rows in the current view</small>
+            <small>Across smart-filled loads in the current view</small>
+          </article>
+          <article className={`metric-card metric-card-${marginMetricTone(summary.totalMarginWithoutService)}`}>
+            <span>Margin Without Service</span>
+            <strong>{formatCurrency(summary.totalMarginWithoutService)}</strong>
+            <small>Baseline from average corridor fuel price</small>
+          </article>
+          <article className={`metric-card metric-card-${summary.totalServiceSavings >= 0 ? "green" : "amber"}`}>
+            <span>Fuel Service Delta</span>
+            <strong>{formatCurrency(summary.totalServiceSavings)}</strong>
+            <small>Smart fuel plan vs average corridor fueling</small>
           </article>
           <article className={`metric-card metric-card-${summary.runningDetention ? "amber" : "green"}`}>
             <span>Detention Recoverable</span>
@@ -309,7 +326,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <div className="workspace-table-toolbar">
             <div>
               <h2>Load Profitability</h2>
-              <span>Each load from your manual inputs, with optional Full Road monitoring.</span>
+              <span>Each load from truck selection plus Smart Route auto-fill, with optional Full Road monitoring.</span>
             </div>
           </div>
           <div className="sheet-frame">
@@ -321,10 +338,13 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                     <th>Lane</th>
                     <th>Stage</th>
                     <th>Revenue</th>
-                    <th>Fuel</th>
+                    <th>Fuel With Service</th>
+                    <th>Fuel Without Service</th>
+                    <th>Service Delta</th>
                     <th>Other Cost</th>
                     <th>Detention</th>
-                    <th>Margin</th>
+                    <th>Margin With Service</th>
+                    <th>Margin Without Service</th>
                     <th>Margin / Mi</th>
                     <th>Trip</th>
                   </tr>
@@ -346,11 +366,19 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                       </td>
                       <td>
                         <strong>{formatCurrency(record.projectedRevenue)}</strong>
-                        <small>Manual rate {formatCurrency(record.revenueBase)} + acc {formatCurrency(record.accessorials)}</small>
+                        <small>Rate {formatCurrency(record.revenueBase)} + acc {formatCurrency(record.accessorials)}</small>
                       </td>
                       <td>
                         <strong>{formatCurrency(record.estimatedFuelCost)}</strong>
-                        <small>{record.estimatedFuelCost > 0 ? "Manual fuel entry" : "Enter fuel cost in Loads"}</small>
+                        <small>{record.estimatedFuelCost > 0 ? "Smart Route fuel plan" : "Run Smart Fill from Loads"}</small>
+                      </td>
+                      <td>
+                        <strong>{formatCurrency(record.baselineFuelCost)}</strong>
+                        <small>Average corridor fuel baseline</small>
+                      </td>
+                      <td className={`profitability-tone-${marginTone(record.smartServiceSavings)}`}>
+                        <strong>{formatCurrency(record.smartServiceSavings)}</strong>
+                        <small>Margin lift from Smart Route fuel choices</small>
                       </td>
                       <td>
                         <strong>{formatCurrency((record.driverCost || 0) + (record.lumperCost || 0) + (record.tollCost || 0))}</strong>
@@ -362,20 +390,24 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                       </td>
                       <td className={`profitability-tone-${marginTone(record.projectedMargin)}`}>
                         <strong>{formatCurrency(record.projectedMargin)}</strong>
-                        <small>{record.totalMiles ? `${formatMiles(record.totalMiles)} total` : "Enter total miles in Loads"}</small>
+                        <small>{record.totalMiles ? `${formatMiles(record.totalMiles)} total` : "Run Smart Fill or enter miles"}</small>
+                      </td>
+                      <td className={`profitability-tone-${marginTone(record.projectedMarginWithoutService)}`}>
+                        <strong>{formatCurrency(record.projectedMarginWithoutService)}</strong>
+                        <small>Same load without smart fuel savings</small>
                       </td>
                       <td>
                         <strong>{record.projectedMarginPerMile !== null ? formatCurrency(record.projectedMarginPerMile) : "$0.00"}</strong>
-                        <small>{record.projectedMarginPerMile !== null ? "Projected" : "Need manual miles"}</small>
+                        <small>{record.projectedMarginPerMile !== null ? "Projected" : "Need route miles"}</small>
                       </td>
                       <td>
                         <strong>{record.deadheadMiles ? formatMiles(record.deadheadMiles) : "n/a"}</strong>
-                        <small>{record.loadedMiles ? `${formatMiles(record.loadedMiles)} loaded` : "Enter loaded miles"}</small>
+                        <small>{record.loadedMiles ? `${formatMiles(record.loadedMiles)} loaded` : "Smart Fill populates loaded miles"}</small>
                       </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="10" className="empty-state-cell">No profitability records match the current filters.</td>
+                      <td colSpan="12" className="empty-state-cell">No profitability records match the current filters.</td>
                     </tr>
                   )}
                 </tbody>
@@ -390,7 +422,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
           <div className="workspace-table-toolbar">
             <div>
               <h2>Lane Profitability</h2>
-              <span>Grouped from your manual load rows, with Full Road only used for monitoring when linked.</span>
+              <span>Grouped from smart-filled load rows, with Full Road only used for monitoring when linked.</span>
             </div>
           </div>
           <div className="sheet-frame">
@@ -401,7 +433,9 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                     <th>Lane</th>
                     <th>Loads</th>
                     <th>Total Revenue</th>
-                    <th>Total Margin</th>
+                    <th>Margin With Service</th>
+                    <th>Margin Without Service</th>
+                    <th>Fuel Service Delta</th>
                     <th>Avg Margin / Load</th>
                     <th>Margin / Mi</th>
                     <th>Avg Detention</th>
@@ -415,6 +449,8 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                       <td><strong>{metricValue(lane.loadCount)}</strong></td>
                       <td><strong>{formatCurrency(lane.totalRevenue)}</strong></td>
                       <td className={`profitability-tone-${marginTone(lane.totalMargin)}`}><strong>{formatCurrency(lane.totalMargin)}</strong></td>
+                      <td className={`profitability-tone-${marginTone(lane.totalMarginWithoutService)}`}><strong>{formatCurrency(lane.totalMarginWithoutService)}</strong></td>
+                      <td className={`profitability-tone-${marginTone(lane.totalServiceSavings)}`}><strong>{formatCurrency(lane.totalServiceSavings)}</strong></td>
                       <td><strong>{formatCurrency(lane.avgMarginPerLoad)}</strong></td>
                       <td><strong>{lane.marginPerMile !== null ? formatCurrency(lane.marginPerMile) : "$0.00"}</strong></td>
                       <td><strong>{formatCurrency(lane.avgDetentionPerLoad)}</strong></td>
@@ -422,7 +458,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="8" className="empty-state-cell">No manual lane profitability rows yet.</td>
+                      <td colSpan="9" className="empty-state-cell">No smart-filled lane profitability rows yet.</td>
                     </tr>
                   )}
                 </tbody>

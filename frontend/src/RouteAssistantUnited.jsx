@@ -275,6 +275,11 @@ function driverOptionLabel(vehicle) {
 
 function findMatchingLoadRow(vehicle, loadRows) {
   if (!vehicle || !Array.isArray(loadRows) || !loadRows.length) return null;
+  const vehicleId = Number(vehicle?.id);
+  if (Number.isFinite(vehicleId) && vehicleId > 0) {
+    const directMatch = loadRows.find((row) => Number(row?.vehicle_id) === vehicleId);
+    if (directMatch) return directMatch;
+  }
   const truckCandidates = [vehicle.number, vehicle.vin, vehicle.license_plate_number].map(normalizeText).filter(Boolean);
   const driverCandidates = [vehicle?.driver?.full_name, vehicle?.permanent_driver?.full_name].map(normalizeText).filter(Boolean);
 

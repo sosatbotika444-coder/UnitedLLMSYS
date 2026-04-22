@@ -3,6 +3,7 @@ import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
+import { getAutoDieselPrice } from "./priceSignals";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
@@ -22,6 +23,10 @@ const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
+const ROUTE_REQUEST_TIMEOUT_MS = 120000;
+const DEFAULT_TANK_CAPACITY_GALLONS = 200;
+const DEFAULT_TRUCK_MPG = 6.0;
+const DEFAULT_CURRENT_FUEL_GALLONS = 100;
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
   { id: "admin", label: "Admin", detail: "Users, bans, statistics" },
@@ -107,7 +112,7 @@ const workspaceCopy = {
   loads: {
     eyebrow: "Fuel Service",
     title: "Loads",
-    subtitle: "Edit and save load rows."
+    subtitle: "Choose a truck, enter A/B and rate, then auto-fill route economics."
   },
   chat: {
     eyebrow: "All Workspaces",
@@ -123,6 +128,7 @@ const workspaceCopy = {
 const emptyRegister = { full_name: "", email: "", password: "" };
 const emptyLogin = { email: "", password: "" };
 const emptyRow = {
+  vehicle_id: null,
   driver: "",
   truck: "",
   mpg: "6.0",
@@ -148,6 +154,8 @@ const emptyRow = {
   toll_cost: "0",
   other_accessorials: "0",
   manual_fuel_cost: "0",
+  baseline_fuel_cost: "0",
+  smart_service_savings: "0",
   manual_total_miles: "0",
   manual_deadhead_miles: "0",
   manual_loaded_miles: "0"
@@ -178,10 +186,261 @@ function computeMilesToEmpty(row) {
   return String(Math.round((tank * mpg * fuel) / 100));
 }
 
+function clampPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function positiveNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function vehicleDriver(vehicle) {
+  return vehicle?.driver || vehicle?.permanent_driver || null;
+}
+
+function vehicleDriverName(vehicle) {
+  return vehicleDriver(vehicle)?.full_name || "Unassigned";
+}
+
+function vehicleLabel(vehicle) {
+  return vehicle?.number || vehicle?.vin || `Vehicle ${vehicle?.id ?? ""}`.trim();
+}
+
+function vehicleFuelPercent(vehicle) {
+  const location = vehicle?.location || {};
+  return clampPercent(
+    location.fuel_level_percent
+    ?? location.fuel_primary_remaining_percentage
+    ?? location.fuel_remaining_percentage
+    ?? location.fuel_percentage
+    ?? null
+  );
+}
+
+function vehicleLocationQuery(vehicle) {
+  const location = vehicle?.location || {};
+  const lat = Number(location.lat);
+  const lon = Number(location.lon);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) return `${lat}, ${lon}`;
+  if (location.address) return location.address;
+  const cityState = [location.city, location.state].filter(Boolean).join(", ");
+  return cityState || "";
+}
+
+function resolveVehicleMpgInfo(vehicle) {
+  const directMpg = positiveNumber(vehicle?.mpg);
+  if (directMpg !== null) {
+    return {
+      value: directMpg,
+      source: vehicle?.mpg_source || "Motive truck MPG"
+    };
+  }
+
+  const totalDistanceMiles = positiveNumber(vehicle?.utilization_summary?.total_distance_miles);
+  const totalFuelGallons = positiveNumber(vehicle?.utilization_summary?.total_fuel);
+  if (totalDistanceMiles !== null && totalFuelGallons !== null) {
+    return {
+      value: totalDistanceMiles / totalFuelGallons,
+      source: "Motive 7-day total distance vs total fuel"
+    };
+  }
+
+  const drivingDistanceMiles = positiveNumber(vehicle?.driving_summary?.distance_miles);
+  const drivingFuelGallons = positiveNumber(vehicle?.utilization_summary?.driving_fuel);
+  if (drivingDistanceMiles !== null && drivingFuelGallons !== null) {
+    return {
+      value: drivingDistanceMiles / drivingFuelGallons,
+      source: "Motive 7-day driving distance vs driving fuel"
+    };
+  }
+
+  return {
+    value: null,
+    source: ""
+  };
+}
+
+function findVehicleForRow(row, vehicles) {
+  if (!row || !Array.isArray(vehicles) || !vehicles.length) return null;
+  const explicitId = Number(row.vehicle_id);
+  if (Number.isFinite(explicitId) && explicitId > 0) {
+    return vehicles.find((vehicle) => Number(vehicle?.id) === explicitId) || null;
+  }
+
+  const truckText = String(row.truck || "").trim().toLowerCase();
+  const driverText = String(row.driver || "").trim().toLowerCase();
+
+  return vehicles.find((vehicle) => {
+    const label = vehicleLabel(vehicle).toLowerCase();
+    const driverName = vehicleDriverName(vehicle).toLowerCase();
+    const truckMatch = truckText && (truckText === label || truckText.includes(label) || label.includes(truckText));
+    const driverMatch = driverText && (driverText === driverName || driverText.includes(driverName) || driverName.includes(driverText));
+    return truckMatch || driverMatch;
+  }) || null;
+}
+
+function deriveRowTruckPreset(vehicle, row) {
+  const fuelPercent = vehicleFuelPercent(vehicle);
+  const rowFuelPercent = clampPercent(row?.fuel_level);
+  const resolvedFuelPercent = fuelPercent ?? rowFuelPercent;
+  const tankCapacityGallons = Math.max(1, Number(row?.tank_capacity) || DEFAULT_TANK_CAPACITY_GALLONS);
+  const motiveMpg = resolveVehicleMpgInfo(vehicle);
+  const rowMpg = positiveNumber(row?.mpg);
+  const mpg = motiveMpg.value ?? rowMpg ?? DEFAULT_TRUCK_MPG;
+  const currentFuelGallons = resolvedFuelPercent !== null
+    ? (tankCapacityGallons * resolvedFuelPercent) / 100
+    : DEFAULT_CURRENT_FUEL_GALLONS;
+
+  return {
+    fuelPercent: resolvedFuelPercent,
+    tankCapacityGallons,
+    mpg,
+    mpgSource: motiveMpg.value !== null
+      ? motiveMpg.source
+      : rowMpg !== null
+        ? "MPG from load row"
+        : `Default truck MPG ${DEFAULT_TRUCK_MPG.toFixed(1)}`,
+    currentFuelGallons
+  };
+}
+
+function toMilesFromMeters(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return parsed / 1609.344;
+}
+
+function stopDetourMiles(stop) {
+  const detourMeters = Number(stop?.detour_distance_meters);
+  if (Number.isFinite(detourMeters) && detourMeters > 0) {
+    return toMilesFromMeters(detourMeters);
+  }
+  const offRouteMiles = Number(stop?.off_route_miles);
+  if (Number.isFinite(offRouteMiles) && offRouteMiles > 0) {
+    return offRouteMiles * 2;
+  }
+  return 0;
+}
+
+function planRouteMiles(plan) {
+  const strategyMiles = Number(plan?.fuel_strategy?.total_route_miles);
+  if (Number.isFinite(strategyMiles) && strategyMiles > 0) {
+    return strategyMiles;
+  }
+  return toMilesFromMeters(plan?.routes?.[0]?.distance_meters);
+}
+
+function planFuelCost(plan) {
+  const strategyCost = Number(plan?.fuel_strategy?.estimated_fuel_cost);
+  return Number.isFinite(strategyCost) ? strategyCost : 0;
+}
+
+function uniquePlanStops(plan) {
+  if (!plan) return [];
+  const sourceStops = plan?.routes?.[0]?.fuel_stops?.length ? plan.routes[0].fuel_stops : (plan?.top_fuel_stops || []);
+  const byId = new Map();
+  sourceStops.forEach((stop) => {
+    const key = stop?.id || `${stop?.lat},${stop?.lon}`;
+    if (!key) return;
+    byId.set(key, stop);
+  });
+  return [...byId.values()];
+}
+
+function inferBaselineFuelCost(plan) {
+  const serviceCost = planFuelCost(plan);
+  const requiredGallons = Number(plan?.fuel_strategy?.required_purchase_gallons);
+  if (!Number.isFinite(requiredGallons) || requiredGallons <= 0) {
+    return serviceCost;
+  }
+
+  const stopPrices = uniquePlanStops(plan)
+    .map((stop) => getAutoDieselPrice(stop))
+    .filter((value) => Number.isFinite(value));
+  const fallbackPrices = (plan?.fuel_strategy?.stops || [])
+    .map((item) => Number(item?.auto_diesel_price))
+    .filter((value) => Number.isFinite(value));
+  const prices = stopPrices.length ? stopPrices : fallbackPrices;
+  if (!prices.length) {
+    return serviceCost;
+  }
+
+  const averagePrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+  return Number((requiredGallons * averagePrice).toFixed(2));
+}
+
+function plannedDriveMiles(plan) {
+  const routeMiles = planRouteMiles(plan);
+  const detourMiles = (plan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + stopDetourMiles(item?.stop), 0);
+  return routeMiles + detourMiles;
+}
+
+function estimateRemainingFuelGallons(plan, startingGallons, mpg) {
+  const start = Number(startingGallons);
+  const economy = Number(mpg);
+  if (!Number.isFinite(start) || !Number.isFinite(economy) || economy <= 0) {
+    return DEFAULT_CURRENT_FUEL_GALLONS;
+  }
+
+  const purchasedGallons = (plan?.fuel_strategy?.stops || []).reduce((sum, item) => sum + (Number(item?.gallons_to_buy) || 0), 0);
+  const consumedGallons = plannedDriveMiles(plan) / economy;
+  return Math.max(0, start + purchasedGallons - consumedGallons);
+}
+
+function formatPlannedStop(item, legLabel) {
+  const stop = item?.stop || {};
+  const brand = stop.brand || stop.name || "Fuel Stop";
+  const cityState = [stop.city, stop.state_code].filter(Boolean).join(", ");
+  const price = getAutoDieselPrice(stop) ?? Number(item?.auto_diesel_price);
+  const gallons = Number(item?.gallons_to_buy);
+  return [
+    `${legLabel} ${Number(item?.sequence) || 0}. ${brand}`,
+    cityState,
+    Number.isFinite(gallons) && gallons > 0 ? `${gallons.toFixed(1)} gal` : "",
+    Number.isFinite(price) ? `$${price.toFixed(3)}/gal` : "",
+    String(item?.reason || "").trim(),
+  ].filter(Boolean).join(" | ");
+}
+
+function buildSmartStopsFromPlans(toPickupPlan, toDeliveryPlan) {
+  const combined = [
+    ...(toPickupPlan?.fuel_strategy?.stops || []).map((item) => formatPlannedStop(item, "To PU")),
+    ...(toDeliveryPlan?.fuel_strategy?.stops || []).map((item) => formatPlannedStop(item, "To DEL")),
+  ].filter(Boolean);
+
+  if (!combined.length) {
+    return ["", "", ""];
+  }
+
+  const visible = combined.slice(0, 3);
+  if (combined.length > 3) {
+    visible[2] = `${visible[2]} | +${combined.length - 3} more in Full Road`;
+  }
+  while (visible.length < 3) {
+    visible.push("");
+  }
+  return visible;
+}
+
+function vehicleOptionLabel(vehicle) {
+  const fuelPercent = vehicleFuelPercent(vehicle);
+  const mpgInfo = resolveVehicleMpgInfo(vehicle);
+  return [
+    vehicleLabel(vehicle),
+    vehicleDriverName(vehicle),
+    fuelPercent !== null ? `${fuelPercent.toFixed(0)}% fuel` : "Fuel n/a",
+    mpgInfo.value !== null ? `${mpgInfo.value.toFixed(1)} MPG` : "MPG n/a",
+  ].join(" | ");
+}
+
 function normalizeRow(row) {
   const mergedRow = { ...emptyRow, ...(row || {}) };
   return {
     ...mergedRow,
+    vehicle_id: mergedRow.vehicle_id ? Number(mergedRow.vehicle_id) : null,
     fuel_level: Number(mergedRow.fuel_level ?? 0),
     miles_to_empty: mergedRow.miles_to_empty || computeMilesToEmpty(mergedRow)
   };
@@ -203,19 +462,36 @@ function readStoredUser() {
 }
 
 async function apiRequest(path, options = {}, token = "") {
+  const { timeoutMs, ...fetchOptions } = options;
   const headers = {
     "Content-Type": "application/json",
-    ...(options.headers || {})
+    ...(fetchOptions.headers || {})
   };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers
-  });
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeoutId = timeoutMs && controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: fetchOptions.signal || controller?.signal
+    });
+  } catch (requestError) {
+    if (requestError?.name === "AbortError" && timeoutMs) {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    throw requestError;
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 
   if (response.status === 204) {
     return null;
@@ -379,9 +655,11 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
     </div>
   );
 }
-function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
+function MobileLoadCard({ row, savingId, smartFillId, fleetLoading, vehicles, onUpdate, onSave, onDelete, onVehicleSelect, onSmartFill }) {
   const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
   const routeLabel = [row.pickup_city, row.delivery_city].filter(Boolean).join(" to ");
+  const selectedVehicle = findVehicleForRow(row, vehicles);
+  const serviceSavings = Number(row.smart_service_savings) || 0;
 
   return (
     <article className="mobile-load-card">
@@ -408,6 +686,19 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
         <label>Load #<input value={row.load_number} onChange={(event) => onUpdate(row.id, "load_number", event.target.value)} onBlur={(event) => onSave({ ...row, load_number: event.target.value })} /></label>
         <label>Customer<input value={row.customer_name} onChange={(event) => onUpdate(row.id, "customer_name", event.target.value)} onBlur={(event) => onSave({ ...row, customer_name: event.target.value })} /></label>
         <label>Broker<input value={row.broker_name} onChange={(event) => onUpdate(row.id, "broker_name", event.target.value)} onBlur={(event) => onSave({ ...row, broker_name: event.target.value })} /></label>
+        <label>
+          Truck Preset
+          <select
+            value={selectedVehicle?.id ? String(selectedVehicle.id) : ""}
+            onChange={(event) => onVehicleSelect(row, event.target.value)}
+            disabled={fleetLoading || !vehicles.length}
+          >
+            <option value="">{fleetLoading ? "Syncing Motive fleet..." : "Select truck"}</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>{vehicleOptionLabel(vehicle)}</option>
+            ))}
+          </select>
+        </label>
         <label>Driver<input value={row.driver} onChange={(event) => onUpdate(row.id, "driver", event.target.value)} onBlur={(event) => onSave({ ...row, driver: event.target.value })} /></label>
         <label>Truck<input value={row.truck} onChange={(event) => onUpdate(row.id, "truck", event.target.value)} onBlur={(event) => onSave({ ...row, truck: event.target.value })} /></label>
         <label>Pickup<input value={row.pickup_city} onChange={(event) => onUpdate(row.id, "pickup_city", event.target.value)} onBlur={(event) => onSave({ ...row, pickup_city: event.target.value })} /></label>
@@ -445,6 +736,12 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
 
       <details className="mobile-load-stops">
         <summary>Stops, appointments, and profit</summary>
+        <div className="mobile-load-controls">
+          <button className="secondary-button" type="button" onClick={() => onSmartFill(row)} disabled={smartFillId === row.id || savingId === row.id || fleetLoading || !vehicles.length}>
+            {smartFillId === row.id ? "Planning..." : "Smart Fill from Truck + A/B"}
+          </button>
+          <small>{selectedVehicle ? `${vehicleLabel(selectedVehicle)} ready` : "Pick a truck, enter pickup/delivery, then Smart Fill."}</small>
+        </div>
         <label>Pickup Appt<input value={row.pickup_appt_at} onChange={(event) => onUpdate(row.id, "pickup_appt_at", event.target.value)} onBlur={(event) => onSave({ ...row, pickup_appt_at: event.target.value })} placeholder="2026-04-22 08:00" /></label>
         <label>Delivery Appt<input value={row.delivery_appt_at} onChange={(event) => onUpdate(row.id, "delivery_appt_at", event.target.value)} onBlur={(event) => onSave({ ...row, delivery_appt_at: event.target.value })} placeholder="2026-04-23 14:00" /></label>
         <label>Rate Total<input value={row.rate_total} onChange={(event) => onUpdate(row.id, "rate_total", event.target.value)} onBlur={(event) => onSave({ ...row, rate_total: event.target.value })} /></label>
@@ -454,13 +751,21 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
         <label>Lumper<input value={row.lumper_cost} onChange={(event) => onUpdate(row.id, "lumper_cost", event.target.value)} onBlur={(event) => onSave({ ...row, lumper_cost: event.target.value })} /></label>
         <label>Tolls<input value={row.toll_cost} onChange={(event) => onUpdate(row.id, "toll_cost", event.target.value)} onBlur={(event) => onSave({ ...row, toll_cost: event.target.value })} /></label>
         <label>Accessorials<input value={row.other_accessorials} onChange={(event) => onUpdate(row.id, "other_accessorials", event.target.value)} onBlur={(event) => onSave({ ...row, other_accessorials: event.target.value })} /></label>
-        <label>Manual Fuel<input value={row.manual_fuel_cost} onChange={(event) => onUpdate(row.id, "manual_fuel_cost", event.target.value)} onBlur={(event) => onSave({ ...row, manual_fuel_cost: event.target.value })} /></label>
+        <label>Route Fuel<input value={row.manual_fuel_cost} onChange={(event) => onUpdate(row.id, "manual_fuel_cost", event.target.value)} onBlur={(event) => onSave({ ...row, manual_fuel_cost: event.target.value })} /></label>
+        <label>No Service Fuel<input value={row.baseline_fuel_cost} readOnly /></label>
+        <label>Service Savings<input value={row.smart_service_savings} readOnly /></label>
         <label>Total Miles<input value={row.manual_total_miles} onChange={(event) => onUpdate(row.id, "manual_total_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_total_miles: event.target.value })} /></label>
         <label>Deadhead<input value={row.manual_deadhead_miles} onChange={(event) => onUpdate(row.id, "manual_deadhead_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_deadhead_miles: event.target.value })} /></label>
         <label>Loaded Miles<input value={row.manual_loaded_miles} onChange={(event) => onUpdate(row.id, "manual_loaded_miles", event.target.value)} onBlur={(event) => onSave({ ...row, manual_loaded_miles: event.target.value })} /></label>
         <label>1st Stop<textarea value={row.stop1} onChange={(event) => onUpdate(row.id, "stop1", event.target.value)} onBlur={(event) => onSave({ ...row, stop1: event.target.value })} /></label>
         <label>2nd Stop<textarea value={row.stop2} onChange={(event) => onUpdate(row.id, "stop2", event.target.value)} onBlur={(event) => onSave({ ...row, stop2: event.target.value })} /></label>
         <label>3rd Stop<textarea value={row.stop3} onChange={(event) => onUpdate(row.id, "stop3", event.target.value)} onBlur={(event) => onSave({ ...row, stop3: event.target.value })} /></label>
+        <div className="mobile-load-stats">
+          <div><span>With service</span><strong>{row.manual_fuel_cost || "0.00"}</strong></div>
+          <div><span>Without service</span><strong>{row.baseline_fuel_cost || "0.00"}</strong></div>
+          <div><span>Delta</span><strong>{serviceSavings >= 0 ? "+" : ""}{serviceSavings.toFixed(2)}</strong></div>
+          <div><span>Route source</span><strong>{row.stop1 || row.stop2 || row.stop3 ? "Smart Route" : "Manual"}</strong></div>
+        </div>
       </details>
 
       <footer>
@@ -496,7 +801,7 @@ function MobileQuickActions({ onSelect, onCreateLoad }) {
     </section>
   );
 }
-function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, createRow, deleteRow, saveRow, updateLocalRow, theme, setTheme, onSelectWorkspace }) {
+function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, smartFillId, fleetLoading, fleetVehicles, createRow, deleteRow, saveRow, updateLocalRow, syncRowVehicle, smartFillRow, theme, setTheme, onSelectWorkspace }) {
   if (activeWorkspace === "tracking") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
   }
@@ -539,7 +844,21 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
           })}
         </div>
         <div className="mobile-load-list">
-          {filteredRows.length ? filteredRows.map((row) => <MobileLoadCard key={row.id} row={row} savingId={savingId} onUpdate={updateLocalRow} onSave={saveRow} onDelete={deleteRow} />) : <div className="mobile-empty-card">{gridLoading ? "Loading loads..." : "No loads yet."}</div>}
+          {filteredRows.length ? filteredRows.map((row) => (
+            <MobileLoadCard
+              key={row.id}
+              row={row}
+              savingId={savingId}
+              smartFillId={smartFillId}
+              fleetLoading={fleetLoading}
+              vehicles={fleetVehicles}
+              onUpdate={updateLocalRow}
+              onSave={saveRow}
+              onDelete={deleteRow}
+              onVehicleSelect={syncRowVehicle}
+              onSmartFill={smartFillRow}
+            />
+          )) : <div className="mobile-empty-card">{gridLoading ? "Loading loads..." : "No loads yet."}</div>}
         </div>
       </section>
     );
@@ -598,13 +917,16 @@ export default function App() {
     return departmentOptions.some((option) => option.id === savedDepartment) ? savedDepartment : "fuel";
   });
   const [rows, setRows] = useState([]);
+  const [fleetVehicles, setFleetVehicles] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [loading, setLoading] = useState(false);
   const [gridLoading, setGridLoading] = useState(false);
+  const [fleetLoading, setFleetLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState(null);
+  const [smartFillId, setSmartFillId] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("command");
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sitePanel, setSitePanel] = useState("");
@@ -614,6 +936,7 @@ export default function App() {
       localStorage.removeItem(USER_KEY);
       setUser(null);
       setRows([]);
+      setFleetVehicles([]);
       return;
     }
 
@@ -638,6 +961,7 @@ export default function App() {
             setToken("");
             setUser(null);
             setRows([]);
+            setFleetVehicles([]);
             setError("Session check failed. Please sign in again.");
           }
         }
@@ -682,6 +1006,39 @@ export default function App() {
 
     loadFuelWorkspace();
 
+    return () => {
+      ignore = true;
+    };
+  }, [token, user?.department]);
+
+  useEffect(() => {
+    if (!token || user?.department !== "fuel") {
+      setFleetVehicles([]);
+      setFleetLoading(false);
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadFleetPresets() {
+      setFleetLoading(true);
+      try {
+        const data = await apiRequest("/motive/fleet", {}, token);
+        if (!ignore) {
+          setFleetVehicles(Array.isArray(data?.vehicles) ? data.vehicles : []);
+        }
+      } catch {
+        if (!ignore) {
+          setFleetVehicles([]);
+        }
+      } finally {
+        if (!ignore) {
+          setFleetLoading(false);
+        }
+      }
+    }
+
+    loadFleetPresets();
     return () => {
       ignore = true;
     };
@@ -858,6 +1215,143 @@ export default function App() {
     }
   }
 
+  async function syncRowVehicle(row, nextVehicleId) {
+    if (!token) return;
+
+    const vehicleId = Number(nextVehicleId);
+    if (!Number.isFinite(vehicleId) || vehicleId <= 0) {
+      const clearedRow = normalizeRow({ ...row, vehicle_id: null });
+      setRows((currentRows) => currentRows.map((item) => (item.id === row.id ? clearedRow : item)));
+      await saveRow(clearedRow);
+      return;
+    }
+
+    const vehicle = fleetVehicles.find((item) => Number(item?.id) === vehicleId);
+    if (!vehicle) {
+      setError("Selected truck is not available in the current Motive snapshot.");
+      return;
+    }
+
+    const preset = deriveRowTruckPreset(vehicle, row);
+    const nextRow = normalizeRow({
+      ...row,
+      vehicle_id: vehicleId,
+      driver: vehicleDriverName(vehicle),
+      truck: vehicleLabel(vehicle),
+      mpg: Number(preset.mpg).toFixed(1),
+      tank_capacity: String(Math.round(preset.tankCapacityGallons)),
+      fuel_level: preset.fuelPercent !== null ? Math.round(preset.fuelPercent) : row.fuel_level,
+    });
+    nextRow.miles_to_empty = computeMilesToEmpty(nextRow);
+    setRows((currentRows) => currentRows.map((item) => (item.id === row.id ? nextRow : item)));
+    await saveRow(nextRow);
+  }
+
+  async function smartFillRow(row) {
+    if (!token) return;
+
+    const vehicle = findVehicleForRow(row, fleetVehicles);
+    if (!vehicle) {
+      setError("Pick a Motive truck first, then run Smart Fill.");
+      return;
+    }
+    if (!String(row.pickup_city || "").trim() || !String(row.delivery_city || "").trim()) {
+      setError("Enter pickup and delivery before Smart Fill.");
+      return;
+    }
+
+    const originQuery = vehicleLocationQuery(vehicle);
+    if (!originQuery) {
+      setError("Selected truck does not have a usable Motive location.");
+      return;
+    }
+
+    const preset = deriveRowTruckPreset(vehicle, row);
+    const commonPayload = {
+      vehicle_id: Number(vehicle.id) || null,
+      vehicle_number: vehicleLabel(vehicle),
+      driver_name: vehicleDriverName(vehicle),
+      vehicle_type: "Truck",
+      fuel_type: "Auto Diesel",
+      tank_capacity_gallons: preset.tankCapacityGallons,
+      mpg: preset.mpg,
+      sort_by: "cheapest",
+    };
+
+    setSmartFillId(row.id);
+    setMessage("");
+    setError("");
+
+    try {
+      const toPickupPlan = await apiRequest(
+        "/navigation/route-assistant",
+        {
+          method: "POST",
+          timeoutMs: ROUTE_REQUEST_TIMEOUT_MS,
+          body: JSON.stringify({
+            ...commonPayload,
+            origin: originQuery,
+            destination: String(row.pickup_city || "").trim(),
+            current_fuel_gallons: preset.currentFuelGallons,
+          }),
+        },
+        token
+      );
+
+      const remainingAtPickup = estimateRemainingFuelGallons(toPickupPlan, preset.currentFuelGallons, preset.mpg);
+      const toDeliveryPlan = await apiRequest(
+        "/navigation/route-assistant",
+        {
+          method: "POST",
+          timeoutMs: ROUTE_REQUEST_TIMEOUT_MS,
+          body: JSON.stringify({
+            ...commonPayload,
+            origin: String(row.pickup_city || "").trim(),
+            destination: String(row.delivery_city || "").trim(),
+            current_fuel_gallons: remainingAtPickup,
+          }),
+        },
+        token
+      );
+
+      const deadheadMiles = planRouteMiles(toPickupPlan);
+      const loadedMiles = planRouteMiles(toDeliveryPlan);
+      const totalMiles = deadheadMiles + loadedMiles;
+      const serviceFuelCost = planFuelCost(toPickupPlan) + planFuelCost(toDeliveryPlan);
+      const baselineFuelCost = inferBaselineFuelCost(toPickupPlan) + inferBaselineFuelCost(toDeliveryPlan);
+      const serviceSavings = baselineFuelCost - serviceFuelCost;
+      const [stop1, stop2, stop3] = buildSmartStopsFromPlans(toPickupPlan, toDeliveryPlan);
+
+      const nextRow = normalizeRow({
+        ...row,
+        vehicle_id: Number(vehicle.id) || null,
+        driver: vehicleDriverName(vehicle),
+        truck: vehicleLabel(vehicle),
+        mpg: Number(preset.mpg).toFixed(1),
+        tank_capacity: String(Math.round(preset.tankCapacityGallons)),
+        fuel_level: preset.fuelPercent !== null ? Math.round(preset.fuelPercent) : row.fuel_level,
+        manual_fuel_cost: serviceFuelCost.toFixed(2),
+        baseline_fuel_cost: baselineFuelCost.toFixed(2),
+        smart_service_savings: serviceSavings.toFixed(2),
+        manual_total_miles: totalMiles.toFixed(1),
+        manual_deadhead_miles: deadheadMiles.toFixed(1),
+        manual_loaded_miles: loadedMiles.toFixed(1),
+        stop1,
+        stop2,
+        stop3,
+      });
+      nextRow.miles_to_empty = computeMilesToEmpty(nextRow);
+
+      setRows((currentRows) => currentRows.map((item) => (item.id === row.id ? nextRow : item)));
+      await saveRow(nextRow);
+      setMessage(`Smart Fill updated load ${row.load_number || `#${row.id}`} from the selected truck and route.`);
+    } catch (smartFillError) {
+      setError(smartFillError.message || "Smart Fill failed.");
+    } finally {
+      setSmartFillId(null);
+    }
+  }
+
   async function createRow() {
     if (!token || !isFuelService) return;
 
@@ -898,6 +1392,7 @@ export default function App() {
     setToken("");
     setUser(null);
     setRows([]);
+    setFleetVehicles([]);
     setMessage("Signed out.");
     setError("");
     setSitePanel("");
@@ -1391,10 +1886,15 @@ export default function App() {
           loadStatusTabs={loadStatusTabs}
           gridLoading={gridLoading}
           savingId={savingId}
+          smartFillId={smartFillId}
+          fleetLoading={fleetLoading}
+          fleetVehicles={fleetVehicles}
           createRow={createRow}
           deleteRow={deleteRow}
           saveRow={saveRow}
           updateLocalRow={updateLocalRow}
+          syncRowVehicle={syncRowVehicle}
+          smartFillRow={smartFillRow}
           theme={theme}
           setTheme={setTheme}
           onSelectWorkspace={openMobileWorkspace}
@@ -1599,12 +2099,16 @@ export default function App() {
               <div className="workspace-table-toolbar">
                 <div>
                   <h2>Dispatch Sheet</h2>
-                  <span>{gridLoading ? "Syncing..." : savingId ? `Saving row #${savingId}` : "Editable load board"}</span>
+                  <span>{gridLoading ? "Syncing..." : savingId ? `Saving row #${savingId}` : smartFillId ? `Smart Fill on row #${smartFillId}` : "Pick truck, enter pickup + delivery + rate, then let Smart Fill build the economics."}</span>
                 </div>
                 <div className="workspace-table-toolbar-actions">
                   <div className="workspace-main-usercard subdued compact">
                     <span>Rows shown</span>
                     <strong>{filteredRows.length}</strong>
+                  </div>
+                  <div className="workspace-main-usercard subdued compact">
+                    <span>Motive trucks</span>
+                    <strong>{fleetLoading ? "..." : fleetVehicles.length}</strong>
                   </div>
                 </div>
               </div>
@@ -1617,6 +2121,7 @@ export default function App() {
                         <th>Load #</th>
                         <th>Customer</th>
                         <th>Broker</th>
+                        <th>Truck Preset</th>
                         <th>Driver</th>
                         <th>Truck #</th>
                         <th>Approx MPG</th>
@@ -1640,9 +2145,12 @@ export default function App() {
                         <th>Tolls</th>
                         <th>Accessorials</th>
                         <th>Fuel Cost</th>
+                        <th>No Service</th>
+                        <th>Svc +/-</th>
                         <th>Total Mi</th>
                         <th>Deadhead Mi</th>
                         <th>Loaded Mi</th>
+                        <th>Smart Fill</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1650,6 +2158,8 @@ export default function App() {
                       {filteredRows.length ? (
                         filteredRows.map((row) => {
                           const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+                          const selectedVehicle = findVehicleForRow(row, fleetVehicles);
+                          const serviceSavings = Number(row.smart_service_savings) || 0;
 
                           return (
                             <tr key={row.id}>
@@ -1673,6 +2183,20 @@ export default function App() {
                                   onChange={(event) => updateLocalRow(row.id, "broker_name", event.target.value)}
                                   onBlur={(event) => saveRow({ ...row, broker_name: event.target.value })}
                                 />
+                              </td>
+                              <td>
+                                <select
+                                  value={selectedVehicle?.id ? String(selectedVehicle.id) : ""}
+                                  onChange={(event) => syncRowVehicle(row, event.target.value)}
+                                  disabled={fleetLoading || !fleetVehicles.length}
+                                >
+                                  <option value="">{fleetLoading ? "Syncing trucks..." : "Select truck"}</option>
+                                  {fleetVehicles.map((vehicle) => (
+                                    <option key={vehicle.id} value={vehicle.id}>
+                                      {vehicleOptionLabel(vehicle)}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="driver-cell">
                                 <input
@@ -1850,6 +2374,8 @@ export default function App() {
                                   onBlur={(event) => saveRow({ ...row, manual_fuel_cost: event.target.value })}
                                 />
                               </td>
+                              <td className="readonly-cell">{row.baseline_fuel_cost || "0.00"}</td>
+                              <td className="readonly-cell">{serviceSavings >= 0 ? "+" : ""}{serviceSavings.toFixed(2)}</td>
                               <td>
                                 <input
                                   value={row.manual_total_miles}
@@ -1872,6 +2398,11 @@ export default function App() {
                                 />
                               </td>
                               <td className="action-cell">
+                                <button className="secondary-button" type="button" onClick={() => smartFillRow(row)} disabled={smartFillId === row.id || savingId === row.id || fleetLoading || !fleetVehicles.length}>
+                                  {smartFillId === row.id ? "Planning..." : "Smart Fill"}
+                                </button>
+                              </td>
+                              <td className="action-cell">
                                 <button className="delete-button" onClick={() => deleteRow(row.id)}>
                                   Delete
                                 </button>
@@ -1881,7 +2412,7 @@ export default function App() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="30" className="empty-state-cell">
+                          <td colSpan="34" className="empty-state-cell">
                             {gridLoading ? "Loading data..." : "No loads yet."}
                           </td>
                         </tr>
