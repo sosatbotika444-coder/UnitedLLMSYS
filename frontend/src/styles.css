@@ -13035,6 +13035,65 @@ body.theme-blue .route-history-stops div.selected {
   margin-top: 16px;
 }
 
+.fleet-statistics-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.fleet-statistics-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fleet-statistics-head-meta small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.statistics-panel-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.statistics-quick-tabs {
+  margin-top: 14px;
+}
+
+.statistics-table strong,
+.statistics-table small {
+  display: block;
+}
+
+.statistics-table small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.statistics-fuel-danger {
+  color: #b91c1c;
+}
+
+.statistics-fuel-watch {
+  color: #b45309;
+}
+
+.statistics-fuel-good {
+  color: #0f766e;
+}
+
+.statistics-fuel-strong {
+  color: #15803d;
+}
+
+@media (max-width: 900px) {
+  .fleet-statistics-head-meta {
+    justify-content: flex-start;
+  }
+}
+
 .full-road-queue-toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 1.5fr) 180px 180px;

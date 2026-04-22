@@ -13,6 +13,7 @@ const RouteHistoryPanel = lazy(() => import("./RouteHistoryPanel"));
 const TomTomSuite = lazy(() => import("./TomTomSuite"));
 const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
+const FleetStatisticsPanel = lazy(() => import("./FleetStatisticsPanel"));
 const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -30,6 +31,7 @@ const departmentOptions = [
 const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
+  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
   { id: "fullroad", label: "Full Road", detail: "Live trip chain", icon: "FR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
   { id: "history", label: "Route History", detail: "All builds", icon: "RH" },
@@ -47,6 +49,7 @@ const mobileFuelTabs = [
 ];
 const mobileFuelMoreTabs = [
   { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
+  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
   { id: "fullroad", label: "Full Road", detail: "Truck to pickup to delivery", icon: "FR" },
   { id: "history", label: "Route History", detail: "All routing builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
@@ -67,6 +70,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Tracking",
     subtitle: "Fleet visibility and status."
+  },
+  statistics: {
+    eyebrow: "Fuel Service",
+    title: "Statistics",
+    subtitle: "Filter every truck by fuel, MPG, faults, utilization, and load data."
   },
   fullroad: {
     eyebrow: "Fuel Service",
@@ -448,6 +456,10 @@ function MobileQuickActions({ onSelect, onCreateLoad }) {
 function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, createRow, deleteRow, saveRow, updateLocalRow, theme, setTheme, onSelectWorkspace }) {
   if (activeWorkspace === "tracking") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "statistics") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading truck statistics..." />}><FleetStatisticsPanel token={token} active loadRows={rows} /></Suspense></section>;
   }
 
   if (activeWorkspace === "routing") {
@@ -1449,6 +1461,12 @@ export default function App() {
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "tracking"}>
             <Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}>
               <MotiveTrackingPanel token={token} active={activeWorkspace === "tracking"} />
+            </Suspense>
+          </section>
+
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "statistics"}>
+            <Suspense fallback={<ModuleLoader label="Loading truck statistics..." />}>
+              <FleetStatisticsPanel token={token} active={activeWorkspace === "statistics"} loadRows={rows} />
             </Suspense>
           </section>
 
