@@ -1,4 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  applyTripStageLifecycle,
+  buildTripProfitabilitySnapshot,
+  getTripStageTimeline,
+  recordTripTimelineEvent,
+  resolveLoadForTrip,
+} from "./profitability";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
@@ -628,7 +635,7 @@ function buildTripInsights(trip, vehicle = null, livePickupPlan = null) {
   };
 }
 
-function buildDispatchSummary(trip, vehicle = null, insights = null) {
+function buildDispatchSummary(trip, vehicle = null, insights = null, profitability = null) {
   if (!trip) return "";
   const nextStop = nextFuelStopForTrip(trip);
   const liveLocation = vehicle ? vehicleLocationLabel(vehicle) : (trip.live?.locationLabel || "Location unavailable");
@@ -646,6 +653,8 @@ function buildDispatchSummary(trip, vehicle = null, insights = null) {
     `ETA pickup: ${formatDateTime(trip.metrics?.etaToPickup)}`,
     `ETA delivery: ${formatDateTime(trip.metrics?.etaToDelivery)}`,
     `Projected fuel reserve: ${insights ? `${formatGallons(insights.projectedReserveGallons)} (${insights.projectedReservePercent.toFixed(0)}%)` : "Unknown"}`,
+    `Projected margin: ${profitability ? formatCurrency(profitability.projectedMargin) : "Pending load economics"}`,
+    `Detention running: ${profitability ? formatCurrency(profitability.detentionAmount) : "$0.00"}`,
     `Next action: ${insights?.nextAction || "Monitor trip"}`
   ];
 
@@ -930,19 +939,21 @@ function updateTripLiveState(trip, vehicle) {
   const distanceToPickupMiles = haversineMiles(livePoint, pickupPoint);
   const distanceToDeliveryMiles = haversineMiles(livePoint, deliveryPoint);
   let nextStage = trip.stage || "enroute_pickup";
+  const eventAt = vehicle?.location?.located_at || new Date().toISOString();
+  const shouldStampDeliveryArrival =
+    nextStage === "enroute_delivery"
+    && distanceToDeliveryMiles !== null
+    && distanceToDeliveryMiles <= DELIVERY_COMPLETE_THRESHOLD_MILES;
 
-  if (nextStage !== "delivered" && distanceToDeliveryMiles !== null && distanceToDeliveryMiles <= DELIVERY_COMPLETE_THRESHOLD_MILES) {
-    nextStage = "delivered";
-  } else if (nextStage === "enroute_pickup" && distanceToPickupMiles !== null && distanceToPickupMiles <= PICKUP_ARRIVAL_THRESHOLD_MILES) {
+  if (nextStage === "enroute_pickup" && distanceToPickupMiles !== null && distanceToPickupMiles <= PICKUP_ARRIVAL_THRESHOLD_MILES) {
     nextStage = "at_pickup";
   } else if (nextStage === "at_pickup" && distanceToPickupMiles !== null && distanceToPickupMiles > 2) {
     nextStage = "enroute_delivery";
   }
 
-  return {
+  const liveUpdatedTrip = {
     ...trip,
     updatedAt: new Date().toISOString(),
-    stage: nextStage,
     live: {
       locationLabel: vehicleLocationLabel(vehicle),
       locatedAt: vehicle?.location?.located_at || "",
@@ -958,6 +969,10 @@ function updateTripLiveState(trip, vehicle) {
       distanceToDeliveryMiles
     }
   };
+
+  return applyTripStageLifecycle(liveUpdatedTrip, nextStage, eventAt, {
+    setDeliveryArrival: shouldStampDeliveryArrival,
+  });
 }
 
 function SummaryCard({ label, value, detail, tone = "neutral" }) {
@@ -1151,23 +1166,25 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
 
     const vehiclesById = new Map(fleetSnapshot.vehicles.map((vehicle) => [String(vehicle.id), vehicle]));
     const currentTrips = activeTripsRef.current;
-    const stageChangedTrips = [];
+    const lifecycleChangedTrips = [];
     const nextTrips = currentTrips.map((trip) => {
       const vehicle = vehiclesById.get(String(trip.vehicleId));
       if (!vehicle) return trip;
       const nextTrip = updateTripLiveState(trip, vehicle);
-      if (nextTrip.stage !== trip.stage) {
-        stageChangedTrips.push(nextTrip);
+      const previousTimeline = JSON.stringify(getTripStageTimeline(trip));
+      const nextTimeline = JSON.stringify(getTripStageTimeline(nextTrip));
+      if (nextTrip.stage !== trip.stage || previousTimeline !== nextTimeline) {
+        lifecycleChangedTrips.push(nextTrip);
       }
       return nextTrip;
     });
 
     setActiveTrips(nextTrips);
 
-    if (!token || !stageChangedTrips.length) return;
+    if (!token || !lifecycleChangedTrips.length) return;
 
     Promise.all(
-      stageChangedTrips.map((trip) =>
+      lifecycleChangedTrips.map((trip) =>
         apiRequest(
           `/full-road-trips/${trip.id}`,
           {
@@ -1230,6 +1247,18 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   const selectedTrip = useMemo(
     () => activeTrips.find((trip) => String(trip.id) === String(selectedTripId)) || null,
     [activeTrips, selectedTripId]
+  );
+  const selectedTripLoadRow = useMemo(
+    () => (selectedTrip ? resolveLoadForTrip(selectedTrip, loadRows) : null),
+    [loadRows, selectedTrip]
+  );
+  const selectedTripTimeline = useMemo(
+    () => getTripStageTimeline(selectedTrip),
+    [selectedTrip]
+  );
+  const selectedTripProfitability = useMemo(
+    () => (selectedTrip ? buildTripProfitabilitySnapshot(selectedTrip, selectedTripLoadRow) : null),
+    [selectedTrip, selectedTripLoadRow]
   );
   const selectedTripVehicle = useMemo(
     () => vehicles.find((vehicle) => String(vehicle.id) === String(selectedTrip?.vehicleId)) || null,
@@ -1397,8 +1426,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
   );
   const selectedTripNote = selectedTrip ? String(tripNotesById[String(selectedTrip.id)] || "") : "";
   const dispatchSummary = useMemo(
-    () => buildDispatchSummary(selectedTrip, selectedTripVehicle, selectedTripInsights),
-    [selectedTrip, selectedTripInsights, selectedTripVehicle]
+    () => buildDispatchSummary(selectedTrip, selectedTripVehicle, selectedTripInsights, selectedTripProfitability),
+    [selectedTrip, selectedTripInsights, selectedTripProfitability, selectedTripVehicle]
   );
 
   function upsertTripState(savedTrip) {
@@ -1500,6 +1529,12 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
         preset,
         existingStage: existingTrip?.stage || "enroute_pickup"
       });
+      if (existingTrip?.metrics?.stageTimeline) {
+        trip.metrics = {
+          ...trip.metrics,
+          stageTimeline: existingTrip.metrics.stageTimeline
+        };
+      }
       const liveReadyTrip = updateTripLiveState(trip, selectedVehicle);
       const savedTrip = await saveTripRecord(liveReadyTrip);
       const hydratedTrip = updateTripLiveState(savedTrip, selectedVehicle);
@@ -1530,11 +1565,15 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     setMessage("");
 
     try {
-      const stagedTrip = {
-        ...selectedTrip,
-        stage: nextStage,
-        updatedAt: new Date().toISOString()
-      };
+      const eventAt = new Date().toISOString();
+      const stagedTrip = applyTripStageLifecycle(
+        {
+          ...selectedTrip,
+          updatedAt: eventAt
+        },
+        nextStage,
+        eventAt
+      );
       const liveReadyTrip = selectedTripVehicle ? updateTripLiveState(stagedTrip, selectedTripVehicle) : stagedTrip;
       const savedTrip = await saveTripRecord(liveReadyTrip);
       const hydratedTrip = selectedTripVehicle ? updateTripLiveState(savedTrip, selectedTripVehicle) : savedTrip;
@@ -1543,6 +1582,34 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
       setMessage(`Trip stage updated to ${stageLabels[hydratedTrip.stage] || "Trip"}.`);
     } catch (error) {
       setTripError(error.message || "Trip stage could not be updated.");
+    } finally {
+      setTripBusy(false);
+    }
+  }
+
+  async function stampTimelineEvent(eventKey, successMessage) {
+    if (!selectedTrip || !token) return;
+    setTripBusy(true);
+    setTripError("");
+    setMessage("");
+
+    try {
+      const eventAt = new Date().toISOString();
+      const stampedTrip = recordTripTimelineEvent(
+        {
+          ...selectedTrip,
+          updatedAt: eventAt
+        },
+        eventKey,
+        eventAt
+      );
+      const liveReadyTrip = selectedTripVehicle ? updateTripLiveState(stampedTrip, selectedTripVehicle) : stampedTrip;
+      const savedTrip = await saveTripRecord(liveReadyTrip);
+      const hydratedTrip = selectedTripVehicle ? updateTripLiveState(savedTrip, selectedTripVehicle) : savedTrip;
+      upsertTripState(hydratedTrip);
+      setMessage(successMessage);
+    } catch (error) {
+      setTripError(error.message || "Timeline event could not be saved.");
     } finally {
       setTripBusy(false);
     }
@@ -1666,7 +1733,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <option value="">Manual trip</option>
               {loadRows.map((row) => (
                 <option key={row.id} value={row.id}>
-                  {row.driver || "Driver"} | {row.truck || "Truck"} | {row.pickup_city || "Pickup"} to {row.delivery_city || "Delivery"}
+                  {row.load_number ? `#${row.load_number} | ` : ""}{row.driver || "Driver"} | {row.truck || "Truck"} | {row.pickup_city || "Pickup"} to {row.delivery_city || "Delivery"}
                 </option>
               ))}
             </select>
@@ -1810,6 +1877,20 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             <SummaryCard label="ETA Pickup" value={formatDateTime(selectedTrip.metrics.etaToPickup)} detail={formatDuration(selectedTrip.metrics.toPickupDurationSeconds)} tone="amber" />
             <SummaryCard label="ETA Delivery" value={formatDateTime(selectedTrip.metrics.etaToDelivery)} detail={formatDuration(selectedTrip.metrics.totalDurationSeconds)} tone="violet" />
             <SummaryCard label="Fuel Stops" value={metricValue(selectedTrip.metrics.fuelStopCount)} detail={formatCurrency(selectedTrip.metrics.estimatedFuelCost)} tone="dark" />
+            <SummaryCard
+              label="Projected Margin"
+              value={selectedTripProfitability ? formatCurrency(selectedTripProfitability.projectedMargin) : "$0.00"}
+              detail={selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined
+                ? `${formatCurrency(selectedTripProfitability.projectedMarginPerMile)} per mile`
+                : "Need Full Road miles"}
+              tone={selectedTripProfitability && selectedTripProfitability.projectedMargin < 0 ? "amber" : "green"}
+            />
+            <SummaryCard
+              label="Detention"
+              value={selectedTripProfitability ? formatCurrency(selectedTripProfitability.detentionAmount) : "$0.00"}
+              detail={`PU ${selectedTripProfitability ? formatMinutes(selectedTripProfitability.pickupDetention.billableMinutes) : "0m"} | DEL ${selectedTripProfitability ? formatMinutes(selectedTripProfitability.deliveryDetention.billableMinutes) : "0m"}`}
+              tone={selectedTripProfitability?.detentionStatus === "running_billable" ? "amber" : "blue"}
+            />
             <SummaryCard label="Fuel Reserve" value={formatGallons(selectedTripInsights?.projectedReserveGallons)} detail={`${selectedTripInsights?.projectedReservePercent?.toFixed(0) || "0"}% projected on arrival`} tone="blue" />
             <SummaryCard label="Live Next" value={nextDistance !== null && nextDistance !== undefined ? formatDistanceMiles(nextDistance) : "No GPS"} detail={nextEta ? `Last ETA ${formatDateTime(nextEta)}` : "Waiting on route"} tone="green" />
           </section>
@@ -1824,6 +1905,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               <div className="full-road-stage-actions">
                 {selectedTrip.stage === "enroute_pickup" ? <button className="secondary-button" type="button" onClick={() => updateTripStage("at_pickup")} disabled={tripBusy}>Mark At Pickup</button> : null}
                 {selectedTrip.stage === "at_pickup" ? <button className="secondary-button" type="button" onClick={() => updateTripStage("enroute_delivery")} disabled={tripBusy}>Depart Pickup</button> : null}
+                {selectedTrip.stage === "enroute_delivery" && !selectedTripTimeline.deliveryArrivedAt ? <button className="secondary-button" type="button" onClick={() => stampTimelineEvent("deliveryArrivedAt", "Delivery arrival recorded.")} disabled={tripBusy}>Mark At Delivery</button> : null}
                 {selectedTrip.stage !== "delivered" ? <button className="primary-button" type="button" onClick={() => updateTripStage("delivered")} disabled={tripBusy}>Mark Delivered</button> : null}
                 <button className="delete-button" type="button" onClick={() => archiveTrip(selectedTrip.id)} disabled={tripBusy}>Archive</button>
               </div>
@@ -1851,6 +1933,92 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 <small>{selectedTrip.live?.isMoving ? "Moving" : "Stopped"}</small>
               </article>
             </div>
+          </section>
+
+          <section className="full-road-economics-grid">
+            <section className="panel full-road-detention-panel">
+              <div className="panel-head compact-panel-head">
+                <div>
+                  <h2>Detention</h2>
+                  <span>Arrival, departure, dwell time, and current billable detention for pickup and delivery.</span>
+                </div>
+              </div>
+              <div className="full-road-timeline-grid">
+                <article>
+                  <span>Pickup Arrival</span>
+                  <strong>{formatDateTime(selectedTripTimeline.pickupArrivedAt)}</strong>
+                  <small>{selectedTripProfitability ? `${formatMinutes(selectedTripProfitability.pickupDetention.dwellMinutes)} dwell` : "No dwell yet"}</small>
+                </article>
+                <article>
+                  <span>Pickup Departure</span>
+                  <strong>{formatDateTime(selectedTripTimeline.pickupDepartedAt)}</strong>
+                  <small>{selectedTripProfitability ? `${formatCurrency(selectedTripProfitability.pickupDetention.amount)} billable` : "$0.00 billable"}</small>
+                </article>
+                <article>
+                  <span>Delivery Arrival</span>
+                  <strong>{formatDateTime(selectedTripTimeline.deliveryArrivedAt)}</strong>
+                  <small>{selectedTripProfitability ? `${formatMinutes(selectedTripProfitability.deliveryDetention.dwellMinutes)} dwell` : "No dwell yet"}</small>
+                </article>
+                <article>
+                  <span>Delivery Departure</span>
+                  <strong>{formatDateTime(selectedTripTimeline.deliveryDepartedAt)}</strong>
+                  <small>{selectedTripProfitability ? `${formatCurrency(selectedTripProfitability.deliveryDetention.amount)} billable` : "$0.00 billable"}</small>
+                </article>
+              </div>
+              <div className="full-road-detention-actions">
+                {selectedTrip.stage === "at_pickup" && !selectedTripTimeline.pickupArrivedAt ? <button className="secondary-button" type="button" onClick={() => stampTimelineEvent("pickupArrivedAt", "Pickup arrival recorded.")} disabled={tripBusy}>Stamp Pickup Arrival</button> : null}
+                {selectedTrip.stage === "enroute_delivery" && !selectedTripTimeline.deliveryArrivedAt ? <button className="secondary-button" type="button" onClick={() => stampTimelineEvent("deliveryArrivedAt", "Delivery arrival recorded.")} disabled={tripBusy}>Stamp Delivery Arrival</button> : null}
+              </div>
+            </section>
+
+            <section className="panel full-road-profit-panel">
+              <div className="panel-head compact-panel-head">
+                <div>
+                  <h2>Trip Profitability</h2>
+                  <span>Projected revenue, route fuel, and lane margin for this exact load.</span>
+                </div>
+              </div>
+              <div className="full-road-financial-grid">
+                <article>
+                  <span>Load</span>
+                  <strong>{selectedTripLoadRow?.load_number || selectedTrip.truckNumber}</strong>
+                  <small>{selectedTripLoadRow?.customer_name || "Customer not linked yet"}</small>
+                </article>
+                <article>
+                  <span>Lane</span>
+                  <strong>{selectedTripProfitability?.laneKey || `${selectedTrip.pickup} -> ${selectedTrip.delivery}`}</strong>
+                  <small>{selectedTripLoadRow?.broker_name || "Broker not set"}</small>
+                </article>
+                <article>
+                  <span>Revenue</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.projectedRevenue)}</strong>
+                  <small>Rate {formatCurrency(selectedTripProfitability?.revenueBase)} + accessorials {formatCurrency(selectedTripProfitability?.accessorials)}</small>
+                </article>
+                <article>
+                  <span>Total Cost</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.projectedCost)}</strong>
+                  <small>Fuel {formatCurrency(selectedTripProfitability?.estimatedFuelCost)} + driver/tolls/lumper</small>
+                </article>
+                <article>
+                  <span>Projected Margin</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.projectedMargin)}</strong>
+                  <small>{selectedTripProfitability?.projectedMarginPerMile !== null && selectedTripProfitability?.projectedMarginPerMile !== undefined ? `${formatCurrency(selectedTripProfitability.projectedMarginPerMile)} per mile` : "Waiting on routed miles"}</small>
+                </article>
+                <article>
+                  <span>Detention Recoverable</span>
+                  <strong>{formatCurrency(selectedTripProfitability?.detentionAmount)}</strong>
+                  <small>{selectedTripLoadRow ? `${selectedTripLoadRow.detention_free_minutes || "120"} min free | ${formatCurrency(selectedTripProfitability?.detentionRatePerHour)}/hr` : "Default detention settings"}</small>
+                </article>
+              </div>
+              <div className="full-road-financial-callout">
+                <strong>{selectedTripProfitability && selectedTripProfitability.projectedMargin < 0 ? "Margin risk" : "Profitability outlook"}</strong>
+                <p>
+                  {selectedTripProfitability && selectedTripProfitability.projectedMargin < 0
+                    ? "This trip is currently underwater on projected numbers. Check rate, deadhead, fuel plan, and detention recovery before closing it."
+                    : "This trip is carrying a positive projected margin. Keep detention timestamps accurate so billed revenue does not leak out at pickup or delivery."}
+                </p>
+              </div>
+            </section>
           </section>
 
           <section className="full-road-ops-grid">

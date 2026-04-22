@@ -116,6 +116,18 @@ class Load(Base):
     stop2: Mapped[str] = mapped_column(Text, default="", nullable=False)
     stop3: Mapped[str] = mapped_column(Text, default="", nullable=False)
     delivery_city: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    broker_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    load_number: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    pickup_appt_at: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    delivery_appt_at: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    rate_total: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    driver_pay_total: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    detention_free_minutes: Mapped[str] = mapped_column(String(32), default="120", nullable=False)
+    detention_rate_per_hour: Mapped[str] = mapped_column(String(32), default="50", nullable=False)
+    lumper_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    toll_cost: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
+    other_accessorials: Mapped[str] = mapped_column(String(32), default="0", nullable=False)
 
 
 class FullRoadTrip(Base):

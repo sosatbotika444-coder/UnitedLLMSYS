@@ -14,6 +14,7 @@ const TomTomSuite = lazy(() => import("./TomTomSuite"));
 const MotiveDashboardCards = lazy(() => import("./MotiveDashboardCards"));
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const FleetStatisticsPanel = lazy(() => import("./FleetStatisticsPanel"));
+const ProfitabilityPanel = lazy(() => import("./ProfitabilityPanel"));
 const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -32,6 +33,7 @@ const workspaceTabs = [
   { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
   { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
   { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
+  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "PF" },
   { id: "fullroad", label: "Full Road", detail: "Live trip chain", icon: "FR" },
   { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
   { id: "history", label: "Route History", detail: "All builds", icon: "RH" },
@@ -50,6 +52,7 @@ const mobileFuelTabs = [
 const mobileFuelMoreTabs = [
   { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
   { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
+  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "PF" },
   { id: "fullroad", label: "Full Road", detail: "Truck to pickup to delivery", icon: "FR" },
   { id: "history", label: "Route History", detail: "All routing builds", icon: "RH" },
   { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
@@ -75,6 +78,11 @@ const workspaceCopy = {
     eyebrow: "Fuel Service",
     title: "Statistics",
     subtitle: "Filter every truck by fuel, MPG, faults, utilization, and load data."
+  },
+  profitability: {
+    eyebrow: "Fuel Service",
+    title: "Profitability",
+    subtitle: "Track detention, lane margin, deadhead, and estimated trip profit."
   },
   fullroad: {
     eyebrow: "Fuel Service",
@@ -126,7 +134,19 @@ const emptyRow = {
   stop1: "",
   stop2: "",
   stop3: "",
-  delivery_city: ""
+  delivery_city: "",
+  customer_name: "",
+  broker_name: "",
+  load_number: "",
+  pickup_appt_at: "",
+  delivery_appt_at: "",
+  rate_total: "0",
+  driver_pay_total: "0",
+  detention_free_minutes: "120",
+  detention_rate_per_hour: "50",
+  lumper_cost: "0",
+  toll_cost: "0",
+  other_accessorials: "0"
 };
 
 function getDepartmentMeta(departmentId) {
@@ -155,10 +175,11 @@ function computeMilesToEmpty(row) {
 }
 
 function normalizeRow(row) {
+  const mergedRow = { ...emptyRow, ...(row || {}) };
   return {
-    ...row,
-    fuel_level: Number(row.fuel_level ?? 0),
-    miles_to_empty: row.miles_to_empty || computeMilesToEmpty(row)
+    ...mergedRow,
+    fuel_level: Number(mergedRow.fuel_level ?? 0),
+    miles_to_empty: mergedRow.miles_to_empty || computeMilesToEmpty(mergedRow)
   };
 }
 
@@ -356,13 +377,15 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
 }
 function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
   const fullLoadMiles = Math.round((Number(row.mpg) || 0) * (Number(row.tank_capacity) || 0));
+  const routeLabel = [row.pickup_city, row.delivery_city].filter(Boolean).join(" to ");
 
   return (
     <article className="mobile-load-card">
       <header>
         <div>
-          <span>Truck {row.truck || "-"}</span>
+          <span>{row.load_number ? `Load ${row.load_number}` : `Truck ${row.truck || "-"}`}</span>
           <strong>{row.driver || "Unassigned driver"}</strong>
+          <small>{routeLabel || row.customer_name || "Dispatch row"}</small>
         </div>
         <select
           className={`status-select ${getStatusTone(row.status)}`}
@@ -378,6 +401,9 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
       </header>
 
       <div className="mobile-load-fields">
+        <label>Load #<input value={row.load_number} onChange={(event) => onUpdate(row.id, "load_number", event.target.value)} onBlur={(event) => onSave({ ...row, load_number: event.target.value })} /></label>
+        <label>Customer<input value={row.customer_name} onChange={(event) => onUpdate(row.id, "customer_name", event.target.value)} onBlur={(event) => onSave({ ...row, customer_name: event.target.value })} /></label>
+        <label>Broker<input value={row.broker_name} onChange={(event) => onUpdate(row.id, "broker_name", event.target.value)} onBlur={(event) => onSave({ ...row, broker_name: event.target.value })} /></label>
         <label>Driver<input value={row.driver} onChange={(event) => onUpdate(row.id, "driver", event.target.value)} onBlur={(event) => onSave({ ...row, driver: event.target.value })} /></label>
         <label>Truck<input value={row.truck} onChange={(event) => onUpdate(row.id, "truck", event.target.value)} onBlur={(event) => onSave({ ...row, truck: event.target.value })} /></label>
         <label>Pickup<input value={row.pickup_city} onChange={(event) => onUpdate(row.id, "pickup_city", event.target.value)} onBlur={(event) => onSave({ ...row, pickup_city: event.target.value })} /></label>
@@ -414,7 +440,16 @@ function MobileLoadCard({ row, savingId, onUpdate, onSave, onDelete }) {
       </div>
 
       <details className="mobile-load-stops">
-        <summary>Stops and notes</summary>
+        <summary>Stops, appointments, and profit</summary>
+        <label>Pickup Appt<input value={row.pickup_appt_at} onChange={(event) => onUpdate(row.id, "pickup_appt_at", event.target.value)} onBlur={(event) => onSave({ ...row, pickup_appt_at: event.target.value })} placeholder="2026-04-22 08:00" /></label>
+        <label>Delivery Appt<input value={row.delivery_appt_at} onChange={(event) => onUpdate(row.id, "delivery_appt_at", event.target.value)} onBlur={(event) => onSave({ ...row, delivery_appt_at: event.target.value })} placeholder="2026-04-23 14:00" /></label>
+        <label>Rate Total<input value={row.rate_total} onChange={(event) => onUpdate(row.id, "rate_total", event.target.value)} onBlur={(event) => onSave({ ...row, rate_total: event.target.value })} /></label>
+        <label>Driver Pay<input value={row.driver_pay_total} onChange={(event) => onUpdate(row.id, "driver_pay_total", event.target.value)} onBlur={(event) => onSave({ ...row, driver_pay_total: event.target.value })} /></label>
+        <label>Free Min<input value={row.detention_free_minutes} onChange={(event) => onUpdate(row.id, "detention_free_minutes", event.target.value)} onBlur={(event) => onSave({ ...row, detention_free_minutes: event.target.value })} /></label>
+        <label>Detention $/Hr<input value={row.detention_rate_per_hour} onChange={(event) => onUpdate(row.id, "detention_rate_per_hour", event.target.value)} onBlur={(event) => onSave({ ...row, detention_rate_per_hour: event.target.value })} /></label>
+        <label>Lumper<input value={row.lumper_cost} onChange={(event) => onUpdate(row.id, "lumper_cost", event.target.value)} onBlur={(event) => onSave({ ...row, lumper_cost: event.target.value })} /></label>
+        <label>Tolls<input value={row.toll_cost} onChange={(event) => onUpdate(row.id, "toll_cost", event.target.value)} onBlur={(event) => onSave({ ...row, toll_cost: event.target.value })} /></label>
+        <label>Accessorials<input value={row.other_accessorials} onChange={(event) => onUpdate(row.id, "other_accessorials", event.target.value)} onBlur={(event) => onSave({ ...row, other_accessorials: event.target.value })} /></label>
         <label>1st Stop<textarea value={row.stop1} onChange={(event) => onUpdate(row.id, "stop1", event.target.value)} onBlur={(event) => onSave({ ...row, stop1: event.target.value })} /></label>
         <label>2nd Stop<textarea value={row.stop2} onChange={(event) => onUpdate(row.id, "stop2", event.target.value)} onBlur={(event) => onSave({ ...row, stop2: event.target.value })} /></label>
         <label>3rd Stop<textarea value={row.stop3} onChange={(event) => onUpdate(row.id, "stop3", event.target.value)} onBlur={(event) => onSave({ ...row, stop3: event.target.value })} /></label>
@@ -460,6 +495,10 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
 
   if (activeWorkspace === "statistics") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading truck statistics..." />}><FleetStatisticsPanel token={token} active loadRows={rows} /></Suspense></section>;
+  }
+
+  if (activeWorkspace === "profitability") {
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading profitability..." />}><ProfitabilityPanel token={token} active loadRows={rows} /></Suspense></section>;
   }
 
   if (activeWorkspace === "routing") {
@@ -683,7 +722,15 @@ export default function App() {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const haystack = `${row.driver} ${row.truck} ${row.pickup_city} ${row.delivery_city}`.toLowerCase();
+      const haystack = [
+        row.driver,
+        row.truck,
+        row.pickup_city,
+        row.delivery_city,
+        row.customer_name,
+        row.broker_name,
+        row.load_number
+      ].join(" ").toLowerCase();
       const matchesSearch = haystack.includes(search.toLowerCase());
       const matchesStatus = statusFilter === "All" || row.status === statusFilter;
       return matchesSearch && matchesStatus;
@@ -1470,6 +1517,12 @@ export default function App() {
             </Suspense>
           </section>
 
+          <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "profitability"}>
+            <Suspense fallback={<ModuleLoader label="Loading profitability..." />}>
+              <ProfitabilityPanel token={token} active={activeWorkspace === "profitability"} loadRows={rows} />
+            </Suspense>
+          </section>
+
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "fullroad"}>
             <Suspense fallback={<ModuleLoader label="Loading Full Road..." />}>
               <FullRoadWorkspace token={token} active={activeWorkspace === "fullroad"} loadRows={rows} />
@@ -1499,14 +1552,14 @@ export default function App() {
               <div>
                 <span className="eyebrow">Loads</span>
                 <h2>{filteredRows.length} rows shown</h2>
-                <p>Search, filter, edit, save.</p>
+                <p>Search, edit, and save dispatch plus profitability inputs.</p>
               </div>
               <div className="loads-control-actions">
                 <label className="workspace-table-search">
                   <span>Search loads</span>
                   <input
                     type="text"
-                    placeholder="Driver, truck, pickup, delivery"
+                    placeholder="Load, customer, broker, driver, truck"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                   />
@@ -1553,6 +1606,9 @@ export default function App() {
                   <table className="dispatch-sheet">
                     <thead>
                       <tr>
+                        <th>Load #</th>
+                        <th>Customer</th>
+                        <th>Broker</th>
                         <th>Driver</th>
                         <th>Truck #</th>
                         <th>Approx MPG</th>
@@ -1562,10 +1618,19 @@ export default function App() {
                         <th>Fuel %</th>
                         <th>Full Load Miles</th>
                         <th>PU City</th>
+                        <th>PU Appt</th>
                         <th>1st Stop</th>
                         <th>2nd Stop</th>
                         <th>3rd Stop</th>
                         <th>Del City</th>
+                        <th>Del Appt</th>
+                        <th>Rate</th>
+                        <th>Driver Pay</th>
+                        <th>Free Min</th>
+                        <th>Det / Hr</th>
+                        <th>Lumper</th>
+                        <th>Tolls</th>
+                        <th>Accessorials</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1576,6 +1641,27 @@ export default function App() {
 
                           return (
                             <tr key={row.id}>
+                              <td>
+                                <input
+                                  value={row.load_number}
+                                  onChange={(event) => updateLocalRow(row.id, "load_number", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, load_number: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.customer_name}
+                                  onChange={(event) => updateLocalRow(row.id, "customer_name", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, customer_name: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.broker_name}
+                                  onChange={(event) => updateLocalRow(row.id, "broker_name", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, broker_name: event.target.value })}
+                                />
+                              </td>
                               <td className="driver-cell">
                                 <input
                                   value={row.driver}
@@ -1653,6 +1739,14 @@ export default function App() {
                                 />
                               </td>
                               <td>
+                                <input
+                                  value={row.pickup_appt_at}
+                                  onChange={(event) => updateLocalRow(row.id, "pickup_appt_at", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, pickup_appt_at: event.target.value })}
+                                  placeholder="2026-04-22 08:00"
+                                />
+                              </td>
+                              <td>
                                 <textarea
                                   value={row.stop1}
                                   onChange={(event) => updateLocalRow(row.id, "stop1", event.target.value)}
@@ -1680,6 +1774,63 @@ export default function App() {
                                   onBlur={(event) => saveRow({ ...row, delivery_city: event.target.value })}
                                 />
                               </td>
+                              <td>
+                                <input
+                                  value={row.delivery_appt_at}
+                                  onChange={(event) => updateLocalRow(row.id, "delivery_appt_at", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, delivery_appt_at: event.target.value })}
+                                  placeholder="2026-04-23 14:00"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.rate_total}
+                                  onChange={(event) => updateLocalRow(row.id, "rate_total", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, rate_total: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.driver_pay_total}
+                                  onChange={(event) => updateLocalRow(row.id, "driver_pay_total", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, driver_pay_total: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.detention_free_minutes}
+                                  onChange={(event) => updateLocalRow(row.id, "detention_free_minutes", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, detention_free_minutes: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.detention_rate_per_hour}
+                                  onChange={(event) => updateLocalRow(row.id, "detention_rate_per_hour", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, detention_rate_per_hour: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.lumper_cost}
+                                  onChange={(event) => updateLocalRow(row.id, "lumper_cost", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, lumper_cost: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.toll_cost}
+                                  onChange={(event) => updateLocalRow(row.id, "toll_cost", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, toll_cost: event.target.value })}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  value={row.other_accessorials}
+                                  onChange={(event) => updateLocalRow(row.id, "other_accessorials", event.target.value)}
+                                  onBlur={(event) => saveRow({ ...row, other_accessorials: event.target.value })}
+                                />
+                              </td>
                               <td className="action-cell">
                                 <button className="delete-button" onClick={() => deleteRow(row.id)}>
                                   Delete
@@ -1690,7 +1841,7 @@ export default function App() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="14" className="empty-state-cell">
+                          <td colSpan="26" className="empty-state-cell">
                             {gridLoading ? "Loading data..." : "No loads yet."}
                           </td>
                         </tr>

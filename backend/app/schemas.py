@@ -271,6 +271,18 @@ class LoadBase(BaseModel):
     stop2: str = ""
     stop3: str = ""
     delivery_city: str = Field(default="", max_length=255)
+    customer_name: str = Field(default="", max_length=255)
+    broker_name: str = Field(default="", max_length=255)
+    load_number: str = Field(default="", max_length=128)
+    pickup_appt_at: str = Field(default="", max_length=64)
+    delivery_appt_at: str = Field(default="", max_length=64)
+    rate_total: str = Field(default="0", max_length=32)
+    driver_pay_total: str = Field(default="0", max_length=32)
+    detention_free_minutes: str = Field(default="120", max_length=32)
+    detention_rate_per_hour: str = Field(default="50", max_length=32)
+    lumper_cost: str = Field(default="0", max_length=32)
+    toll_cost: str = Field(default="0", max_length=32)
+    other_accessorials: str = Field(default="0", max_length=32)
 
 
 class LoadCreate(LoadBase):

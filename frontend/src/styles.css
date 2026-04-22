@@ -12855,6 +12855,8 @@ body.theme-blue .route-history-stops div.selected {
 .full-road-builder-panel,
 .full-road-trip-strip-panel,
 .full-road-control-panel,
+.full-road-detention-panel,
+.full-road-profit-panel,
 .full-road-map-panel,
 .full-road-fuel-panel,
 .full-road-leg-card,
@@ -12869,6 +12871,8 @@ body.theme-blue .route-history-stops div.selected {
 
 .full-road-builder-panel::before,
 .full-road-control-panel::before,
+.full-road-detention-panel::before,
+.full-road-profit-panel::before,
 .full-road-fuel-panel::before {
   content: "";
   position: absolute;
@@ -12944,6 +12948,8 @@ body.theme-blue .route-history-stops div.selected {
 .full-road-leg-grid span,
 .full-road-live-grid article,
 .full-road-selected-vehicle article,
+.full-road-timeline-grid article,
+.full-road-financial-grid article,
 .full-road-top-stop-card,
 .full-road-fuel-stop-item {
   display: grid;
@@ -12991,6 +12997,8 @@ body.theme-blue .route-history-stops div.selected {
 
 .full-road-selected-vehicle,
 .full-road-live-grid,
+.full-road-timeline-grid,
+.full-road-financial-grid,
 .full-road-leg-grid,
 .full-road-fuel-grid,
 .full-road-top-stop-grid {
@@ -13001,6 +13009,8 @@ body.theme-blue .route-history-stops div.selected {
 
 .full-road-selected-vehicle article,
 .full-road-live-grid article,
+.full-road-timeline-grid article,
+.full-road-financial-grid article,
 .full-road-leg-stop,
 .full-road-top-stop-card,
 .full-road-fuel-stop-item {
@@ -13011,13 +13021,17 @@ body.theme-blue .route-history-stops div.selected {
 }
 
 .full-road-selected-vehicle article,
-.full-road-live-grid article {
+.full-road-live-grid article,
+.full-road-timeline-grid article,
+.full-road-financial-grid article {
   min-height: 104px;
   align-content: space-between;
 }
 
 .full-road-selected-vehicle span,
 .full-road-live-grid span,
+.full-road-timeline-grid span,
+.full-road-financial-grid span,
 .full-road-leg-card span,
 .full-road-fuel-card span,
 .full-road-trip-stage {
@@ -13040,6 +13054,11 @@ body.theme-blue .route-history-stops div.selected {
   gap: 16px;
 }
 
+.profitability-panel {
+  display: grid;
+  gap: 16px;
+}
+
 .fleet-statistics-head-meta {
   display: flex;
   align-items: center;
@@ -13056,6 +13075,40 @@ body.theme-blue .route-history-stops div.selected {
 .statistics-panel-stack {
   display: grid;
   gap: 16px;
+}
+
+.profitability-toolbar {
+  align-items: end;
+}
+
+.profitability-summary-grid .metric-card strong {
+  font-size: clamp(26px, 3vw, 38px);
+}
+
+.profitability-table strong,
+.profitability-table small {
+  display: block;
+}
+
+.profitability-table small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.profitability-tone-danger {
+  color: #b91c1c;
+}
+
+.profitability-tone-watch {
+  color: #b45309;
+}
+
+.profitability-tone-good {
+  color: #15803d;
+}
+
+.profitability-tone-neutral {
+  color: var(--text-strong);
 }
 
 .statistics-quick-tabs {
@@ -13264,7 +13317,9 @@ body.theme-blue .route-history-stops div.selected {
 .full-road-leg-card strong,
 .full-road-fuel-card strong,
 .full-road-live-grid strong,
-.full-road-selected-vehicle strong {
+.full-road-selected-vehicle strong,
+.full-road-timeline-grid strong,
+.full-road-financial-grid strong {
   color: var(--text-strong);
 }
 
@@ -13280,6 +13335,8 @@ body.theme-blue .route-history-stops div.selected {
 .full-road-leg-card small,
 .full-road-leg-card em,
 .full-road-fuel-card small,
+.full-road-timeline-grid small,
+.full-road-financial-grid small,
 .full-road-top-stop-card small,
 .full-road-fuel-stop-item small {
   color: var(--muted);
@@ -13307,9 +13364,17 @@ body.theme-blue .route-history-stops div.selected {
 }
 
 .full-road-control-panel,
+.full-road-detention-panel,
+.full-road-profit-panel,
 .full-road-map-panel,
 .full-road-fuel-panel {
   padding: 20px;
+}
+
+.full-road-economics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .full-road-ops-grid {
@@ -13548,6 +13613,31 @@ body.theme-blue .route-history-stops div.selected {
   flex: 1 1 160px;
 }
 
+.full-road-detention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.full-road-financial-callout {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(236, 253, 245, 0.9));
+}
+
+.full-road-financial-callout strong {
+  color: var(--text-strong);
+}
+
+.full-road-financial-callout p {
+  margin: 8px 0 0;
+  color: var(--muted-strong);
+  line-height: 1.55;
+}
+
 .full-road-notes-field textarea {
   min-height: 168px;
   padding: 14px;
@@ -13659,6 +13749,8 @@ body.theme-blue .route-history-stops div.selected {
 body.theme-dark .full-road-builder-panel,
 body.theme-dark .full-road-trip-strip-panel,
 body.theme-dark .full-road-control-panel,
+body.theme-dark .full-road-detention-panel,
+body.theme-dark .full-road-profit-panel,
 body.theme-dark .full-road-map-panel,
 body.theme-dark .full-road-fuel-panel,
 body.theme-dark .full-road-leg-card,
@@ -13670,6 +13762,8 @@ body.theme-dark .full-road-fuel-card {
 
 body.theme-dark .full-road-builder-panel::before,
 body.theme-dark .full-road-control-panel::before,
+body.theme-dark .full-road-detention-panel::before,
+body.theme-dark .full-road-profit-panel::before,
 body.theme-dark .full-road-fuel-panel::before {
   background: linear-gradient(90deg, rgba(96, 165, 250, 0.7), rgba(45, 212, 191, 0.56));
 }
@@ -13681,6 +13775,8 @@ body.theme-dark .full-road-queue-toolbar select,
 body.theme-dark .full-road-notes-field textarea,
 body.theme-dark .full-road-selected-vehicle article,
 body.theme-dark .full-road-live-grid article,
+body.theme-dark .full-road-timeline-grid article,
+body.theme-dark .full-road-financial-grid article,
 body.theme-dark .full-road-leg-stop,
 body.theme-dark .full-road-leg-stop-list > div,
 body.theme-dark .full-road-top-stop-card,
@@ -13701,7 +13797,8 @@ body.theme-dark .full-road-trip-tab.active {
 body.theme-dark .full-road-health-hero,
 body.theme-dark .full-road-stage-node,
 body.theme-dark .full-road-dispatch-meta article,
-body.theme-dark .full-road-checklist-item {
+body.theme-dark .full-road-checklist-item,
+body.theme-dark .full-road-financial-callout {
   background: rgba(15, 23, 42, 0.9);
   border-color: rgba(71, 85, 105, 0.48);
 }
@@ -13732,6 +13829,7 @@ body.theme-dark .full-road-health-badge.tone-dark {
   }
 
   .full-road-main-grid,
+  .full-road-economics-grid,
   .full-road-ops-grid,
   .full-road-side-stack {
     grid-template-columns: 1fr;
@@ -13746,6 +13844,8 @@ body.theme-dark .full-road-health-badge.tone-dark {
   .full-road-summary-grid,
   .full-road-selected-vehicle,
   .full-road-live-grid,
+  .full-road-timeline-grid,
+  .full-road-financial-grid,
   .full-road-fuel-grid,
   .full-road-stage-track,
   .full-road-dispatch-meta {
@@ -13759,6 +13859,8 @@ body.theme-dark .full-road-health-badge.tone-dark {
   .full-road-summary-grid,
   .full-road-selected-vehicle,
   .full-road-live-grid,
+  .full-road-timeline-grid,
+  .full-road-financial-grid,
   .full-road-fuel-grid,
   .full-road-stage-track,
   .full-road-dispatch-meta {
