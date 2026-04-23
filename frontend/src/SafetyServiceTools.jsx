@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SafetyServiceMapCanvas from "./SafetyServiceMapCanvas";
+import MapStage from "./MapStage";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 
@@ -327,13 +328,15 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
               <span>{filteredItems.length} visible point(s)</span>
             </div>
           </div>
-          <SafetyServiceMapCanvas
-            centerVehicle={selectedVehicle}
-            items={filteredItems}
-            selectedItemId={selectedItemId}
-            onSelect={setSelectedItemId}
-            active={active}
-          />
+          <MapStage title={isEmergency ? "Response Map" : "Service Map"} detail={`${filteredItems.length} visible point${filteredItems.length === 1 ? "" : "s"} in the current search.`}>
+            <SafetyServiceMapCanvas
+              centerVehicle={selectedVehicle}
+              items={filteredItems}
+              selectedItemId={selectedItemId}
+              onSelect={setSelectedItemId}
+              active={active}
+            />
+          </MapStage>
         </section>
 
         <aside className="safety-service-sidebar">

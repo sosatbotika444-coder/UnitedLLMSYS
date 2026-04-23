@@ -6,6 +6,7 @@ import {
   getPriceSignalMeta,
   parsePriceTarget
 } from "./priceSignals";
+import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
@@ -543,8 +544,6 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
   const [activeFilters, setActiveFilters] = useState(defaultFilters);
   const [cheapStopCount, setCheapStopCount] = useState("3");
-  const [mapFullscreen, setMapFullscreen] = useState(false);
-  const mapStageRef = useRef(null);
   const blurTimerRef = useRef(null);
   const locationSuggestionCacheRef = useRef(new Map());
   const [locationFieldFocus, setLocationFieldFocus] = useState("");
@@ -914,59 +913,6 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     }, { below: 0, above: 0, unknown: 0 });
   }, [activePriceTarget, visibleStops]);
 
-  useEffect(() => {
-    document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
-
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        setMapFullscreen(false);
-      }
-    }
-
-    function handleFullscreenChange() {
-      if (!document.fullscreenElement) {
-        setMapFullscreen(false);
-      }
-    }
-
-    const resizeTimers = mapFullscreen
-      ? [40, 180, 420].map((delay) => window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay))
-      : [];
-
-    if (mapFullscreen) {
-      window.addEventListener("keydown", handleEscape);
-      document.addEventListener("fullscreenchange", handleFullscreenChange);
-    }
-
-    return () => {
-      document.body.classList.remove("map-fullscreen-active");
-      window.removeEventListener("keydown", handleEscape);
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-      resizeTimers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [mapFullscreen]);
-
-  async function toggleMapFullscreen() {
-    if (!mapFullscreen) {
-      setMapFullscreen(true);
-      try {
-        await mapStageRef.current?.requestFullscreen?.();
-      } catch {
-        // CSS fullscreen still works when the browser blocks native fullscreen.
-      }
-      return;
-    }
-
-    setMapFullscreen(false);
-    if (document.fullscreenElement) {
-      try {
-        await document.exitFullscreen?.();
-      } catch {
-        // Ignore browser fullscreen exit errors; CSS state is already reset.
-      }
-    }
-  }
-
   function useLiveTruckLocationForOrigin() {
     if (!selectedVehicleLocation) return;
     setRouteForm((current) => ({ ...current, origin: selectedVehicleLocation }));
@@ -1252,18 +1198,20 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
       {routePlan ? (
         <div className="route-results">
           <div className="route-main-grid route-main-grid-brand">
-            <div ref={mapStageRef} className={`route-map-stage route-map-stage-brand ${mapFullscreen ? "route-map-stage-fullscreen" : ""}`}>
-              <div className="route-map-toolbar">
-                <div className="route-map-toolbar-copy">
-                  <strong>Map</strong>
-                  <span>Prices remain visible under each station as you zoom in.</span>
-                </div>
-                <button className="secondary-button route-map-expand-button" type="button" onClick={toggleMapFullscreen}>
-                  {mapFullscreen ? "Close full screen" : "Full screen"}
-                </button>
-              </div>
-              <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}><RouteMap plan={routePlan} isFullscreen={mapFullscreen} active={active} priceTarget={activePriceTarget} startMarkerTitle={selectedVehicle ? `${vehicleLabel(selectedVehicle)} | ${vehicleDriverName(selectedVehicle)}` : routePlan.origin.label} endMarkerTitle={routePlan.destination.label || "Destination"} /></Suspense>
-            </div>
+            <MapStage title="Map" detail="Prices remain visible under each station as you zoom in." className="route-map-stage-brand">
+              {({ isFullscreen }) => (
+                <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}>
+                  <RouteMap
+                    plan={routePlan}
+                    isFullscreen={isFullscreen}
+                    active={active}
+                    priceTarget={activePriceTarget}
+                    startMarkerTitle={selectedVehicle ? `${vehicleLabel(selectedVehicle)} | ${vehicleDriverName(selectedVehicle)}` : routePlan.origin.label}
+                    endMarkerTitle={routePlan.destination.label || "Destination"}
+                  />
+                </Suspense>
+              )}
+            </MapStage>
 
             <aside className="route-side-panel">
               <div className="fuel-board fuel-board-brand-list unitedlane-briefing-card">

@@ -5,6 +5,7 @@ import {
   getTripStageTimeline,
   recordTripTimelineEvent,
 } from "./profitability";
+import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
@@ -2165,17 +2166,20 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                 </div>
               </div>
               {combinedMapPlan ? (
-                <div className="route-map-stage route-map-stage-brand full-road-map-stage">
-                  <Suspense fallback={<div className="module-loader">Loading Full Road map...</div>}>
-                    <RouteMap
-                      plan={combinedMapPlan}
-                      active={active}
-                      startMarkerTitle={combinedMapPlan.origin?.label || selectedTrip.toPickupPlan.origin.label || "Truck route start"}
-                      endMarkerTitle={selectedTrip.toDeliveryPlan.destination.label || selectedTrip.delivery}
-                      markers={mapMarkers}
-                    />
-                  </Suspense>
-                </div>
+                <MapStage title="Map" detail="Truck location, pickup, delivery, and fuel stops in one full screen view." className="route-map-stage-brand full-road-map-stage">
+                  {({ isFullscreen }) => (
+                    <Suspense fallback={<div className="module-loader">Loading Full Road map...</div>}>
+                      <RouteMap
+                        plan={combinedMapPlan}
+                        isFullscreen={isFullscreen}
+                        active={active}
+                        startMarkerTitle={combinedMapPlan.origin?.label || selectedTrip.toPickupPlan.origin.label || "Truck route start"}
+                        endMarkerTitle={selectedTrip.toDeliveryPlan.destination.label || selectedTrip.delivery}
+                        markers={mapMarkers}
+                      />
+                    </Suspense>
+                  )}
+                </MapStage>
               ) : (
                 <div className="full-road-empty">Build a trip to see the live route map.</div>
               )}

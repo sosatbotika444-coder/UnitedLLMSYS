@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MotiveFleetMap from "./MotiveFleetMap";
+import MapStage from "./MapStage";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const filterOptions = ["All", "Moving", "Stopped", "Stale", "Low Fuel", "Faults"];
@@ -513,13 +514,15 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 <span>{selectedLocationLabel}</span>
                 <small>{canFocusStreet ? formatCoordinates(currentVehicle.location) : "Select a vehicle with live GPS coordinates to zoom in to street level."}</small>
               </div>
-              <MotiveFleetMap
-                active={active}
-                vehicles={filteredVehicles}
-                selectedVehicleId={currentVehicle?.id ?? null}
-                onSelect={handleVehicleSelect}
-                viewMode={mapView}
-              />
+              <MapStage title={mapView === "street" ? "Street focus" : "Fleet overview"} detail={`${filteredVehicles.length} truck${filteredVehicles.length === 1 ? "" : "s"} visible on the map.`}>
+                <MotiveFleetMap
+                  active={active}
+                  vehicles={filteredVehicles}
+                  selectedVehicleId={currentVehicle?.id ?? null}
+                  onSelect={handleVehicleSelect}
+                  viewMode={mapView}
+                />
+              </MapStage>
             </section>
 
             <aside className="motive-detail-panel">

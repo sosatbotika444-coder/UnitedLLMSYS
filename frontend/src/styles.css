@@ -5389,6 +5389,40 @@ body.map-fullscreen-active .route-map-stage-fullscreen .live-route-map,
   background: var(--surface-solid) !important;
 }
 
+.map-stage-shell {
+  display: grid;
+  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.map-stage-shell .live-route-map,
+.map-stage-shell .motive-fleet-map-shell,
+.map-stage-shell .motive-fleet-map,
+.map-stage-shell .safety-service-map-shell,
+.map-stage-shell .safety-service-map-canvas {
+  min-height: 0;
+}
+
+body.map-fullscreen-active .map-stage-shell-fullscreen,
+.map-stage-shell-fullscreen:fullscreen {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+}
+
+body.map-fullscreen-active .map-stage-shell-fullscreen .live-route-map,
+body.map-fullscreen-active .map-stage-shell-fullscreen .motive-fleet-map-shell,
+body.map-fullscreen-active .map-stage-shell-fullscreen .motive-fleet-map,
+body.map-fullscreen-active .map-stage-shell-fullscreen .safety-service-map-shell,
+body.map-fullscreen-active .map-stage-shell-fullscreen .safety-service-map-canvas,
+.map-stage-shell-fullscreen:fullscreen .live-route-map,
+.map-stage-shell-fullscreen:fullscreen .motive-fleet-map-shell,
+.map-stage-shell-fullscreen:fullscreen .motive-fleet-map,
+.map-stage-shell-fullscreen:fullscreen .safety-service-map-shell,
+.map-stage-shell-fullscreen:fullscreen .safety-service-map-canvas {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
 .loads-control-card {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
   padding: 18px;
@@ -12207,6 +12241,24 @@ body.theme-dark .fuel-auth-filter-card > span {
 .admin-panel-head p {
   color: #475569;
   margin: 6px 0 0;
+}
+
+.admin-tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-tab-summary {
+  color: #475569;
+  font-size: 14px;
+}
+
+.admin-tab-panel,
+.admin-workspace-panel {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
 }
 
 .admin-stat-grid {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import RouteMap from "./RouteMap";
+import MapStage from "./MapStage";
 import {
   formatPriceTarget,
   getAutoDieselPrice,
@@ -346,9 +347,9 @@ export default function RouteAssistant({ token }) {
       {routePlan ? (
         <div className="route-results">
           <div className="route-main-grid route-main-grid-brand">
-            <div className="route-map-stage route-map-stage-brand">
-              <RouteMap plan={routePlan} priceTarget={activePriceTarget} />
-            </div>
+            <MapStage title="Map" detail="Open the route in full screen when you need more room." className="route-map-stage-brand">
+              {({ isFullscreen }) => <RouteMap plan={routePlan} priceTarget={activePriceTarget} isFullscreen={isFullscreen} />}
+            </MapStage>
 
             <aside className="route-side-panel">
               <div className="route-options-grid route-options-grid-compact route-options-grid-brand">

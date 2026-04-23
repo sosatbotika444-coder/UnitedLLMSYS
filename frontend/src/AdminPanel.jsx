@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
+const SafetyServiceTools = lazy(() => import("./SafetyServiceTools"));
 const departmentOptions = ["admin", "fuel", "safety", "driver"];
 const departmentLabels = {
   admin: "Admin",
@@ -8,6 +10,11 @@ const departmentLabels = {
   safety: "Safety",
   driver: "Driver"
 };
+const adminWorkspaceTabs = [
+  { id: "access", label: "Accounts", detail: "Users, roles, bans, and system stats" },
+  { id: "fleet", label: "Fleet", detail: "All trucks, tracking, HOS, and live map" },
+  { id: "service", label: "Service", detail: "Fuel service map and nearby support" }
+];
 const emptyCreateForm = {
   full_name: "",
   email: "",
@@ -159,6 +166,7 @@ function UserRow({ user, currentUserId, busyId, onPatch, onDelete, onResetPasswo
 export default function AdminPanel({ token, user }) {
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
+  const [activeTab, setActiveTab] = useState("access");
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [filters, setFilters] = useState({ search: "", department: "all", status: "all" });
   const [loading, setLoading] = useState(false);
@@ -305,71 +313,108 @@ export default function AdminPanel({ token, user }) {
       {message ? <div className="notice success inline-notice">{message}</div> : null}
       {error ? <div className="notice error inline-notice">{error}</div> : null}
 
-      <section className="admin-stat-grid">
-        {quickStats.map((stat) => <StatCard key={stat.label} {...stat} value={formatNumber(stat.value)} />)}
-      </section>
+      <div className="admin-tab-strip">
+        {adminWorkspaceTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`workspace-inline-tab ${activeTab === tab.id ? "active" : ""}`.trim()}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <section className="admin-insight-grid">
-        <article className="admin-insight-panel">
-          <div className="panel-head"><h3>Departments</h3><span>Accounts by role</span></div>
-          <div className="admin-pill-list">
-            {departmentOptions.map((department) => <span key={department}><b>{departmentLabels[department]}</b>{formatNumber(usersByDepartment[department] || 0)}</span>)}
-          </div>
-        </article>
-        <article className="admin-insight-panel">
-          <div className="panel-head"><h3>Fuel Approval Status</h3><span>Current authorization mix</span></div>
-          <div className="admin-pill-list">
-            {Object.keys(fuelStatuses).length ? Object.entries(fuelStatuses).map(([status, total]) => <span key={status}><b>{status}</b>{formatNumber(total)}</span>) : <span><b>No approvals</b>0</span>}
-          </div>
-        </article>
-      </section>
+      <div className="admin-tab-summary">
+        {adminWorkspaceTabs.find((tab) => tab.id === activeTab)?.detail || ""}
+      </div>
 
-      <section className="admin-management-grid">
-        <form className="admin-create-panel" onSubmit={createUser}>
-          <div className="panel-head"><h3>Create Account</h3><span>Add staff, drivers, or another admin.</span></div>
-          <label>Full name<input value={createForm.full_name} onChange={(event) => setCreateForm({ ...createForm, full_name: event.target.value })} required /></label>
-          <label>Email<input type="email" value={createForm.email} onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })} required /></label>
-          <label>Username<input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} placeholder="optional" /></label>
-          <label>Password<input type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} minLength="6" required /></label>
-          <label>Role<select value={createForm.department} onChange={(event) => setCreateForm({ ...createForm, department: event.target.value })}>{departmentOptions.map((department) => <option key={department} value={department}>{departmentLabels[department]}</option>)}</select></label>
-          <button className="primary-button" type="submit" disabled={loading}>Create</button>
-        </form>
+      {activeTab === "access" ? (
+        <div className="admin-tab-panel">
+          <section className="admin-stat-grid">
+            {quickStats.map((stat) => <StatCard key={stat.label} {...stat} value={formatNumber(stat.value)} />)}
+          </section>
 
-        <section className="admin-users-panel">
-          <div className="admin-users-toolbar">
-            <div>
-              <span>Users</span>
-              <h3>{formatNumber(users.length)} accounts shown</h3>
-            </div>
-            <div className="admin-filter-row">
-              <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search name, email, username" />
-              <select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}>
-                <option value="all">All roles</option>
-                {departmentOptions.map((department) => <option key={department} value={department}>{departmentLabels[department]}</option>)}
-              </select>
-              <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-                <option value="all">All statuses</option>
-                <option value="active">Active</option>
-                <option value="banned">Banned</option>
-              </select>
-            </div>
-          </div>
+          <section className="admin-insight-grid">
+            <article className="admin-insight-panel">
+              <div className="panel-head"><h3>Departments</h3><span>Accounts by role</span></div>
+              <div className="admin-pill-list">
+                {departmentOptions.map((department) => <span key={department}><b>{departmentLabels[department]}</b>{formatNumber(usersByDepartment[department] || 0)}</span>)}
+              </div>
+            </article>
+            <article className="admin-insight-panel">
+              <div className="panel-head"><h3>Fuel Approval Status</h3><span>Current authorization mix</span></div>
+              <div className="admin-pill-list">
+                {Object.keys(fuelStatuses).length ? Object.entries(fuelStatuses).map(([status, total]) => <span key={status}><b>{status}</b>{formatNumber(total)}</span>) : <span><b>No approvals</b>0</span>}
+              </div>
+            </article>
+          </section>
 
-          <div className="admin-user-list">
-            {users.length ? users.map((item) => (
-              <UserRow
-                key={item.id}
-                user={item}
-                currentUserId={user?.id}
-                busyId={busyId}
-                onPatch={patchUser}
-                onDelete={deleteUser}
-                onResetPassword={resetPassword}
-              />
-            )) : <div className="empty-route-card">{loading ? "Loading users..." : "No accounts match this filter."}</div>}
-          </div>
+          <section className="admin-management-grid">
+            <form className="admin-create-panel" onSubmit={createUser}>
+              <div className="panel-head"><h3>Create Account</h3><span>Add staff, drivers, or another admin.</span></div>
+              <label>Full name<input value={createForm.full_name} onChange={(event) => setCreateForm({ ...createForm, full_name: event.target.value })} required /></label>
+              <label>Email<input type="email" value={createForm.email} onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })} required /></label>
+              <label>Username<input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} placeholder="optional" /></label>
+              <label>Password<input type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} minLength="6" required /></label>
+              <label>Role<select value={createForm.department} onChange={(event) => setCreateForm({ ...createForm, department: event.target.value })}>{departmentOptions.map((department) => <option key={department} value={department}>{departmentLabels[department]}</option>)}</select></label>
+              <button className="primary-button" type="submit" disabled={loading}>Create</button>
+            </form>
+
+            <section className="admin-users-panel">
+              <div className="admin-users-toolbar">
+                <div>
+                  <span>Users</span>
+                  <h3>{formatNumber(users.length)} accounts shown</h3>
+                </div>
+                <div className="admin-filter-row">
+                  <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search name, email, username" />
+                  <select value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })}>
+                    <option value="all">All roles</option>
+                    {departmentOptions.map((department) => <option key={department} value={department}>{departmentLabels[department]}</option>)}
+                  </select>
+                  <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="banned">Banned</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-user-list">
+                {users.length ? users.map((item) => (
+                  <UserRow
+                    key={item.id}
+                    user={item}
+                    currentUserId={user?.id}
+                    busyId={busyId}
+                    onPatch={patchUser}
+                    onDelete={deleteUser}
+                    onResetPassword={resetPassword}
+                  />
+                )) : <div className="empty-route-card">{loading ? "Loading users..." : "No accounts match this filter."}</div>}
+              </div>
+            </section>
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "fleet" ? (
+        <section className="admin-workspace-panel">
+          <Suspense fallback={<div className="empty-route-card">Loading fleet control...</div>}>
+            <MotiveTrackingPanel token={token} active={activeTab === "fleet"} />
+          </Suspense>
         </section>
-      </section>
+      ) : null}
+
+      {activeTab === "service" ? (
+        <section className="admin-workspace-panel">
+          <Suspense fallback={<div className="empty-route-card">Loading service map...</div>}>
+            <SafetyServiceTools token={token} mode="service" active={activeTab === "service"} />
+          </Suspense>
+        </section>
+      ) : null}
     </section>
   );
 }
