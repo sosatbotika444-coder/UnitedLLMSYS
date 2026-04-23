@@ -53,6 +53,7 @@ function dashboardVehicleMatches(vehicle, term) {
     vehicle.model,
     vehicle.vin,
     vehicle.license_plate_number,
+    vehicle.resolved_driver?.full_name,
     vehicle.driver?.full_name,
     vehicle.permanent_driver?.full_name,
     vehicle.location?.city,

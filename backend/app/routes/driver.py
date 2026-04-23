@@ -20,7 +20,7 @@ motive_client = MotiveClient(settings)
 
 
 def _vehicle_driver(vehicle: dict) -> dict | None:
-    return vehicle.get("driver") or vehicle.get("permanent_driver") or None
+    return vehicle.get("resolved_driver") or vehicle.get("driver") or vehicle.get("permanent_driver") or None
 
 
 def _driver_name(vehicle: dict) -> str:

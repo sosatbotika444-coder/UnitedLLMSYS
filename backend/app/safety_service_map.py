@@ -117,6 +117,7 @@ def _vehicle_options(snapshot: dict) -> list[dict]:
     options: list[dict] = []
     for vehicle in snapshot.get("vehicles") or []:
         location = vehicle.get("location") or {}
+        resolved_driver = vehicle.get("resolved_driver") or vehicle.get("driver") or vehicle.get("permanent_driver") or {}
         lat = location.get("lat")
         lon = location.get("lon")
         if lat is None or lon is None:
@@ -125,7 +126,7 @@ def _vehicle_options(snapshot: dict) -> list[dict]:
             "id": vehicle.get("id"),
             "number": vehicle.get("number") or f"Truck {vehicle.get('id')}",
             "label": vehicle.get("number") or f"Truck {vehicle.get('id')}",
-            "driver_name": _clean_text((vehicle.get("driver") or {}).get("full_name")) or _clean_text((vehicle.get("permanent_driver") or {}).get("full_name")),
+            "driver_name": _clean_text(resolved_driver.get("full_name")),
             "lat": lat,
             "lon": lon,
             "address": _clean_text(location.get("address")) or ", ".join(part for part in [_clean_text(location.get("city")), _clean_text(location.get("state"))] if part),

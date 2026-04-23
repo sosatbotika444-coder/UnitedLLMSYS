@@ -728,10 +728,13 @@ class MotiveClient:
             for item in hos_available_records
             if self._driver_name_key(item.get("driver_name"))
         }
+        hos_available_by_vehicle_key = self._group_first_by_vehicle_key(hos_available_records)
         hos_summaries_by_driver_id = self._group_by_driver(hos_summary_records)
         hos_summaries_by_driver_name = self._group_by_driver_name(hos_summary_records)
+        hos_summaries_by_vehicle_key = self._group_by_vehicle_key(hos_summary_records)
         hos_logs_by_driver_id = self._group_by_driver(hos_log_records)
         hos_logs_by_driver_name = self._group_by_driver_name(hos_log_records)
+        hos_logs_by_vehicle_key = self._group_by_vehicle_key(hos_log_records)
 
         location_v2_by_id: dict[int, dict] = {}
         location_v3_by_id: dict[int, dict] = {}
@@ -803,10 +806,13 @@ class MotiveClient:
                 scorecards_by_driver=scorecards_by_driver,
                 hos_available_by_driver_id=hos_available_by_driver_id,
                 hos_available_by_driver_name=hos_available_by_driver_name,
+                hos_available_by_vehicle_key=hos_available_by_vehicle_key,
                 hos_summaries_by_driver_id=hos_summaries_by_driver_id,
                 hos_summaries_by_driver_name=hos_summaries_by_driver_name,
+                hos_summaries_by_vehicle_key=hos_summaries_by_vehicle_key,
                 hos_logs_by_driver_id=hos_logs_by_driver_id,
                 hos_logs_by_driver_name=hos_logs_by_driver_name,
+                hos_logs_by_vehicle_key=hos_logs_by_vehicle_key,
             )
             vehicles.append(vehicle_summary)
 
@@ -834,9 +840,25 @@ class MotiveClient:
             for item in vehicles
             if (item.get("eld_hours") or {}).get("source") == "eld_device_only"
         )
+        matched_live_hos_keys = {
+            first_text((item.get("eld_hours") or {}).get("driver_id")) or self._driver_name_key((item.get("eld_hours") or {}).get("driver_name"))
+            for item in vehicles
+            if (item.get("eld_hours") or {}).get("source") == "motive_available_time"
+        }
+        matched_live_hos_keys.discard("")
+        matched_live_hos_keys.discard(None)
+        live_hos_keys = {
+            first_text(item.get("driver_id")) or self._driver_name_key(item.get("driver_name")) or f"row:{index}"
+            for index, item in enumerate(hos_available_records)
+        }
+        unmatched_live_hos_count = max(0, len(live_hos_keys) - len(matched_live_hos_keys))
         if eld_only_hos_count and not hos_matched_vehicle_count and not errors.get("hos_available_time"):
             warnings.append(
-                f"Motive returned {len(hos_available_records)} HOS available-time record(s), but none matched current trucks. ELD gateways are mapped; live HOS clocks need current Motive driver/HOS data."
+                f"Motive returned {len(hos_available_records)} live HOS clock(s), but none matched current trucks. Current Motive vehicle records have no assigned drivers, so only direct truck-linked HOS can be shown."
+            )
+        elif matched_live_hos_keys and unmatched_live_hos_count and not errors.get("hos_available_time"):
+            warnings.append(
+                f"Motive returned {len(hos_available_records)} live HOS clock(s); {len(matched_live_hos_keys)} matched current trucks and {unmatched_live_hos_count} remain unassigned in Motive."
             )
 
         recent_activity = {
@@ -1039,6 +1061,113 @@ class MotiveClient:
                 return {"id": None, "full_name": suffix}
         return None
 
+    def _match_key(self, value: object) -> str:
+        return re.sub(r"[^0-9a-z]+", "", str(value or "").strip().casefold())
+
+    def _append_match_key(self, keys: list[str], value: object) -> None:
+        key = self._match_key(value)
+        if not key:
+            return
+        if key not in keys:
+            keys.append(key)
+        if key.isdigit():
+            stripped = key.lstrip("0")
+            if stripped and stripped not in keys:
+                keys.append(stripped)
+
+    def _vehicle_match_keys(self, *values: object) -> list[str]:
+        keys: list[str] = []
+        for value in values:
+            text = first_text(value)
+            if not text:
+                continue
+            candidates = [text]
+            candidates.append(text.split("/", 1)[0].strip())
+            candidates.extend(re.split(r"[\s/#-]+", text))
+            candidates.extend(re.findall(r"\d+", text))
+            for candidate in candidates:
+                self._append_match_key(keys, candidate)
+        return keys
+
+    def _group_first_by_vehicle_key(self, items: list[dict]) -> dict[str, dict]:
+        grouped: dict[str, dict] = {}
+        for item in items:
+            for key in item.get("vehicle_keys") or []:
+                if key and key not in grouped:
+                    grouped[key] = item
+        return grouped
+
+    def _group_by_vehicle_key(self, items: list[dict]) -> dict[str, list[dict]]:
+        grouped: defaultdict[str, list[dict]] = defaultdict(list)
+        for item in items:
+            for key in item.get("vehicle_keys") or []:
+                if key:
+                    grouped[key].append(item)
+        return dict(grouped)
+
+    def _match_vehicle_record(self, vehicle_keys: list[str], by_key: dict[str, dict]) -> dict | None:
+        for key in vehicle_keys:
+            if key in by_key:
+                return by_key[key]
+        return None
+
+    def _match_vehicle_records(self, vehicle_keys: list[str], by_key: dict[str, list[dict]]) -> list[dict]:
+        matches: list[dict] = []
+        seen: set[tuple[object, object, object, object]] = set()
+        for key in vehicle_keys:
+            for item in by_key.get(key, []):
+                dedupe_key = (item.get("source"), item.get("id"), item.get("date"), item.get("driver_id"))
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                matches.append(item)
+        return matches
+
+    def _merge_records_unique(self, *collections: list[dict]) -> list[dict]:
+        merged: list[dict] = []
+        seen: set[tuple[object, object, object, object, object]] = set()
+        for collection in collections:
+            for item in collection or []:
+                dedupe_key = (
+                    item.get("source"),
+                    item.get("id"),
+                    item.get("date"),
+                    item.get("driver_id"),
+                    tuple(item.get("vehicle_ids") or []),
+                )
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                merged.append(item)
+        return merged
+
+    def _driver_from_hos_match(self, users_by_id: dict[int, dict], *sources: object) -> dict | None:
+        for source in sources:
+            if isinstance(source, list):
+                candidate_values = source
+            elif isinstance(source, dict):
+                candidate_values = [source]
+            else:
+                candidate_values = []
+            for item in candidate_values:
+                if not isinstance(item, dict):
+                    continue
+                driver_id = as_int(item.get("driver_id"))
+                base = users_by_id.get(driver_id, {}).copy() if driver_id is not None and driver_id in users_by_id else {}
+                full_name = first_text(base.get("full_name"), item.get("driver_name"))
+                if not full_name:
+                    continue
+                merged = dict(base)
+                merged.update({
+                    "id": driver_id if driver_id is not None else base.get("id"),
+                    "full_name": full_name,
+                    "duty_status": first_text(item.get("duty_status"), base.get("duty_status")),
+                    "driver_company_id": first_text(item.get("driver_company_id"), base.get("driver_company_id")),
+                    "inferred_from_hos": True,
+                })
+                return merged
+        return None
+
     def _hos_seconds(self, source: dict, *keys: str) -> int | None:
         if not isinstance(source, dict):
             return None
@@ -1097,9 +1226,11 @@ class MotiveClient:
         recap = unwrap_record(item.get("recap")) or unwrap_record(user.get("recap"))
         last_status = unwrap_record(item.get("last_hos_status")) or unwrap_record(user.get("last_hos_status"))
         last_cycle_reset = unwrap_record(item.get("last_cycle_reset")) or unwrap_record(user.get("last_cycle_reset"))
+        driver_company_id = first_text(driver.get("driver_company_id"), user.get("driver_company_id"), item.get("driver_company_id"))
         return {
             "driver_id": driver.get("id"),
             "driver_name": driver.get("full_name"),
+            "driver_company_id": driver_company_id,
             "duty_status": first_text(item.get("duty_status"), user.get("duty_status"), last_status.get("status")),
             "available_time": {
                 "drive_seconds": self._hos_seconds(available, "drive", "drive_seconds", "driving"),
@@ -1122,20 +1253,30 @@ class MotiveClient:
                 "start_time": first_text(last_cycle_reset.get("start_time")),
                 "end_time": first_text(last_cycle_reset.get("end_time")),
             },
+            "vehicle_keys": self._vehicle_match_keys(driver_company_id),
             "source": "motive_available_time",
         }
 
     def _normalize_hos_summary(self, raw: dict, users_by_id: dict[int, dict]) -> dict:
         item = unwrap_record(raw)
         driver = self._driver_from_hos_record(item, users_by_id)
+        vehicles = [unwrap_record(value) for value in (item.get("vehicles") or []) if isinstance(value, dict)]
+        if not vehicles and item.get("vehicle"):
+            vehicles = [unwrap_record(item.get("vehicle"))]
         violations = [unwrap_record(value) for value in (item.get("hos_violations") or item.get("violations") or []) if isinstance(value, dict)]
         form_errors = [unwrap_record(value) for value in (item.get("form_and_manner_errors") or item.get("form_errors") or []) if isinstance(value, dict)]
+        driver_company_id = first_text(driver.get("driver_company_id"), item.get("driver_company_id"))
+        vehicle_numbers = first_text(item.get("vehicle_numbers"), ", ".join(str(value.get("number")) for value in vehicles if value.get("number")))
+        vehicle_ids = [as_int(value.get("id")) for value in vehicles if as_int(value.get("id")) is not None]
         return {
             "id": as_int(item.get("id")),
             "driver_id": driver.get("id"),
             "driver_name": driver.get("full_name"),
+            "driver_company_id": driver_company_id,
             "date": first_text(item.get("date"), item.get("log_date")),
             "duty_status": first_text(item.get("duty_status"), item.get("status")),
+            "vehicle_numbers": vehicle_numbers,
+            "vehicle_ids": vehicle_ids,
             "off_duty_seconds": self._hos_seconds(item, "off_duty_duration", "off_duty_seconds"),
             "on_duty_seconds": self._hos_seconds(item, "on_duty_duration", "on_duty_seconds"),
             "sleeper_seconds": self._hos_seconds(item, "sleeper_duration", "sleeper_seconds"),
@@ -1151,6 +1292,7 @@ class MotiveClient:
                 }
                 for value in violations[:6]
             ],
+            "vehicle_keys": self._vehicle_match_keys(driver_company_id, vehicle_numbers, *vehicle_ids),
             "source": "motive_hours_of_service",
         }
 
@@ -1177,10 +1319,14 @@ class MotiveClient:
         form_errors = [unwrap_record(value) for value in (item.get("form_and_manner_errors") or item.get("form_errors") or []) if isinstance(value, dict)]
         events = [self._normalize_hos_log_event(value) for value in (item.get("events") or []) if isinstance(value, dict)]
         signed_at = first_text(item.get("driver_signed_at"), item.get("signed_at"), item.get("certified_at"), item.get("driver_signature_at"))
+        driver_company_id = first_text(driver.get("driver_company_id"), item.get("driver_company_id"))
+        vehicle_numbers = first_text(item.get("vehicle_numbers"), ", ".join(str(value.get("number")) for value in vehicles if value.get("number")))
+        vehicle_ids = [as_int(value.get("id")) for value in vehicles if as_int(value.get("id")) is not None]
         return {
             "id": as_int(item.get("id")),
             "driver_id": driver.get("id"),
             "driver_name": driver.get("full_name"),
+            "driver_company_id": driver_company_id,
             "date": first_text(item.get("date"), item.get("log_date")),
             "start_date": first_text(item.get("start_date"), item.get("start_time")),
             "end_date": first_text(item.get("end_date"), item.get("end_time")),
@@ -1190,8 +1336,8 @@ class MotiveClient:
             "cycle": first_text(item.get("cycle")),
             "time_zone": first_text(item.get("time_zone")),
             "eld_mode": first_text(item.get("eld_mode")),
-            "vehicle_numbers": first_text(item.get("vehicle_numbers"), ", ".join(str(value.get("number")) for value in vehicles if value.get("number"))),
-            "vehicle_ids": [as_int(value.get("id")) for value in vehicles if as_int(value.get("id")) is not None],
+            "vehicle_numbers": vehicle_numbers,
+            "vehicle_ids": vehicle_ids,
             "total_miles": as_float(item.get("total_miles")),
             "off_duty_seconds": self._hos_seconds(item, "off_duty_duration", "off_duty_seconds"),
             "on_duty_seconds": self._hos_seconds(item, "on_duty_duration", "on_duty_seconds"),
@@ -1202,6 +1348,7 @@ class MotiveClient:
             "form_error_count": len(form_errors) or as_int(item.get("form_error_count")) or 0,
             "event_count": len(events),
             "events": events[:8],
+            "vehicle_keys": self._vehicle_match_keys(driver_company_id, vehicle_numbers, *vehicle_ids),
             "source": "motive_logs",
         }
 
@@ -1660,10 +1807,13 @@ class MotiveClient:
         scorecards_by_driver: dict[int, dict],
         hos_available_by_driver_id: dict[int, dict],
         hos_available_by_driver_name: dict[str, dict],
+        hos_available_by_vehicle_key: dict[str, dict],
         hos_summaries_by_driver_id: dict[int, list[dict]],
         hos_summaries_by_driver_name: dict[str, list[dict]],
+        hos_summaries_by_vehicle_key: dict[str, list[dict]],
         hos_logs_by_driver_id: dict[int, list[dict]],
         hos_logs_by_driver_name: dict[str, list[dict]],
+        hos_logs_by_vehicle_key: dict[str, list[dict]],
     ) -> dict:
         current_driver = self._normalize_embedded_driver(base.get("current_driver"), users_by_id)
         if not current_driver:
@@ -1671,6 +1821,17 @@ class MotiveClient:
         permanent_driver = self._normalize_embedded_driver(base.get("permanent_driver"), users_by_id)
         driver_hint = self._driver_name_from_vehicle_number(base.get("number"), current_v2.get("number"))
         driver_candidates = [current_driver, permanent_driver, driver_hint]
+        vehicle_keys = self._vehicle_match_keys(
+            vehicle_id,
+            base.get("number"),
+            current_v2.get("number"),
+            base.get("vin"),
+            current_v2.get("vin"),
+            base.get("license_plate_number"),
+            current_v2.get("license_plate_number"),
+            base.get("license_plate_state"),
+            current_v2.get("license_plate_state"),
+        )
         availability_details = unwrap_record(base.get("availability_details"))
         metric_units = bool(base.get("metric_units"))
         merged_eld = eld_device or self._normalize_eld_device(base.get("eld_device")) or (current_location or {}).get("eld_device")
@@ -1680,10 +1841,27 @@ class MotiveClient:
                 driver_score = scorecards_by_driver[candidate["id"]]
                 break
         hos_available = self._match_driver_record(driver_candidates, hos_available_by_driver_id, hos_available_by_driver_name)
-        hos_summaries = sort_by_recent(self._match_driver_records(driver_candidates, hos_summaries_by_driver_id, hos_summaries_by_driver_name), "date")
-        hos_logs = sort_by_recent(self._match_driver_records(driver_candidates, hos_logs_by_driver_id, hos_logs_by_driver_name), "date", "end_date", "updated_at")
+        if not hos_available:
+            hos_available = self._match_vehicle_record(vehicle_keys, hos_available_by_vehicle_key)
+        hos_summaries = sort_by_recent(
+            self._merge_records_unique(
+                self._match_driver_records(driver_candidates, hos_summaries_by_driver_id, hos_summaries_by_driver_name),
+                self._match_vehicle_records(vehicle_keys, hos_summaries_by_vehicle_key),
+            ),
+            "date",
+        )
+        hos_logs = sort_by_recent(
+            self._merge_records_unique(
+                self._match_driver_records(driver_candidates, hos_logs_by_driver_id, hos_logs_by_driver_name),
+                self._match_vehicle_records(vehicle_keys, hos_logs_by_vehicle_key),
+            ),
+            "date",
+            "end_date",
+            "updated_at",
+        )
+        resolved_driver = current_driver or permanent_driver or self._driver_from_hos_match(users_by_id, hos_available, hos_summaries, hos_logs)
         eld_hours = self._build_eld_hours_summary(
-            driver=current_driver or permanent_driver or driver_hint,
+            driver=resolved_driver or driver_hint,
             availability=hos_available,
             hos_summaries=hos_summaries,
             hos_logs=hos_logs,
@@ -1785,6 +1963,8 @@ class MotiveClient:
             "ifta_enabled": as_bool(base.get("ifta")),
             "driver": current_driver,
             "permanent_driver": permanent_driver,
+            "resolved_driver": resolved_driver,
+            "driver_source": "current_driver" if current_driver else "permanent_driver" if permanent_driver else "hos_inferred" if resolved_driver else "",
             "driver_scorecard": driver_score,
             "eld_device": merged_eld,
             "eld_hours": eld_hours,
@@ -1830,7 +2010,7 @@ class MotiveClient:
             "moving_vehicles": len(moving_vehicles),
             "stopped_vehicles": max(0, len(located_vehicles) - len(moving_vehicles)),
             "stale_vehicles": len(stale_vehicles),
-            "vehicles_with_driver": sum(1 for item in vehicles if item.get("driver")),
+            "vehicles_with_driver": sum(1 for item in vehicles if item.get("resolved_driver") or item.get("driver")),
             "low_fuel_vehicles": len(low_fuel_vehicles),
             "vehicles_with_faults": len(vehicles_with_faults),
             "active_fault_codes": sum(1 for item in faults if (item.get("status") or "").lower() not in {"resolved", "inactive", "closed"}),

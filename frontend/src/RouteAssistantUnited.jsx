@@ -240,7 +240,7 @@ function includeSelectedVehicle(vehicles, selectedVehicle) {
 }
 
 function vehicleDriver(vehicle) {
-  return vehicle?.driver || vehicle?.permanent_driver || null;
+  return vehicle?.resolved_driver || vehicle?.driver || vehicle?.permanent_driver || null;
 }
 
 function vehicleDriverName(vehicle) {
@@ -281,7 +281,7 @@ function findMatchingLoadRow(vehicle, loadRows) {
     if (directMatch) return directMatch;
   }
   const truckCandidates = [vehicle.number, vehicle.vin, vehicle.license_plate_number].map(normalizeText).filter(Boolean);
-  const driverCandidates = [vehicle?.driver?.full_name, vehicle?.permanent_driver?.full_name].map(normalizeText).filter(Boolean);
+  const driverCandidates = [vehicle?.resolved_driver?.full_name, vehicle?.driver?.full_name, vehicle?.permanent_driver?.full_name].map(normalizeText).filter(Boolean);
 
   return loadRows.find((row) => {
     const rowTruck = normalizeText(row?.truck);

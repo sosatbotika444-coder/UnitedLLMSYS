@@ -550,7 +550,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   </div>
 
                   <div className="motive-detail-list">
-                    <div><span>Driver</span><strong>{currentVehicle.driver?.full_name || currentVehicle.permanent_driver?.full_name || "Unassigned"}</strong><small>{currentVehicle.driver?.email || currentVehicle.driver?.phone || currentVehicle.permanent_driver?.email || "No driver contact"}</small></div>
+                    <div><span>Driver</span><strong>{currentVehicle.resolved_driver?.full_name || currentVehicle.driver?.full_name || currentVehicle.permanent_driver?.full_name || "Unassigned"}</strong><small>{currentVehicle.resolved_driver?.email || currentVehicle.resolved_driver?.phone || currentVehicle.driver?.email || currentVehicle.driver?.phone || currentVehicle.permanent_driver?.email || "No driver contact"}</small></div>
                     <div><span>Vehicle</span><strong>{[currentVehicle.year, currentVehicle.make, currentVehicle.model].filter(Boolean).join(" ") || "Unknown unit"}</strong><small>{currentVehicle.license_plate_number ? `${currentVehicle.license_plate_state || ""} ${currentVehicle.license_plate_number}`.trim() : "No plate"}</small></div>
                     <div><span>ELD / HOS</span><strong>{currentVehicle.eld_device?.identifier || currentEldHours.source || "Unavailable"}</strong><small>{currentEldHours.summary || currentVehicle.eld_device?.model || "No gateway model"}</small></div>
                     <div><span>Location</span><strong>{currentVehicle.location?.address || [currentVehicle.location?.city, currentVehicle.location?.state].filter(Boolean).join(", ") || "Unknown"}</strong><small>{formatCoordinates(currentVehicle.location)}</small></div>

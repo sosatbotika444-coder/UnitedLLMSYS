@@ -142,6 +142,7 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
     shift_remaining_seconds = eld_available.get("shift_seconds")
     cycle_remaining_seconds = eld_available.get("cycle_seconds")
     driver_scorecard = vehicle.get("driver_scorecard") or {}
+    resolved_driver = vehicle.get("resolved_driver") or vehicle.get("driver") or vehicle.get("permanent_driver") or {}
     location = vehicle.get("location") or {}
 
     active_faults = int(fault_summary.get("active_count") or 0)
@@ -370,7 +371,7 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
             tag="HOS warning",
             action="Confirm remaining drive, shift, and cycle time before assigning the next load.",
         )
-    elif coverage.get("hos_clocks_live") and vehicle.get("driver") and eld_hours.get("status") in {"unavailable", "no_hos_clock"}:
+    elif coverage.get("hos_clocks_live") and resolved_driver and eld_hours.get("status") in {"unavailable", "no_hos_clock"}:
         add_factor(
             6,
             "No HOS clock",
@@ -443,8 +444,8 @@ def _score_vehicle(vehicle: dict, coverage: dict[str, bool]) -> dict:
     return {
         "id": vehicle.get("id"),
         "number": _clean_text(vehicle.get("number")) or f"Truck {vehicle.get('id')}",
-        "driver_name": _clean_text((vehicle.get("driver") or {}).get("full_name")) or _clean_text((vehicle.get("permanent_driver") or {}).get("full_name")) or "Unassigned",
-        "driver_contact": _clean_text((vehicle.get("driver") or {}).get("phone")) or _clean_text((vehicle.get("driver") or {}).get("email")) or _clean_text((vehicle.get("permanent_driver") or {}).get("phone")) or _clean_text((vehicle.get("permanent_driver") or {}).get("email")),
+        "driver_name": _clean_text(resolved_driver.get("full_name")) or "Unassigned",
+        "driver_contact": _clean_text(resolved_driver.get("phone")) or _clean_text(resolved_driver.get("email")),
         "vehicle_label": _vehicle_label(vehicle),
         "vin": _clean_text(vehicle.get("vin")),
         "status": _clean_text(vehicle.get("status")) or _clean_text(vehicle.get("availability_status")) or "Unknown",

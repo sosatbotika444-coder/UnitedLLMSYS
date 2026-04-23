@@ -20,7 +20,7 @@ function markerLabel(vehicle) {
 }
 
 function driverName(vehicle) {
-  return vehicle.driver?.full_name || vehicle.permanent_driver?.full_name || "No driver";
+  return vehicle.resolved_driver?.full_name || vehicle.driver?.full_name || vehicle.permanent_driver?.full_name || "No driver";
 }
 
 function markerTitle(vehicle) {
