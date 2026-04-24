@@ -14613,6 +14613,34 @@ body.theme-dark .full-road-health-badge.tone-dark {
   margin-bottom: 0 !important;
 }
 
+.auth-shift-alarm-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(255, 247, 237, 0.96));
+}
+
+.auth-shift-alarm-banner > div {
+  display: grid;
+  gap: 4px;
+}
+
+.auth-shift-alarm-banner strong {
+  color: #991b1b;
+  font-size: 15px;
+}
+
+.auth-shift-alarm-banner span {
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .auth-shift-form {
   display: grid;
   gap: 12px !important;

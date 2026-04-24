@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
 
@@ -135,6 +135,8 @@ export default function AuthShiftPlanner() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [notice, setNotice] = useState("");
   const [showVerified, setShowVerified] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
+  const [activeAlarm, setActiveAlarm] = useState({ ids: [], message: "" });
   const [notificationPermission, setNotificationPermission] = useState(() => (
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
   ));
@@ -144,6 +146,10 @@ export default function AuthShiftPlanner() {
     dueAt: offsetMinutes(60),
     notes: "",
   }));
+  const audioContextRef = useRef(null);
+  const alarmIntervalRef = useRef(null);
+  const titleIntervalRef = useRef(null);
+  const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : "");
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -156,6 +162,18 @@ export default function AuthShiftPlanner() {
     if (typeof window === "undefined") return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => () => {
+    if (alarmIntervalRef.current) {
+      window.clearInterval(alarmIntervalRef.current);
+    }
+    if (titleIntervalRef.current) {
+      window.clearInterval(titleIntervalRef.current);
+    }
+    if (typeof document !== "undefined") {
+      document.title = baseTitleRef.current;
+    }
+  }, []);
 
   useEffect(() => {
     const readyToAlert = items.filter((item) => {
@@ -176,7 +194,17 @@ export default function AuthShiftPlanner() {
     setItems((current) => current.map((item) => (
       readyIds.has(item.id) ? { ...item, alertedAt } : item
     )));
-    setNotice(plannerNoticeLabel(readyToAlert[0]));
+    setNotice(readyToAlert.length === 1 ? plannerNoticeLabel(readyToAlert[0]) : `${plannerNoticeLabel(readyToAlert[0])} + ${readyToAlert.length - 1} more`);
+    setActiveAlarm({
+      ids: readyToAlert.map((item) => item.id),
+      message: readyToAlert.length === 1
+        ? `${plannerNoticeLabel(readyToAlert[0])}.`
+        : `${plannerNoticeLabel(readyToAlert[0])}. Plus ${readyToAlert.length - 1} more overdue item${readyToAlert.length - 1 === 1 ? "" : "s"}.`,
+    });
+
+    if ("vibrate" in navigator && typeof navigator.vibrate === "function") {
+      navigator.vibrate([220, 120, 220, 120, 420]);
+    }
 
     if (notificationPermission === "granted" && typeof Notification !== "undefined") {
       readyToAlert.slice(0, 3).forEach((item) => {
@@ -190,6 +218,53 @@ export default function AuthShiftPlanner() {
       });
     }
   }, [items, nowMs, notificationPermission]);
+
+  useEffect(() => {
+    if (!activeAlarm.ids.length) {
+      if (alarmIntervalRef.current) {
+        window.clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
+      if (titleIntervalRef.current) {
+        window.clearInterval(titleIntervalRef.current);
+        titleIntervalRef.current = null;
+      }
+      if (typeof document !== "undefined") {
+        document.title = baseTitleRef.current;
+      }
+      return undefined;
+    }
+
+    let flip = false;
+    const ring = () => {
+      playAlarmSound();
+      if ("vibrate" in navigator && typeof navigator.vibrate === "function") {
+        navigator.vibrate([180, 80, 180]);
+      }
+    };
+
+    ring();
+    alarmIntervalRef.current = window.setInterval(ring, 7000);
+    titleIntervalRef.current = window.setInterval(() => {
+      if (typeof document === "undefined") return;
+      flip = !flip;
+      document.title = flip ? "Planner alarm" : baseTitleRef.current;
+    }, 1200);
+
+    return () => {
+      if (alarmIntervalRef.current) {
+        window.clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
+      if (titleIntervalRef.current) {
+        window.clearInterval(titleIntervalRef.current);
+        titleIntervalRef.current = null;
+      }
+      if (typeof document !== "undefined") {
+        document.title = baseTitleRef.current;
+      }
+    };
+  }, [activeAlarm]);
 
   const liveItems = useMemo(
     () => [...items]
@@ -236,6 +311,76 @@ export default function AuthShiftPlanner() {
 
   const notificationAvailable = notificationPermission !== "unsupported";
 
+  async function ensureAudioReady() {
+    if (typeof window === "undefined") return false;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return false;
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextCtor();
+    }
+
+    try {
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+      const ready = audioContextRef.current.state === "running";
+      setSoundReady(ready);
+      return ready;
+    } catch {
+      setSoundReady(false);
+      return false;
+    }
+  }
+
+  function playAlarmSound() {
+    const audioContext = audioContextRef.current;
+    if (!audioContext || audioContext.state !== "running") {
+      return;
+    }
+
+    const pattern = [0, 0.35, 0.7];
+    pattern.forEach((offset, index) => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = index === 2 ? "square" : "sine";
+      oscillator.frequency.setValueAtTime(index === 2 ? 980 : 760, audioContext.currentTime + offset);
+      gain.gain.setValueAtTime(0.0001, audioContext.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + offset + 0.26);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start(audioContext.currentTime + offset);
+      oscillator.stop(audioContext.currentTime + offset + 0.28);
+    });
+  }
+
+  async function primeAlertSystems({ askNotification = false } = {}) {
+    await ensureAudioReady();
+
+    if (
+      askNotification &&
+      notificationAvailable &&
+      notificationPermission === "default" &&
+      typeof Notification !== "undefined"
+    ) {
+      try {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+      } catch {
+        // Ignore permission errors and keep inline alerts active.
+      }
+    }
+  }
+
+  function clearAlarmForIds(idsToClear) {
+    if (!idsToClear.length) return;
+    setActiveAlarm((current) => {
+      const remainingIds = current.ids.filter((id) => !idsToClear.includes(id));
+      return remainingIds.length ? { ...current, ids: remainingIds } : { ids: [], message: "" };
+    });
+  }
+
   function resetDraft(kind = "task", minutes = 60) {
     setDraft({
       kind,
@@ -245,8 +390,9 @@ export default function AuthShiftPlanner() {
     });
   }
 
-  function addPlannerItem(event) {
+  async function addPlannerItem(event) {
     event.preventDefault();
+    await primeAlertSystems({ askNotification: true });
 
     const title = draft.title.trim();
     const due = readLocalDate(draft.dueAt);
@@ -279,7 +425,8 @@ export default function AuthShiftPlanner() {
     resetDraft(draft.kind, draft.kind === "break" ? 15 : 60);
   }
 
-  function quickBreak(minutes) {
+  async function quickBreak(minutes) {
+    await primeAlertSystems({ askNotification: true });
     const startedAt = new Date();
     const dueAt = new Date(startedAt.getTime() + minutes * 60000);
     const nextItem = {
@@ -307,6 +454,7 @@ export default function AuthShiftPlanner() {
   function finishItem(id) {
     const completedAt = new Date().toISOString();
     patchItem(id, () => ({ completedAt }));
+    clearAlarmForIds([id]);
     setNotice("Finish time saved. Verify the item to hide it from the live planner.");
   }
 
@@ -316,6 +464,7 @@ export default function AuthShiftPlanner() {
       completedAt: item.completedAt || verifiedAt,
       verifiedAt,
     }));
+    clearAlarmForIds([id]);
     setNotice("Item verified and hidden from the live planner.");
   }
 
@@ -328,26 +477,29 @@ export default function AuthShiftPlanner() {
         alertedAt: "",
       };
     });
+    clearAlarmForIds([id]);
     setNotice(`Planned finish moved by ${minutes} minutes.`);
   }
 
   function removeItem(id) {
     setItems((current) => current.filter((item) => item.id !== id));
+    clearAlarmForIds([id]);
   }
 
   async function requestAlerts() {
+    await ensureAudioReady();
     if (typeof Notification === "undefined") {
-      setNotice("Browser notifications are not available here, so inline alerts will be used.");
+      setNotice("Browser notifications are not available here, but sound and inline planner alarms are active.");
       return;
     }
 
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
     if (permission === "granted") {
-      setNotice("Browser alerts enabled. You will be notified when a planned finish time is reached.");
+      setNotice("Browser alerts and sound are enabled. You will be notified when a planned finish time is reached.");
       return;
     }
-    setNotice("Browser alerts were not enabled. Inline planner alerts will still work.");
+    setNotice("Browser alerts were not enabled. Sound and inline planner alerts will still work.");
   }
 
   return (
@@ -360,12 +512,13 @@ export default function AuthShiftPlanner() {
               <small className="auth-shift-alert-state">Alerts on</small>
             ) : (
               <button type="button" className="secondary-button auth-shift-alert-button" onClick={requestAlerts}>
-                Enable alerts
+                Enable alerts + sound
               </button>
             )
           ) : (
-            <small className="auth-shift-alert-state">Inline alerts only</small>
+            <small className="auth-shift-alert-state">Inline + sound only</small>
           )}
+          {soundReady ? <small className="auth-shift-alert-state">Sound ready</small> : null}
           <button type="button" className="secondary-button" onClick={() => setShowVerified((current) => !current)}>
             {showVerified ? "Hide archive" : `Archive (${verifiedItems.length})`}
           </button>
@@ -384,6 +537,17 @@ export default function AuthShiftPlanner() {
       {notice ? <div className="notice info auth-shift-notice">{notice}</div> : null}
       {plannerSummary.overdueCount ? (
         <div className="notice error auth-shift-notice">There {plannerSummary.overdueCount === 1 ? "is" : "are"} {plannerSummary.overdueCount} overdue planner item{plannerSummary.overdueCount === 1 ? "" : "s"}.</div>
+      ) : null}
+      {activeAlarm.ids.length ? (
+        <div className="auth-shift-alarm-banner" role="alert" aria-live="assertive">
+          <div>
+            <strong>Alarm is active</strong>
+            <span>{activeAlarm.message}</span>
+          </div>
+          <button type="button" className="primary-button" onClick={() => setActiveAlarm({ ids: [], message: "" })}>
+            Stop alarm
+          </button>
+        </div>
       ) : null}
 
       <form className="auth-shift-form" onSubmit={addPlannerItem}>
