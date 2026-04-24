@@ -7,6 +7,7 @@ from passlib.context import CryptContext
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.activity import record_activity_event
 from app.config import get_settings
 from app.database import get_db
 from app.models import User
@@ -14,6 +15,7 @@ from app.models import User
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 bearer_scheme = HTTPBearer()
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 settings = get_settings()
 DEPARTMENT_LABELS = {
     "admin": "Admin",
@@ -105,8 +107,47 @@ def assert_user_can_authenticate(user: User) -> None:
 
 def mark_user_login(db: Session, user: User) -> None:
     user.last_login_at = datetime.now(timezone.utc)
+    record_activity_event(
+        db,
+        user=user,
+        event_type="login",
+        event_name="Signed in",
+        page="auth",
+        workspace=user.department,
+        label=user.full_name or user.email,
+    )
     db.commit()
     db.refresh(user)
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if not credentials:
+        return None
+
+    try:
+        decode_options = {"verify_exp": settings.access_token_expire_minutes > 0}
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=["HS256"],
+            options=decode_options,
+        )
+        user_id = int(payload.get("sub", "0"))
+    except (JWTError, ValueError):
+        return None
+
+    user = db.get(User, user_id)
+    if not user:
+        return None
+
+    try:
+        assert_user_can_authenticate(user)
+    except HTTPException:
+        return None
+    return user
 
 
 def get_current_user(

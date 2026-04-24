@@ -4,6 +4,7 @@ import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
+import { readClickActivityTarget, setActivityContext, trackActivity } from "./activityTracker";
 import { getAutoDieselPrice } from "./priceSignals";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
@@ -1221,6 +1222,125 @@ export default function App() {
     .filter(Boolean);
   const activeSiteNav = sitePanel || (!user || !isFuelService || activeWorkspace === "command" ? "home" : "");
   const loadStatusTabs = ["All", ...statusOptions];
+  const activityView = useMemo(() => {
+    if (!user) {
+      return {
+        page: mode === "register" ? "auth-register" : "auth-login",
+        workspace: selectedDepartment,
+        label: `${getDepartmentMeta(selectedDepartment).label} ${mode === "register" ? "Register" : "Login"}`,
+      };
+    }
+
+    if (isAdminWorkspace) {
+      return {
+        page: "admin",
+        workspace: "access",
+        label: "Admin Panel",
+      };
+    }
+
+    if (isFuelService) {
+      return {
+        page: "fuel",
+        workspace: activeWorkspace,
+        label: activeWorkspaceMeta.label,
+      };
+    }
+
+    if (isDriverWorkspace) {
+      return {
+        page: "driver",
+        workspace: "workspace",
+        label: "Driver Workspace",
+      };
+    }
+
+    return {
+      page: activeDepartment || "workspace",
+      workspace: "workspace",
+      label: `${selectedDepartmentMeta.label} Workspace`,
+    };
+  }, [
+    activeDepartment,
+    activeWorkspace,
+    activeWorkspaceMeta.label,
+    isAdminWorkspace,
+    isDriverWorkspace,
+    isFuelService,
+    mode,
+    selectedDepartment,
+    selectedDepartmentMeta.label,
+    user,
+  ]);
+
+  useEffect(() => {
+    setActivityContext(activityView);
+  }, [activityView]);
+
+  useEffect(() => {
+    trackActivity({
+      token,
+      eventType: user ? "workspace_view" : "page_enter",
+      eventName: user ? "Opened workspace" : "Opened auth screen",
+      page: activityView.page,
+      workspace: activityView.workspace,
+      label: activityView.label,
+      throttleKey: `view:${user?.id || "guest"}:${activityView.page}:${activityView.workspace}:${mode}:${selectedDepartment}`,
+      throttleMs: 2500,
+    });
+  }, [activityView.label, activityView.page, activityView.workspace, mode, selectedDepartment, token, user]);
+
+  useEffect(() => {
+    function handleDocumentClick(event) {
+      const targetInfo = readClickActivityTarget(event.target);
+      if (!targetInfo) {
+        return;
+      }
+
+      trackActivity({
+        token,
+        eventType: "click",
+        eventName: "Clicked control",
+        label: targetInfo.label,
+        details: targetInfo.details,
+        throttleKey: `click:${user?.id || "guest"}:${activityView.page}:${activityView.workspace}:${targetInfo.label}`,
+        throttleMs: 700,
+      });
+    }
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [activityView.page, activityView.workspace, token, user?.id]);
+
+  useEffect(() => {
+    if (!token || !user) {
+      return undefined;
+    }
+
+    function sendHeartbeat() {
+      if (document.hidden) {
+        return;
+      }
+      trackActivity({
+        token,
+        eventType: "heartbeat",
+        eventName: "Still active",
+        page: activityView.page,
+        workspace: activityView.workspace,
+        label: user.full_name || user.email || "User",
+        throttleKey: `heartbeat:${user.id}:${activityView.page}:${activityView.workspace}`,
+        throttleMs: 30000,
+      });
+    }
+
+    sendHeartbeat();
+    const intervalId = window.setInterval(sendHeartbeat, 60000);
+    document.addEventListener("visibilitychange", sendHeartbeat);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", sendHeartbeat);
+    };
+  }, [activityView.page, activityView.workspace, token, user]);
 
   function updateLocalRow(id, field, value) {
     setRows((currentRows) =>
@@ -1467,6 +1587,16 @@ export default function App() {
   }
 
   function logout() {
+    trackActivity({
+      token,
+      eventType: "session_end",
+      eventName: "Signed out",
+      page: activityView.page,
+      workspace: activityView.workspace,
+      label: user?.full_name || user?.email || "User",
+      throttleKey: `logout:${user?.id || "guest"}`,
+      throttleMs: 1000,
+    });
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setToken("");

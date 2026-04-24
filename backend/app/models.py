@@ -22,6 +22,24 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class UserActivityEvent(Base):
+    __tablename__ = "user_activity_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
+    actor_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    actor_email: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    department: Mapped[str] = mapped_column(String(32), default="guest", nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(120), default="", nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), default="activity", nullable=False, index=True)
+    event_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    page: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    workspace: Mapped[str] = mapped_column(String(80), default="", nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
 class SafetyNote(Base):
     __tablename__ = "safety_notes"
 

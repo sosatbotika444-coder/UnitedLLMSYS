@@ -12442,6 +12442,7 @@ body.theme-dark .fuel-auth-filter-card > span {
 .admin-department-fuel { background: #eff6ff; color: #1d4ed8; }
 .admin-department-safety { background: #fefce8; color: #a16207; }
 .admin-department-driver { background: #f1f5f9; color: #334155; }
+.admin-department-guest { background: #f8fafc; color: #475569; }
 .admin-status-active { background: #ecfdf5; color: #047857; }
 .admin-status-banned { background: #fee2e2; color: #991b1b; }
 .admin-status-self { background: #e0f2fe; color: #075985; }
@@ -12460,12 +12461,93 @@ body.theme-dark .fuel-auth-filter-card > span {
   justify-content: flex-start;
 }
 
+.admin-live-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+}
+
+.admin-live-panel,
+.admin-live-session-card,
+.admin-live-feed-item {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 16px 35px rgba(15, 23, 42, 0.07);
+}
+
+.admin-live-panel {
+  padding: 18px;
+}
+
+.admin-live-session-list,
+.admin-live-feed {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-live-session-card,
+.admin-live-feed-item {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.admin-live-session-head,
+.admin-live-feed-head,
+.admin-live-feed-meta,
+.admin-live-session-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.admin-live-identity {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-live-identity strong {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.admin-live-identity small,
+.admin-live-feed-head span,
+.admin-live-feed-meta span,
+.admin-live-session-meta span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-live-session-meta strong,
+.admin-live-feed-meta strong {
+  color: #0f172a;
+}
+
+.admin-live-session-card p,
+.admin-live-feed-item p {
+  color: #334155;
+  margin: 0;
+}
+
+.admin-live-feed-meta {
+  justify-content: flex-start;
+}
+
 body.theme-dark .admin-panel-head,
 body.theme-dark .admin-stat-card,
 body.theme-dark .admin-insight-panel,
 body.theme-dark .admin-create-panel,
 body.theme-dark .admin-users-panel,
-body.theme-dark .admin-user-row {
+body.theme-dark .admin-user-row,
+body.theme-dark .admin-live-panel,
+body.theme-dark .admin-live-session-card,
+body.theme-dark .admin-live-feed-item {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.22);
   box-shadow: none;
@@ -12477,6 +12559,9 @@ body.theme-dark .admin-insight-panel h3,
 body.theme-dark .admin-create-panel h3,
 body.theme-dark .admin-stat-card strong,
 body.theme-dark .admin-user-identity strong,
+body.theme-dark .admin-live-identity strong,
+body.theme-dark .admin-live-session-meta strong,
+body.theme-dark .admin-live-feed-meta strong,
 body.theme-dark .admin-pill-list b,
 body.theme-dark .admin-user-activity-grid strong {
   color: #f8fafc;
@@ -12486,7 +12571,13 @@ body.theme-dark .admin-panel-head p,
 body.theme-dark .admin-stat-card span,
 body.theme-dark .admin-stat-card small,
 body.theme-dark .admin-user-identity small,
-body.theme-dark .admin-user-activity-grid span {
+body.theme-dark .admin-user-activity-grid span,
+body.theme-dark .admin-live-identity small,
+body.theme-dark .admin-live-feed-head span,
+body.theme-dark .admin-live-feed-meta span,
+body.theme-dark .admin-live-session-meta span,
+body.theme-dark .admin-live-session-card p,
+body.theme-dark .admin-live-feed-item p {
   color: #cbd5e1;
 }
 
@@ -12508,7 +12599,8 @@ body.theme-dark .admin-filter-row select {
   }
 
   .admin-management-grid,
-  .admin-insight-grid {
+  .admin-insight-grid,
+  .admin-live-grid {
     grid-template-columns: 1fr;
   }
 }

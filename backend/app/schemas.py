@@ -62,6 +62,54 @@ class AdminUserRow(UserResponse):
     chat_message_count: int = 0
 
 
+class ActivityEventCreate(BaseModel):
+    sessionId: str = Field(min_length=8, max_length=120)
+    eventType: str = Field(min_length=2, max_length=64)
+    eventName: str = Field(default="", max_length=120)
+    page: str = Field(default="", max_length=255)
+    workspace: str = Field(default="", max_length=80)
+    label: str = Field(default="", max_length=255)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActivityEventResponse(BaseModel):
+    id: int
+    actorName: str = ""
+    actorEmail: str = ""
+    department: str = ""
+    sessionId: str = ""
+    eventType: str = ""
+    eventName: str = ""
+    page: str = ""
+    workspace: str = ""
+    label: str = ""
+    summary: str = ""
+    details: dict[str, Any] = Field(default_factory=dict)
+    createdAt: datetime | None = None
+
+
+class AdminLiveUser(BaseModel):
+    actorName: str = ""
+    actorEmail: str = ""
+    department: str = ""
+    sessionId: str = ""
+    currentPage: str = ""
+    currentWorkspace: str = ""
+    lastEventType: str = ""
+    lastEventLabel: str = ""
+    lastSeenAt: datetime | None = None
+    isGuest: bool = False
+
+
+class AdminLiveSnapshot(BaseModel):
+    onlineSessions: int = 0
+    guestSessions: int = 0
+    actionsLastHour: int = 0
+    loginsLast24Hours: int = 0
+    onlineUsers: list[AdminLiveUser] = Field(default_factory=list)
+    recentEvents: list[ActivityEventResponse] = Field(default_factory=list)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { setActivityContext, trackActivity } from "./activityTracker";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
@@ -12,6 +13,7 @@ const departmentLabels = {
 };
 const adminWorkspaceTabs = [
   { id: "access", label: "Accounts", detail: "Users, roles, bans, and system stats" },
+  { id: "live", label: "Live", detail: "Who is online, what they opened, and what they clicked" },
   { id: "fleet", label: "Fleet", detail: "All trucks, tracking, HOS, and live map" },
   { id: "service", label: "Service", detail: "Fuel service map and nearby support" }
 ];
@@ -66,6 +68,23 @@ function formatDate(value) {
   }).format(date);
 }
 
+function formatRelativeTime(value) {
+  if (!value) return "just now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "just now";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000));
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 function StatCard({ label, value, detail, tone = "neutral" }) {
   return (
     <article className={`admin-stat-card admin-stat-${tone}`}>
@@ -78,6 +97,50 @@ function StatCard({ label, value, detail, tone = "neutral" }) {
 
 function DepartmentBadge({ department }) {
   return <span className={`admin-department-badge admin-department-${department || "fuel"}`}>{departmentLabels[department] || department || "Team"}</span>;
+}
+
+function AdminLiveSessionCard({ session }) {
+  return (
+    <article className="admin-live-session-card">
+      <div className="admin-live-session-head">
+        <div className="admin-live-identity">
+          <strong>{session.actorName || "Visitor"}</strong>
+          <small>{session.actorEmail || (session.isGuest ? "Guest session" : "No email")}</small>
+        </div>
+        {session.isGuest ? <span className="admin-department-badge admin-department-guest">Guest</span> : <DepartmentBadge department={session.department} />}
+      </div>
+
+      <div className="admin-live-session-meta">
+        <span><strong>{session.currentWorkspace || session.currentPage || "Site"}</strong> current view</span>
+        <span><strong>{formatRelativeTime(session.lastSeenAt)}</strong> last seen</span>
+      </div>
+
+      <p>{session.lastEventLabel || "Active on the site now."}</p>
+    </article>
+  );
+}
+
+function AdminActivityFeedItem({ event }) {
+  return (
+    <article className="admin-live-feed-item">
+      <div className="admin-live-feed-head">
+        <div className="admin-live-identity">
+          <strong>{event.actorName || "Visitor"}</strong>
+          <small>{event.actorEmail || (event.department ? departmentLabels[event.department] || event.department : "Guest session")}</small>
+        </div>
+        <span>{formatRelativeTime(event.createdAt)}</span>
+      </div>
+
+      <p>{event.summary || event.eventName || event.label || event.eventType}</p>
+
+      <div className="admin-live-feed-meta">
+        {event.department ? <span className={`admin-department-badge admin-department-${event.department}`}>{departmentLabels[event.department] || event.department}</span> : null}
+        {event.workspace ? <span>{event.workspace}</span> : null}
+        {event.page ? <span>{event.page}</span> : null}
+        <span>{formatDate(event.createdAt)}</span>
+      </div>
+    </article>
+  );
 }
 
 function UserRow({ user, currentUserId, busyId, onPatch, onDelete, onResetPassword }) {
@@ -166,10 +229,12 @@ function UserRow({ user, currentUserId, busyId, onPatch, onDelete, onResetPasswo
 export default function AdminPanel({ token, user }) {
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
+  const [liveSnapshot, setLiveSnapshot] = useState(null);
   const [activeTab, setActiveTab] = useState("access");
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [filters, setFilters] = useState({ search: "", department: "all", status: "all" });
   const [loading, setLoading] = useState(false);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -190,6 +255,12 @@ export default function AdminPanel({ token, user }) {
     setUsers(Array.isArray(data) ? data : []);
   }, [filters, token]);
 
+  const loadLive = useCallback(async () => {
+    if (!token) return;
+    const data = await apiRequest("/admin/activity/live", {}, token);
+    setLiveSnapshot(data);
+  }, [token]);
+
   const refreshAll = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -206,6 +277,50 @@ export default function AdminPanel({ token, user }) {
     refreshAll();
   }, [refreshAll]);
 
+  useEffect(() => {
+    const activeTabMeta = adminWorkspaceTabs.find((tab) => tab.id === activeTab) || adminWorkspaceTabs[0];
+    setActivityContext({ page: "admin", workspace: activeTabMeta.id });
+    trackActivity({
+      token,
+      eventType: "workspace_view",
+      eventName: "Opened admin tab",
+      page: "admin",
+      workspace: activeTabMeta.id,
+      label: activeTabMeta.label,
+      throttleKey: `admin-tab:${user?.id || "guest"}:${activeTabMeta.id}`,
+      throttleMs: 1200,
+    });
+  }, [activeTab, token, user?.id]);
+
+  useEffect(() => {
+    if (activeTab !== "live" || !token) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function pollLive() {
+      try {
+        const data = await apiRequest("/admin/activity/live", {}, token);
+        if (!cancelled) {
+          setLiveSnapshot(data);
+          setError("");
+        }
+      } catch (liveError) {
+        if (!cancelled) {
+          setError(liveError.message);
+        }
+      }
+    }
+
+    pollLive();
+    const intervalId = window.setInterval(pollLive, 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeTab, token]);
+
   const quickStats = useMemo(() => {
     const usersStats = overview?.users || {};
     const operations = overview?.operations || {};
@@ -218,6 +333,27 @@ export default function AdminPanel({ token, user }) {
       { label: "Safety docs", value: operations.safetyDocuments || 0, detail: "Uploaded files", tone: "blue" }
     ];
   }, [overview]);
+
+  const liveStats = useMemo(() => {
+    return [
+      { label: "Online now", value: liveSnapshot?.onlineSessions || 0, detail: "Active sessions in the last 5 minutes", tone: "green" },
+      { label: "Actions (1h)", value: liveSnapshot?.actionsLastHour || 0, detail: "Clicks, views, and sign-ins", tone: "blue" },
+      { label: "Guest sessions", value: liveSnapshot?.guestSessions || 0, detail: "Anonymous visitors on the site", tone: "amber" },
+      { label: "Logins (24h)", value: liveSnapshot?.loginsLast24Hours || 0, detail: "Successful sign-ins across departments", tone: "dark" },
+    ];
+  }, [liveSnapshot]);
+
+  async function refreshLivePanel() {
+    setLiveLoading(true);
+    setError("");
+    try {
+      await loadLive();
+    } catch (liveError) {
+      setError(liveError.message);
+    } finally {
+      setLiveLoading(false);
+    }
+  }
 
   async function createUser(event) {
     event.preventDefault();
@@ -307,7 +443,9 @@ export default function AdminPanel({ token, user }) {
           <h2>Admin Panel</h2>
           <p>Accounts, bans, roles, passwords, and live system statistics.</p>
         </div>
-        <button className="primary-button" type="button" onClick={refreshAll} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</button>
+        <button className="primary-button" type="button" onClick={activeTab === "live" ? refreshLivePanel : refreshAll} disabled={activeTab === "live" ? liveLoading : loading}>
+          {(activeTab === "live" ? liveLoading : loading) ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
 
       {message ? <div className="notice success inline-notice">{message}</div> : null}
@@ -396,6 +534,42 @@ export default function AdminPanel({ token, user }) {
                 )) : <div className="empty-route-card">{loading ? "Loading users..." : "No accounts match this filter."}</div>}
               </div>
             </section>
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "live" ? (
+        <div className="admin-tab-panel">
+          <section className="admin-stat-grid admin-live-stat-grid">
+            {liveStats.map((stat) => <StatCard key={stat.label} {...stat} value={formatNumber(stat.value)} />)}
+          </section>
+
+          <section className="admin-live-grid">
+            <article className="admin-live-panel">
+              <div className="panel-head">
+                <h3>Who is online</h3>
+                <span>Auto refresh every 8 seconds</span>
+              </div>
+
+              <div className="admin-live-session-list">
+                {liveSnapshot?.onlineUsers?.length ? liveSnapshot.onlineUsers.map((session) => (
+                  <AdminLiveSessionCard key={session.sessionId || `${session.actorEmail}-${session.lastSeenAt}`} session={session} />
+                )) : <div className="empty-route-card">No active sessions right now.</div>}
+              </div>
+            </article>
+
+            <article className="admin-live-panel">
+              <div className="panel-head">
+                <h3>Recent activity</h3>
+                <span>Latest actions across the site</span>
+              </div>
+
+              <div className="admin-live-feed">
+                {liveSnapshot?.recentEvents?.length ? liveSnapshot.recentEvents.map((event) => (
+                  <AdminActivityFeedItem key={event.id} event={event} />
+                )) : <div className="empty-route-card">No recent activity yet.</div>}
+              </div>
+            </article>
           </section>
         </div>
       ) : null}

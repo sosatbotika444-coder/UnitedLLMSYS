@@ -5,6 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.activity import build_live_activity_snapshot
 from app.auth import hash_password, normalize_email, normalize_username, require_user_department
 from app.database import get_db
 from app.models import (
@@ -18,7 +19,7 @@ from app.models import (
     TeamChatMessage,
     User,
 )
-from app.schemas import AdminPasswordReset, AdminUserCreate, AdminUserRow, AdminUserUpdate
+from app.schemas import AdminLiveSnapshot, AdminPasswordReset, AdminUserCreate, AdminUserRow, AdminUserUpdate
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -162,6 +163,15 @@ def list_admin_users(
 
     users = db.scalars(statement.order_by(User.id.desc()).limit(limit)).all()
     return _users_with_counts(db, users)
+
+
+@router.get("/activity/live", response_model=AdminLiveSnapshot)
+def admin_live_activity(
+    limit: int = Query(default=60, ge=10, le=120),
+    _: User = Depends(require_user_department("admin")),
+    db: Session = Depends(get_db),
+):
+    return build_live_activity_snapshot(db, limit=limit)
 
 
 @router.post("/users", response_model=AdminUserRow, status_code=status.HTTP_201_CREATED)
