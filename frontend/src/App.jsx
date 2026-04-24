@@ -1529,31 +1529,6 @@ export default function App() {
 
         <main className={`auth-shell site-auth-shell ${isMobileViewport ? "mobile-auth-shell" : ""}`}>
           <section className="auth-showcase auth-showcase-planner">
-            <div className="auth-showcase-orbit" />
-
-            <div className="auth-showcase-copy">
-              <span className="brand-pill">United Lane LLC</span>
-              <h1>Log in fast and keep your shift organized before the day gets noisy.</h1>
-              <p>
-                Use the planner below to write what needs to be done, set finish times, track breaks, and verify completed work so the live board stays clean.
-              </p>
-            </div>
-
-            <div className="auth-showcase-grid">
-              <article>
-                <strong>Auto start time</strong>
-                <span>Every task and break saves its start time automatically the moment it is added.</span>
-              </article>
-              <article>
-                <strong>Finish alerts</strong>
-                <span>When the planned end time arrives, the planner shows an alert and can send a browser notification.</span>
-              </article>
-              <article>
-                <strong>Verify and hide</strong>
-                <span>Completed work moves out of the live board after verification so only real open items stay visible.</span>
-              </article>
-            </div>
-
             <AuthShiftPlanner />
           </section>
 

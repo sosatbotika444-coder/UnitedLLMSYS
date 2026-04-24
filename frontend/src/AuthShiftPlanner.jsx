@@ -130,16 +130,6 @@ function plannerNoticeLabel(item) {
   return `Scheduled work completed: ${item.title}`;
 }
 
-function SummaryCard({ label, value, detail }) {
-  return (
-    <article className="auth-shift-summary-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
-}
-
 export default function AuthShiftPlanner() {
   const [items, setItems] = useState(readStoredItems);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -345,12 +335,6 @@ export default function AuthShiftPlanner() {
     setItems((current) => current.filter((item) => item.id !== id));
   }
 
-  function updateCompletedAt(id, value) {
-    const parsed = readLocalDate(value);
-    if (!parsed) return;
-    patchItem(id, () => ({ completedAt: parsed.toISOString() }));
-  }
-
   async function requestAlerts() {
     if (typeof Notification === "undefined") {
       setNotice("Browser notifications are not available here, so inline alerts will be used.");
@@ -369,32 +353,32 @@ export default function AuthShiftPlanner() {
   return (
     <section className="auth-shift-planner">
       <div className="auth-shift-planner-head">
-        <div>
-          <span>Shift Planner</span>
-          <h3>Tasks, breaks, and finish verification</h3>
-        </div>
-        {notificationAvailable ? (
-          notificationPermission === "granted" ? (
-            <small className="auth-shift-alert-state">Alerts on</small>
+        <strong>Planner</strong>
+        <div className="auth-shift-head-actions">
+          {notificationAvailable ? (
+            notificationPermission === "granted" ? (
+              <small className="auth-shift-alert-state">Alerts on</small>
+            ) : (
+              <button type="button" className="secondary-button auth-shift-alert-button" onClick={requestAlerts}>
+                Enable alerts
+              </button>
+            )
           ) : (
-            <button type="button" className="secondary-button auth-shift-alert-button" onClick={requestAlerts}>
-              Enable alerts
-            </button>
-          )
-        ) : (
-          <small className="auth-shift-alert-state">Inline alerts only</small>
-        )}
+            <small className="auth-shift-alert-state">Inline alerts only</small>
+          )}
+          <button type="button" className="secondary-button" onClick={() => setShowVerified((current) => !current)}>
+            {showVerified ? "Hide archive" : `Archive (${verifiedItems.length})`}
+          </button>
+        </div>
       </div>
 
-      <div className="auth-shift-summary-grid">
-        <SummaryCard label="In progress" value={plannerSummary.activeCount} detail="Live tasks and breaks" />
-        <SummaryCard label="Need verification" value={plannerSummary.verificationCount} detail="Finished but still visible" />
-        <SummaryCard label="Break slots" value={plannerSummary.plannedBreaks} detail="Multiple breaks supported" />
-        <SummaryCard
-          label="Next finish"
-          value={plannerSummary.nextDueItem ? formatClock(plannerSummary.nextDueItem.dueAt) : "Clear"}
-          detail={plannerSummary.nextDueItem ? plannerSummary.nextDueItem.title : "No active deadlines"}
-        />
+      <div className="auth-shift-topline">
+        <span className="auth-shift-chip">{plannerSummary.activeCount} active</span>
+        <span className="auth-shift-chip">{plannerSummary.verificationCount} to verify</span>
+        <span className="auth-shift-chip">{plannerSummary.plannedBreaks} breaks</span>
+        <span className="auth-shift-chip">
+          {plannerSummary.nextDueItem ? `Next ${formatClock(plannerSummary.nextDueItem.dueAt)}` : "No deadline"}
+        </span>
       </div>
 
       {notice ? <div className="notice info auth-shift-notice">{notice}</div> : null}
@@ -403,7 +387,7 @@ export default function AuthShiftPlanner() {
       ) : null}
 
       <form className="auth-shift-form" onSubmit={addPlannerItem}>
-        <div className="auth-shift-form-grid">
+        <div className="auth-shift-form-grid auth-shift-form-grid-compact">
           <label>
             Type
             <select value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
@@ -421,10 +405,6 @@ export default function AuthShiftPlanner() {
             />
           </label>
           <label>
-            Start time
-            <input type="text" value={formatDateTime(new Date())} readOnly />
-          </label>
-          <label>
             Planned finish
             <input
               type="datetime-local"
@@ -432,20 +412,12 @@ export default function AuthShiftPlanner() {
               onChange={(event) => setDraft((current) => ({ ...current, dueAt: event.target.value }))}
             />
           </label>
+          <button type="submit" className="primary-button auth-shift-add-button">Add</button>
         </div>
 
-        <label className="auth-shift-notes-field">
-          Notes
-          <textarea
-            value={draft.notes}
-            onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
-            placeholder="Optional context, phone number, station, lane, or reminder"
-          />
-        </label>
-
-        <div className="auth-shift-quick-actions">
-          <div className="auth-shift-quick-group">
-            <span>Quick time presets</span>
+        <div className="auth-shift-quick-actions auth-shift-quick-actions-compact">
+          <div className="auth-shift-quick-group compact">
+            <span>Time</span>
             <div>
               <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(15) }))}>15m</button>
               <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(30) }))}>30m</button>
@@ -454,8 +426,8 @@ export default function AuthShiftPlanner() {
             </div>
           </div>
 
-          <div className="auth-shift-quick-group">
-            <span>Quick breaks</span>
+          <div className="auth-shift-quick-group compact">
+            <span>Breaks</span>
             <div>
               <button type="button" className="secondary-button" onClick={() => quickBreak(15)}>Break 15m</button>
               <button type="button" className="secondary-button" onClick={() => quickBreak(30)}>Break 30m</button>
@@ -463,21 +435,13 @@ export default function AuthShiftPlanner() {
             </div>
           </div>
         </div>
-
-        <div className="auth-shift-form-actions">
-          <small>Start time is captured automatically the moment you add the item.</small>
-          <button type="submit" className="primary-button">Add to planner</button>
-        </div>
       </form>
 
-      <div className="auth-shift-list-head">
+      <div className="auth-shift-list-head compact">
         <div>
-          <strong>Live planner</strong>
-          <small>Verified items disappear from this list automatically.</small>
+          <strong>Live</strong>
+          <small>{liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
         </div>
-        <button type="button" className="secondary-button" onClick={() => setShowVerified((current) => !current)}>
-          {showVerified ? "Hide verified" : `Show verified (${verifiedItems.length})`}
-        </button>
       </div>
 
       {liveItems.length ? (
@@ -492,35 +456,12 @@ export default function AuthShiftPlanner() {
                     <strong>{item.title}</strong>
                     <small>{plannerStatusLabel(item, nowMs)}</small>
                   </div>
-                  <div className="auth-shift-item-meta">
-                    <span>Started {formatClock(item.startedAt)}</span>
-                    <span>Due {formatClock(item.dueAt)}</span>
-                  </div>
                 </div>
 
-                {item.notes ? <p>{item.notes}</p> : null}
-
-                <div className="auth-shift-time-grid">
-                  <div>
-                    <span>Started</span>
-                    <strong>{formatDateTime(item.startedAt)}</strong>
-                  </div>
-                  <div>
-                    <span>Planned finish</span>
-                    <strong>{formatDateTime(item.dueAt)}</strong>
-                  </div>
-                  <div>
-                    <span>Actual finish</span>
-                    {item.completedAt ? (
-                      <input
-                        type="datetime-local"
-                        value={toLocalInputValue(item.completedAt)}
-                        onChange={(event) => updateCompletedAt(item.id, event.target.value)}
-                      />
-                    ) : (
-                      <strong>Not finished</strong>
-                    )}
-                  </div>
+                <div className="auth-shift-item-meta">
+                  <span>Start {formatClock(item.startedAt)}</span>
+                  <span>Due {formatClock(item.dueAt)}</span>
+                  {item.completedAt ? <span>Finished {formatClock(item.completedAt)}</span> : null}
                 </div>
 
                 <div className="auth-shift-item-actions">
@@ -574,7 +515,6 @@ export default function AuthShiftPlanner() {
                     <span>Finished {formatClock(item.completedAt)}</span>
                   </div>
                 </div>
-                {item.notes ? <p>{item.notes}</p> : null}
               </article>
             ))}
           </div>
