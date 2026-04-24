@@ -13950,3 +13950,546 @@ body.theme-dark .full-road-health-badge.tone-dark {
     min-height: 380px;
   }
 }
+
+.workspace-sidebar-section {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-sidebar-section + .workspace-sidebar-section {
+  margin-top: 6px;
+}
+
+.workspace-sidebar-section-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-sidebar-section-links {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-main-guidance {
+  display: grid;
+  gap: 6px;
+  max-width: 720px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.workspace-main-guidance strong,
+.workspace-orientation-copy strong,
+.workspace-command-hero-copy h2,
+.workspace-start-card strong,
+.workspace-shortcut-button strong,
+.motive-guidance-copy h3,
+.motive-workflow-step strong,
+.motive-focus-head h3,
+.motive-focus-stat strong,
+.motive-attention-card strong,
+.motive-vehicle-card strong {
+  color: var(--text);
+}
+
+.workspace-main-guidance span,
+.workspace-orientation-copy span,
+.workspace-command-hero-copy p,
+.workspace-start-card small,
+.workspace-start-card em,
+.workspace-shortcut-button span,
+.motive-guidance-copy p,
+.motive-workflow-step small,
+.motive-focus-head p,
+.motive-focus-stat small,
+.motive-attention-card small,
+.motive-vehicle-card small,
+.motive-focus-stat span {
+  color: var(--muted);
+}
+
+.workspace-orientation-strip {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: center;
+  padding: 18px !important;
+}
+
+.workspace-orientation-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-orientation-copy span,
+.workspace-command-hero-copy .eyebrow,
+.motive-guidance-copy .eyebrow {
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-orientation-copy strong {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.workspace-shortcut-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-shortcut-button {
+  min-height: 88px;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 14px 16px !important;
+  text-align: left;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.workspace-shortcut-button strong {
+  font-size: 16px;
+}
+
+.workspace-shortcut-button.active,
+.workspace-shortcut-button:hover {
+  background: var(--surface-muted) !important;
+  border-color: rgba(32, 209, 139, 0.28) !important;
+}
+
+.workspace-command-hero-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px !important;
+}
+
+.workspace-command-hero-copy {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.workspace-command-hero-copy h2 {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.08;
+}
+
+.workspace-command-hero-copy p {
+  margin: 0;
+  max-width: 640px;
+}
+
+.workspace-start-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-start-card {
+  min-height: 178px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 18px !important;
+  text-align: left;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.workspace-start-card span {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 36px;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(32, 209, 139, 0.12);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.workspace-start-card strong {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.workspace-start-card em {
+  margin-top: auto;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.workspace-start-card.active,
+.workspace-start-card:hover {
+  background: var(--surface-muted) !important;
+  border-color: rgba(32, 209, 139, 0.32) !important;
+}
+
+.motive-guidance-card,
+.motive-summary-section,
+.motive-focus-card,
+.motive-list-panel-commercial,
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel,
+.motive-preview-block {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.motive-guidance-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.35fr);
+  gap: 16px;
+  padding: 18px;
+}
+
+.motive-guidance-copy {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.motive-guidance-copy h3 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.motive-guidance-copy p {
+  margin: 0;
+}
+
+.motive-guidance-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.motive-workflow-step {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.motive-workflow-step span {
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.motive-summary-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.motive-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.motive-section-head h3 {
+  margin: 0;
+}
+
+.motive-summary-grid-primary {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.motive-summary-grid-secondary {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+}
+
+.motive-workbench-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.4fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.motive-list-panel-commercial,
+.motive-focus-card,
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel {
+  padding: 18px;
+}
+
+.motive-list-panel-commercial {
+  display: grid;
+  gap: 14px;
+  position: sticky;
+  top: 84px;
+}
+
+.motive-list-toolbar-commercial {
+  grid-template-columns: 1fr;
+}
+
+.motive-attention-queue {
+  display: grid;
+  gap: 10px;
+}
+
+.motive-attention-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.motive-attention-card,
+.motive-vehicle-card {
+  text-align: left;
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.motive-attention-card {
+  min-height: 120px;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px !important;
+}
+
+.motive-attention-card-top {
+  display: grid;
+  gap: 6px;
+}
+
+.motive-attention-card span,
+.motive-focus-head > div > span,
+.motive-focus-stat span,
+.motive-vehicle-card-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.motive-attention-card strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.motive-attention-card.active,
+.motive-attention-card:hover,
+.motive-vehicle-card.selected,
+.motive-vehicle-card:hover {
+  background: var(--surface-muted) !important;
+  border-color: rgba(32, 209, 139, 0.32) !important;
+}
+
+.motive-vehicle-card-list {
+  display: grid;
+  gap: 10px;
+  max-height: 1120px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.motive-vehicle-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px !important;
+}
+
+.motive-vehicle-card-top,
+.motive-vehicle-card-foot,
+.motive-focus-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.motive-vehicle-card-top > div:first-child,
+.motive-focus-head > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.motive-vehicle-card strong {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.motive-vehicle-card-pills,
+.motive-focus-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.motive-list-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.motive-vehicle-card-grid,
+.motive-focus-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.motive-vehicle-card-grid > div,
+.motive-focus-stat {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.motive-vehicle-card-grid strong,
+.motive-focus-stat strong {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.motive-vehicle-card-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.motive-vehicle-card-foot small:last-child {
+  max-width: 320px;
+  text-align: right;
+}
+
+.motive-focus-column {
+  display: grid;
+  gap: 16px;
+}
+
+.motive-focus-card {
+  display: grid;
+  gap: 14px;
+}
+
+.motive-focus-head h3 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.06;
+}
+
+.motive-focus-head p {
+  margin: 0;
+}
+
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.motive-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1280px) {
+  .workspace-shortcut-row,
+  .workspace-start-grid,
+  .motive-guidance-steps,
+  .motive-summary-grid-primary,
+  .motive-summary-grid-secondary,
+  .motive-attention-grid,
+  .motive-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .motive-workbench-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .motive-list-panel-commercial {
+    position: static;
+  }
+}
+
+@media (max-width: 960px) {
+  .workspace-orientation-strip,
+  .motive-guidance-card {
+    grid-template-columns: 1fr;
+  }
+
+  .motive-vehicle-card-grid,
+  .motive-focus-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-shortcut-row,
+  .workspace-start-grid,
+  .motive-guidance-steps,
+  .motive-summary-grid-primary,
+  .motive-summary-grid-secondary,
+  .motive-attention-grid,
+  .motive-preview-grid,
+  .motive-vehicle-card-grid,
+  .motive-focus-metric-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-main-guidance,
+  .workspace-orientation-strip,
+  .workspace-command-hero-card,
+  .motive-guidance-card,
+  .motive-summary-section,
+  .motive-list-panel-commercial,
+  .motive-focus-card,
+  .motive-map-panel,
+  .motive-detail-panel,
+  .motive-history-panel {
+    padding: 14px !important;
+  }
+
+  .motive-vehicle-card-top,
+  .motive-vehicle-card-foot,
+  .motive-focus-head {
+    flex-direction: column;
+  }
+
+  .motive-vehicle-card-foot small:last-child {
+    max-width: none;
+    text-align: left;
+  }
+}

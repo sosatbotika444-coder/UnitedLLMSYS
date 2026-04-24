@@ -47,6 +47,37 @@ const workspaceTabs = [
   { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
   { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
 ];
+const workspaceNavSections = [
+  { id: "start", label: "Start Here", tabs: ["command", "loads", "tracking", "routing"] },
+  { id: "ops", label: "Operations", tabs: ["fullroad", "statistics", "profitability", "history", "approvals"] },
+  { id: "team", label: "Team", tabs: ["chat", "settings"] }
+];
+const workspaceQuickStartCards = [
+  {
+    id: "loads",
+    step: "01",
+    title: "Create or update a load",
+    detail: "Start here when a new shipment arrives or dispatch details change."
+  },
+  {
+    id: "routing",
+    step: "02",
+    title: "Build the route and fuel plan",
+    detail: "Use routing after the load basics are ready so the trip is practical and fuel-safe."
+  },
+  {
+    id: "tracking",
+    step: "03",
+    title: "Watch the truck live",
+    detail: "Open tracking to verify location, fuel, faults, and HOS without hunting through screens."
+  },
+  {
+    id: "fullroad",
+    step: "04",
+    title: "Follow the full trip",
+    detail: "Use Full Road when you need one commercial view from assigned truck through delivery."
+  }
+];
 const mobileFuelTabs = [
   { id: "command", label: "Home", icon: "HM" },
   { id: "loads", label: "Loads", icon: "LD" },
@@ -72,57 +103,68 @@ const workspaceCopy = {
   command: {
     eyebrow: "Fuel Service",
     title: "Fuel Service",
-    subtitle: "Dispatch, fuel, and live operations."
+    subtitle: "Dispatch, fuel, and live operations.",
+    helper: "Start in Loads, then move to Routing or Tracking depending on whether you are planning or monitoring."
   },
   tracking: {
     eyebrow: "Fuel Service",
     title: "Tracking",
-    subtitle: "Fleet visibility and status."
+    subtitle: "Fleet visibility and status.",
+    helper: "Search or filter the fleet first, click one truck, then review the map, fuel, faults, and HOS on the right."
   },
   statistics: {
     eyebrow: "Fuel Service",
     title: "Statistics",
-    subtitle: "Filter every truck by fuel, MPG, faults, utilization, and load data."
+    subtitle: "Filter every truck by fuel, MPG, faults, utilization, and load data.",
+    helper: "Use this workspace when you need to compare the whole fleet instead of one truck at a time."
   },
   profitability: {
     eyebrow: "Fuel Service",
     title: "Profitability",
-    subtitle: "Track detention, lane margin, deadhead, and estimated trip profit."
+    subtitle: "Track detention, lane margin, deadhead, and estimated trip profit.",
+    helper: "Open the highest-risk loads first so margin problems surface before they become service issues."
   },
   fullroad: {
     eyebrow: "Fuel Service",
     title: "Full Road",
-    subtitle: "Live truck to pickup to delivery with fuel planning."
+    subtitle: "Live truck to pickup to delivery with fuel planning.",
+    helper: "Use this when one trip needs a complete operational story, not just one route or one data panel."
   },
   routing: {
     eyebrow: "Fuel Service",
     title: "Routing",
-    subtitle: "Build routes and fuel plans."
+    subtitle: "Build routes and fuel plans.",
+    helper: "Choose a truck or origin/destination pair, then build the route and approve the best fuel stop."
   },
   history: {
     eyebrow: "Fuel Service",
     title: "Route History",
-    subtitle: "Search every route build by account, driver, truck, origin, destination, or date."
+    subtitle: "Search every route build by account, driver, truck, origin, destination, or date.",
+    helper: "Use history to reopen previous plans quickly instead of rebuilding the same route from scratch."
   },
   approvals: {
     eyebrow: "Fuel Service",
     title: "Fuel Approvals",
-    subtitle: "Approve stops, limits, and Motive purchase checks."
+    subtitle: "Approve stops, limits, and Motive purchase checks.",
+    helper: "Review approvals here after a route is built so driver instructions and spending limits stay aligned."
   },
   loads: {
     eyebrow: "Fuel Service",
     title: "Loads",
-    subtitle: "Choose a truck, enter A/B and rate, then auto-fill route economics."
+    subtitle: "Choose a truck, enter A/B and rate, then auto-fill route economics.",
+    helper: "This is the main entry point for dispatch work. Complete the core row here before using the planning tools."
   },
   chat: {
     eyebrow: "All Workspaces",
     title: "Team Chat",
-    subtitle: "Shared communication for Fuel Service, Safety, and Driver accounts."
+    subtitle: "Shared communication for Fuel Service, Safety, and Driver accounts.",
+    helper: "Use chat for quick coordination when a load or truck needs shared attention across teams."
   },
   settings: {
     eyebrow: "Fuel Service",
     title: "Settings",
-    subtitle: "Theme and browser preferences."
+    subtitle: "Theme and browser preferences.",
+    helper: "Change only personal workspace preferences here. It does not affect the operational data."
   }
 };
 const emptyRegister = { full_name: "", email: "", password: "" };
@@ -528,6 +570,39 @@ function DepartmentCard({ option, active, onSelect }) {
   );
 }
 
+function WorkspaceStartCard({ item, active, onSelect }) {
+  const tabMeta = workspaceTabs.find((tab) => tab.id === item.id);
+  if (!tabMeta) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`workspace-start-card${active ? " active" : ""}`}
+      onClick={() => onSelect(item.id)}
+    >
+      <span>{item.step}</span>
+      <strong>{item.title}</strong>
+      <small>{item.detail}</small>
+      <em>{active ? "Current workspace" : `${tabMeta.label} workspace`}</em>
+    </button>
+  );
+}
+
+function WorkspaceShortcutButton({ tab, active, onSelect }) {
+  return (
+    <button
+      type="button"
+      className={`workspace-shortcut-button${active ? " active" : ""}`}
+      onClick={() => onSelect(tab.id)}
+    >
+      <span>{tab.label}</span>
+      <strong>{tab.detail}</strong>
+    </button>
+  );
+}
+
 
 function InstallAppButton({ mobile = false }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -896,6 +971,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
         <MetricCard label="Review" value={metrics.reviewLoads} detail={`${metrics.delayedLoads} delayed`} tone="violet" />
         <MetricCard label="Miles" value={formatNumber(metrics.totalMilesToEmpty)} detail="All loads" tone="dark" />
       </section>
+      <MobileQuickActions onSelect={onSelectWorkspace} onCreateLoad={createRow} />
       <Suspense fallback={<ModuleLoader label="Loading Motive operations cards..." />}><MotiveDashboardCards token={token} active /></Suspense>
       <section className="panel workspace-tool-surface mobile-tool-panel">
         <div className="panel-head"><div><h2>Fuel Tools</h2><span>Route and station tools.</span></div></div>
@@ -1139,6 +1215,9 @@ export default function App() {
   const isDriverWorkspace = activeDepartment === "driver";
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
   const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id] || workspaceCopy.command;
+  const workspaceShortcutTabs = workspaceQuickStartCards
+    .map((item) => workspaceTabs.find((tab) => tab.id === item.id))
+    .filter(Boolean);
   const activeSiteNav = sitePanel || (!user || !isFuelService || activeWorkspace === "command" ? "home" : "");
   const loadStatusTabs = ["All", ...statusOptions];
 
@@ -1938,19 +2017,33 @@ export default function App() {
           </button>
 
           <nav className="workspace-sidebar-nav">
-            {workspaceTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`workspace-sidebar-link ${activeWorkspace === tab.id ? "active" : ""}`}
-                onClick={() => setActiveWorkspace(tab.id)}
-              >
-                <span className="workspace-sidebar-link-icon">{tab.icon}</span>
-                <span className="workspace-sidebar-link-copy">
-                  <strong>{tab.label}</strong>
-                  <small>{tab.detail}</small>
-                </span>
-              </button>
+            {workspaceNavSections.map((section) => (
+              <section key={section.id} className="workspace-sidebar-section">
+                <div className="workspace-sidebar-section-title">{section.label}</div>
+                <div className="workspace-sidebar-section-links">
+                  {section.tabs.map((tabId) => {
+                    const tab = workspaceTabs.find((item) => item.id === tabId);
+                    if (!tab) {
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={`workspace-sidebar-link ${activeWorkspace === tab.id ? "active" : ""}`}
+                        onClick={() => setActiveWorkspace(tab.id)}
+                      >
+                        <span className="workspace-sidebar-link-icon">{tab.icon}</span>
+                        <span className="workspace-sidebar-link-copy">
+                          <strong>{tab.label}</strong>
+                          <small>{tab.detail}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             ))}
           </nav>
 
@@ -1972,14 +2065,24 @@ export default function App() {
               <span className="workspace-main-kicker">{activeWorkspaceCopy.eyebrow}</span>
               <h1>{activeWorkspaceCopy.title}</h1>
               <p>{activeWorkspaceCopy.subtitle}</p>
+              <div className="workspace-main-guidance">
+                <strong>What to do here</strong>
+                <span>{activeWorkspaceCopy.helper}</span>
+              </div>
             </div>
 
             <div className="workspace-main-meta">
               <div className="workspace-main-usercard">
                 <span>Account</span>
                 <strong>{user.full_name}</strong>
+                <small>{user.email}</small>
               </div>
-              <button className="primary-button header-action-button" type="button" onClick={createRow}>
+              <div className="workspace-main-usercard subdued">
+                <span>Workspace</span>
+                <strong>{activeWorkspaceMeta.label}</strong>
+                <small>{activeWorkspaceMeta.detail}</small>
+              </div>
+              <button className="primary-button header-action-button" type="button" onClick={() => { createRow(); setActiveWorkspace("loads"); }}>
                 Create Load
               </button>
             </div>
@@ -1988,7 +2091,34 @@ export default function App() {
           {message ? <div className="notice success inline-notice">{message}</div> : null}
           {error ? <div className="notice error inline-notice">{error}</div> : null}
 
+          <section className="panel workspace-orientation-strip">
+            <div className="workspace-orientation-copy">
+              <span>Recommended flow</span>
+              <strong>{"Loads -> Routing -> Tracking"}</strong>
+              <small>New users can safely follow this order without needing to learn the whole platform first.</small>
+            </div>
+            <div className="workspace-shortcut-row">
+              {workspaceShortcutTabs.map((tab) => (
+                <WorkspaceShortcutButton key={tab.id} tab={tab} active={activeWorkspace === tab.id} onSelect={setActiveWorkspace} />
+              ))}
+            </div>
+          </section>
+
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "command"}>
+            <section className="panel workspace-command-hero-card">
+              <div className="workspace-command-hero-copy">
+                <span className="eyebrow">Start Here</span>
+                <h2>Clear workflow for dispatch and fuel service</h2>
+                <p>Keep the first experience simple: create the load, plan the route, then watch the truck live.</p>
+              </div>
+
+              <div className="workspace-start-grid">
+                {workspaceQuickStartCards.map((item) => (
+                  <WorkspaceStartCard key={item.id} item={item} active={activeWorkspace === item.id} onSelect={setActiveWorkspace} />
+                ))}
+              </div>
+            </section>
+
             <section className="metric-grid">
               <MetricCard label="Total loads" value={metrics.total} detail={`${metrics.activeLoads} active`} tone="green" />
               <MetricCard label="Low fuel" value={metrics.lowFuelCount} detail="Below 40%" tone={metrics.lowFuelCount ? "amber" : "blue"} />
