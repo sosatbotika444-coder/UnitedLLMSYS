@@ -18,7 +18,7 @@ from app.official_stations import (
     station_catalog_runtime_status,
     stop_live_price_refresh_workers,
 )
-from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, motive, navigation, safety
+from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, motive, navigation, planner, safety
 
 import app.models  # noqa: F401
 
@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     api.include_router(loads.router)
     api.include_router(motive.router)
     api.include_router(navigation.router)
+    api.include_router(planner.router)
     api.include_router(safety.router)
 
     app.include_router(api)

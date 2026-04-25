@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 
 DepartmentName = Literal["admin", "fuel", "safety", "driver"]
+PlannerItemKind = Literal["task", "break"]
 
 
 class UserCreate(BaseModel):
@@ -148,6 +149,31 @@ class DriverProfile(BaseModel):
     match: DriverVehicleMatch
     vehicle: dict[str, Any] = Field(default_factory=dict)
     fleetSnapshot: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlannerItemBase(BaseModel):
+    kind: PlannerItemKind = "task"
+    title: str = Field(min_length=1, max_length=255)
+    notes: str = Field(default="", max_length=12000)
+    startedAt: datetime
+    dueAt: datetime | None = None
+    completedAt: datetime | None = None
+    verifiedAt: datetime | None = None
+    alertedAt: datetime | None = None
+
+
+class PlannerItemCreate(PlannerItemBase):
+    pass
+
+
+class PlannerItemUpdate(PlannerItemBase):
+    pass
+
+
+class PlannerItemResponse(PlannerItemBase):
+    id: int
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
 
 
 class SafetyNoteUpdate(BaseModel):

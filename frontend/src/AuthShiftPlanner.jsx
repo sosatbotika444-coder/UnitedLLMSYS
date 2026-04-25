@@ -1,6 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+export const DEFAULT_SHIFT_PLANNER_STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
+
+async function apiRequest(path, options = {}, token = "") {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || "Planner request failed");
+  }
+
+  return data;
+}
 
 function createPlannerId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -30,33 +58,53 @@ function offsetMinutes(minutes) {
   return toLocalInputValue(date);
 }
 
-function readStoredItems() {
+function normalizePlannerItem(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  return {
+    id: item.id || createPlannerId(),
+    kind: item.kind === "break" ? "break" : "task",
+    title: String(item.title || "").trim(),
+    notes: String(item.notes || "").trim(),
+    startedAt: item.startedAt || new Date().toISOString(),
+    dueAt: item.dueAt || "",
+    completedAt: item.completedAt || "",
+    verifiedAt: item.verifiedAt || "",
+    alertedAt: item.alertedAt || "",
+  };
+}
+
+function readStoredItems(storageKey = DEFAULT_SHIFT_PLANNER_STORAGE_KEY) {
   if (typeof window === "undefined") {
     return [];
   }
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item) => item && typeof item === "object")
-      .map((item) => ({
-        id: item.id || createPlannerId(),
-        kind: item.kind === "break" ? "break" : "task",
-        title: String(item.title || "").trim(),
-        notes: String(item.notes || "").trim(),
-        startedAt: item.startedAt || new Date().toISOString(),
-        dueAt: item.dueAt || "",
-        completedAt: item.completedAt || "",
-        verifiedAt: item.verifiedAt || "",
-        alertedAt: item.alertedAt || "",
-      }))
-      .filter((item) => item.title);
+      .map(normalizePlannerItem)
+      .filter((item) => item && item.title);
   } catch {
     return [];
   }
+}
+
+function toPlannerPayload(item) {
+  return {
+    kind: item.kind === "break" ? "break" : "task",
+    title: String(item.title || "").trim(),
+    notes: String(item.notes || "").trim(),
+    startedAt: item.startedAt || new Date().toISOString(),
+    dueAt: item.dueAt || null,
+    completedAt: item.completedAt || null,
+    verifiedAt: item.verifiedAt || null,
+    alertedAt: item.alertedAt || null,
+  };
 }
 
 function formatClock(value) {
@@ -130,8 +178,13 @@ function plannerNoticeLabel(item) {
   return `Scheduled work completed: ${item.title}`;
 }
 
-export default function AuthShiftPlanner() {
-  const [items, setItems] = useState(readStoredItems);
+export default function AuthShiftPlanner({
+  token = "",
+  title = "Planner",
+  storageKey = DEFAULT_SHIFT_PLANNER_STORAGE_KEY,
+  migrationKeys = [],
+}) {
+  const [items, setItems] = useState(() => readStoredItems(storageKey));
   const [nowMs, setNowMs] = useState(Date.now());
   const [notice, setNotice] = useState("");
   const [showVerified, setShowVerified] = useState(false);
@@ -146,10 +199,16 @@ export default function AuthShiftPlanner() {
     dueAt: offsetMinutes(60),
     notes: "",
   }));
+  const [remoteSyncing, setRemoteSyncing] = useState(false);
+  const [plannerSaving, setPlannerSaving] = useState(false);
   const audioContextRef = useRef(null);
   const alarmIntervalRef = useRef(null);
   const titleIntervalRef = useRef(null);
   const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : "");
+
+  useEffect(() => {
+    setItems(readStoredItems(storageKey));
+  }, [storageKey]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -160,8 +219,8 @@ export default function AuthShiftPlanner() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+    localStorage.setItem(storageKey, JSON.stringify(items));
+  }, [items, storageKey]);
 
   useEffect(() => () => {
     if (alarmIntervalRef.current) {
@@ -174,6 +233,70 @@ export default function AuthShiftPlanner() {
       document.title = baseTitleRef.current;
     }
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    let ignore = false;
+
+    async function loadSavedPlanner() {
+      setRemoteSyncing(true);
+
+      const primaryItems = readStoredItems(storageKey);
+      const backupItems = primaryItems.length
+        ? []
+        : migrationKeys.flatMap((key) => readStoredItems(key));
+
+      try {
+        let remoteItems = await apiRequest("/planner/items", {}, token);
+        remoteItems = Array.isArray(remoteItems)
+          ? remoteItems.map(normalizePlannerItem).filter((item) => item && item.title)
+          : [];
+
+        if (!remoteItems.length && (primaryItems.length || backupItems.length)) {
+          const importSource = primaryItems.length ? primaryItems : backupItems;
+          const importedItems = [];
+          for (const item of importSource) {
+            const saved = await apiRequest(
+              "/planner/items",
+              {
+                method: "POST",
+                body: JSON.stringify(toPlannerPayload(item)),
+              },
+              token
+            );
+            const normalized = normalizePlannerItem(saved);
+            if (normalized?.title) {
+              importedItems.push(normalized);
+            }
+          }
+          remoteItems = importedItems;
+          if (!ignore && importedItems.length) {
+            setNotice("Browser planner was imported into your account.");
+          }
+        }
+
+        if (!ignore) {
+          setItems(remoteItems);
+        }
+      } catch (loadError) {
+        if (!ignore) {
+          setNotice(loadError.message || "Saved planner could not load. Using this browser copy.");
+        }
+      } finally {
+        if (!ignore) {
+          setRemoteSyncing(false);
+        }
+      }
+    }
+
+    loadSavedPlanner();
+    return () => {
+      ignore = true;
+    };
+  }, [migrationKeys, storageKey, token]);
 
   useEffect(() => {
     const readyToAlert = items.filter((item) => {
@@ -194,6 +317,27 @@ export default function AuthShiftPlanner() {
     setItems((current) => current.map((item) => (
       readyIds.has(item.id) ? { ...item, alertedAt } : item
     )));
+
+    if (token) {
+      Promise.all(
+        readyToAlert.map((item) => savePlannerItem({ ...item, alertedAt }))
+      )
+        .then((savedItems) => {
+          const savedByPreviousId = new Map(
+            savedItems
+              .filter((item) => item?.title)
+              .map((item, index) => [String(readyToAlert[index]?.id), item])
+          );
+          if (!savedByPreviousId.size) {
+            return;
+          }
+          setItems((current) => current.map((item) => savedByPreviousId.get(String(item.id)) || item));
+        })
+        .catch(() => {
+          // Keep the inline alarm state even if the background alert sync fails.
+        });
+    }
+
     setNotice(readyToAlert.length === 1 ? plannerNoticeLabel(readyToAlert[0]) : `${plannerNoticeLabel(readyToAlert[0])} + ${readyToAlert.length - 1} more`);
     setActiveAlarm({
       ids: readyToAlert.map((item) => item.id),
@@ -217,7 +361,7 @@ export default function AuthShiftPlanner() {
         }
       });
     }
-  }, [items, nowMs, notificationPermission]);
+  }, [items, nowMs, notificationPermission, token]);
 
   useEffect(() => {
     if (!activeAlarm.ids.length) {
@@ -373,6 +517,49 @@ export default function AuthShiftPlanner() {
     }
   }
 
+  async function savePlannerItem(item) {
+    const payload = toPlannerPayload(item);
+    if (!token) {
+      return normalizePlannerItem(item);
+    }
+
+    const numericId = Number(item.id);
+    if (Number.isInteger(numericId) && numericId > 0) {
+      const saved = await apiRequest(
+        `/planner/items/${numericId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+        token
+      );
+      return normalizePlannerItem(saved);
+    }
+
+    const saved = await apiRequest(
+      "/planner/items",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token
+    );
+    return normalizePlannerItem(saved);
+  }
+
+  async function deletePlannerItem(id) {
+    if (!token) {
+      return;
+    }
+
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return;
+    }
+
+    await apiRequest(`/planner/items/${numericId}`, { method: "DELETE" }, token);
+  }
+
   function clearAlarmForIds(idsToClear) {
     if (!idsToClear.length) return;
     setActiveAlarm((current) => {
@@ -390,15 +577,63 @@ export default function AuthShiftPlanner() {
     });
   }
 
+  async function addItemToPlanner(nextItem, successMessage) {
+    setPlannerSaving(true);
+    try {
+      const savedItem = await savePlannerItem(nextItem);
+      if (!savedItem?.title) {
+        throw new Error("Planner item could not be saved.");
+      }
+      setItems((current) => [savedItem, ...current]);
+      setNotice(successMessage);
+      return savedItem;
+    } catch (saveError) {
+      setNotice(saveError.message || "Planner item could not be saved.");
+      return null;
+    } finally {
+      setPlannerSaving(false);
+    }
+  }
+
+  async function updatePlannerEntry(id, updater, successMessage) {
+    const currentItem = items.find((item) => String(item.id) === String(id));
+    if (!currentItem) {
+      return null;
+    }
+
+    const nextItem = normalizePlannerItem({ ...currentItem, ...updater(currentItem) });
+    if (!nextItem) {
+      return null;
+    }
+
+    setPlannerSaving(true);
+    try {
+      const savedItem = await savePlannerItem(nextItem);
+      if (!savedItem?.title) {
+        throw new Error("Planner item could not be saved.");
+      }
+      setItems((current) => current.map((item) => (String(item.id) === String(id) ? savedItem : item)));
+      if (successMessage) {
+        setNotice(successMessage);
+      }
+      return savedItem;
+    } catch (saveError) {
+      setNotice(saveError.message || "Planner item could not be updated.");
+      return null;
+    } finally {
+      setPlannerSaving(false);
+    }
+  }
+
   async function addPlannerItem(event) {
     event.preventDefault();
     await primeAlertSystems({ askNotification: true });
 
-    const title = draft.title.trim();
+    const titleValue = draft.title.trim();
     const due = readLocalDate(draft.dueAt);
     const startedAt = new Date();
 
-    if (!title) {
+    if (!titleValue) {
       setNotice("Write what needs to be done before adding it to the planner.");
       return;
     }
@@ -411,7 +646,7 @@ export default function AuthShiftPlanner() {
     const nextItem = {
       id: createPlannerId(),
       kind: draft.kind,
-      title,
+      title: titleValue,
       notes: draft.notes.trim(),
       startedAt: startedAt.toISOString(),
       dueAt: due.toISOString(),
@@ -420,9 +655,10 @@ export default function AuthShiftPlanner() {
       alertedAt: "",
     };
 
-    setItems((current) => [nextItem, ...current]);
-    setNotice(`${plannerKindLabel(draft.kind)} added. Start time was saved automatically.`);
-    resetDraft(draft.kind, draft.kind === "break" ? 15 : 60);
+    const saved = await addItemToPlanner(nextItem, `${plannerKindLabel(draft.kind)} added. Start time was saved automatically.`);
+    if (saved) {
+      resetDraft(draft.kind, draft.kind === "break" ? 15 : 60);
+    }
   }
 
   async function quickBreak(minutes) {
@@ -441,49 +677,65 @@ export default function AuthShiftPlanner() {
       alertedAt: "",
     };
 
-    setItems((current) => [nextItem, ...current]);
-    setNotice(`Quick break added for ${minutes} minutes.`);
+    await addItemToPlanner(nextItem, `Quick break added for ${minutes} minutes.`);
   }
 
-  function patchItem(id, updater) {
-    setItems((current) => current.map((item) => (
-      item.id === id ? { ...item, ...updater(item) } : item
-    )));
+  async function finishItem(id) {
+    const saved = await updatePlannerEntry(
+      id,
+      () => ({ completedAt: new Date().toISOString() }),
+      "Finish time saved. Verify the item to hide it from the live planner."
+    );
+    if (saved) {
+      clearAlarmForIds([id]);
+    }
   }
 
-  function finishItem(id) {
-    const completedAt = new Date().toISOString();
-    patchItem(id, () => ({ completedAt }));
-    clearAlarmForIds([id]);
-    setNotice("Finish time saved. Verify the item to hide it from the live planner.");
-  }
-
-  function verifyItem(id) {
+  async function verifyItem(id) {
     const verifiedAt = new Date().toISOString();
-    patchItem(id, (item) => ({
-      completedAt: item.completedAt || verifiedAt,
-      verifiedAt,
-    }));
-    clearAlarmForIds([id]);
-    setNotice("Item verified and hidden from the live planner.");
+    const saved = await updatePlannerEntry(
+      id,
+      (item) => ({
+        completedAt: item.completedAt || verifiedAt,
+        verifiedAt,
+      }),
+      "Item verified and hidden from the live planner."
+    );
+    if (saved) {
+      clearAlarmForIds([id]);
+    }
   }
 
-  function extendItem(id, minutes) {
-    patchItem(id, (item) => {
-      const due = readLocalDate(item.dueAt) || new Date();
-      const base = Math.max(due.getTime(), Date.now());
-      return {
-        dueAt: new Date(base + minutes * 60000).toISOString(),
-        alertedAt: "",
-      };
-    });
-    clearAlarmForIds([id]);
-    setNotice(`Planned finish moved by ${minutes} minutes.`);
+  async function extendItem(id, minutes) {
+    const saved = await updatePlannerEntry(
+      id,
+      (item) => {
+        const due = readLocalDate(item.dueAt) || new Date();
+        const base = Math.max(due.getTime(), Date.now());
+        return {
+          dueAt: new Date(base + minutes * 60000).toISOString(),
+          alertedAt: "",
+        };
+      },
+      `Planned finish moved by ${minutes} minutes.`
+    );
+    if (saved) {
+      clearAlarmForIds([id]);
+    }
   }
 
-  function removeItem(id) {
-    setItems((current) => current.filter((item) => item.id !== id));
-    clearAlarmForIds([id]);
+  async function removeItem(id) {
+    setPlannerSaving(true);
+    try {
+      await deletePlannerItem(id);
+      setItems((current) => current.filter((item) => String(item.id) !== String(id)));
+      clearAlarmForIds([id]);
+      setNotice("Planner item deleted.");
+    } catch (deleteError) {
+      setNotice(deleteError.message || "Planner item could not be deleted.");
+    } finally {
+      setPlannerSaving(false);
+    }
   }
 
   async function requestAlerts() {
@@ -502,11 +754,16 @@ export default function AuthShiftPlanner() {
     setNotice("Browser alerts were not enabled. Sound and inline planner alerts will still work.");
   }
 
+  const persistenceLabel = token
+    ? (remoteSyncing ? "Syncing account planner" : "Saved to account")
+    : "Saved in this browser";
+
   return (
     <section className="auth-shift-planner">
       <div className="auth-shift-planner-head">
-        <strong>Planner</strong>
+        <strong>{title}</strong>
         <div className="auth-shift-head-actions">
+          <small className="auth-shift-alert-state">{persistenceLabel}</small>
           {notificationAvailable ? (
             notificationPermission === "granted" ? (
               <small className="auth-shift-alert-state">Alerts on</small>
@@ -576,7 +833,9 @@ export default function AuthShiftPlanner() {
               onChange={(event) => setDraft((current) => ({ ...current, dueAt: event.target.value }))}
             />
           </label>
-          <button type="submit" className="primary-button auth-shift-add-button">Add</button>
+          <button type="submit" className="primary-button auth-shift-add-button" disabled={plannerSaving}>
+            {plannerSaving ? "Saving..." : "Add"}
+          </button>
         </div>
 
         <div className="auth-shift-quick-actions auth-shift-quick-actions-compact">
@@ -593,9 +852,9 @@ export default function AuthShiftPlanner() {
           <div className="auth-shift-quick-group compact">
             <span>Breaks</span>
             <div>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(15)}>Break 15m</button>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(30)}>Break 30m</button>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(45)}>Break 45m</button>
+              <button type="button" className="secondary-button" onClick={() => quickBreak(15)} disabled={plannerSaving}>Break 15m</button>
+              <button type="button" className="secondary-button" onClick={() => quickBreak(30)} disabled={plannerSaving}>Break 30m</button>
+              <button type="button" className="secondary-button" onClick={() => quickBreak(45)} disabled={plannerSaving}>Break 45m</button>
             </div>
           </div>
         </div>
@@ -604,7 +863,7 @@ export default function AuthShiftPlanner() {
       <div className="auth-shift-list-head compact">
         <div>
           <strong>Live</strong>
-          <small>{liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
+          <small>{remoteSyncing && !items.length ? "Loading saved planner" : liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
         </div>
       </div>
 
@@ -630,21 +889,21 @@ export default function AuthShiftPlanner() {
 
                 <div className="auth-shift-item-actions">
                   {!item.completedAt ? (
-                    <button type="button" className="primary-button" onClick={() => finishItem(item.id)}>
+                    <button type="button" className="primary-button" onClick={() => finishItem(item.id)} disabled={plannerSaving}>
                       Finish now
                     </button>
                   ) : null}
                   {!item.verifiedAt ? (
-                    <button type="button" className="secondary-button" onClick={() => verifyItem(item.id)}>
+                    <button type="button" className="secondary-button" onClick={() => verifyItem(item.id)} disabled={plannerSaving}>
                       Verify & hide
                     </button>
                   ) : null}
                   {!item.verifiedAt ? (
-                    <button type="button" className="secondary-button" onClick={() => extendItem(item.id, 10)}>
+                    <button type="button" className="secondary-button" onClick={() => extendItem(item.id, 10)} disabled={plannerSaving}>
                       +10 min
                     </button>
                   ) : null}
-                  <button type="button" className="secondary-button" onClick={() => removeItem(item.id)}>
+                  <button type="button" className="secondary-button" onClick={() => removeItem(item.id)} disabled={plannerSaving}>
                     Delete
                   </button>
                 </div>
@@ -653,7 +912,9 @@ export default function AuthShiftPlanner() {
           })}
         </div>
       ) : (
-        <div className="empty-route-card compact">Planner is clear. Add work items or breaks, then verify them when the shift step is done.</div>
+        <div className="empty-route-card compact">
+          {remoteSyncing ? "Loading your saved planner..." : "Planner is clear. Add work items or breaks, then verify them when the shift step is done."}
+        </div>
       )}
 
       {showVerified && verifiedItems.length ? (

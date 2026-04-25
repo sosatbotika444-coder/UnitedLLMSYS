@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import AuthShiftPlanner, { DEFAULT_SHIFT_PLANNER_STORAGE_KEY } from './AuthShiftPlanner';
 import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
 
@@ -6,6 +7,7 @@ const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
 const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 const driverMobileTabs = [
   { id: 'fuel', label: 'Fuel' },
+  { id: 'planner', label: 'Planner' },
   { id: 'service', label: 'Service' },
   { id: 'emergency', label: 'SOS' },
   { id: 'chat', label: 'Chat' },
@@ -13,6 +15,7 @@ const driverMobileTabs = [
 ];
 const driverTabs = [
   { id: 'fuel', label: 'Fuel Route' },
+  { id: 'planner', label: 'Planner' },
   { id: 'service', label: 'Service' },
   { id: 'emergency', label: 'Emergency' },
   { id: 'chat', label: 'Team Chat' },
@@ -159,6 +162,11 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
   const driveLeft = formatHosClock(eldHours, 'drive_seconds');
   const shiftLeft = formatHosClock(eldHours, 'shift_seconds');
   const fixedVehicleId = profile?.vehicleId ? String(profile.vehicleId) : '';
+  const plannerStorageKey = useMemo(
+    () => (user?.id ? `unitedlane_driver_shift_planner_${user.id}` : DEFAULT_SHIFT_PLANNER_STORAGE_KEY),
+    [user?.id]
+  );
+  const plannerMigrationKeys = useMemo(() => [DEFAULT_SHIFT_PLANNER_STORAGE_KEY], []);
 
   if (loading) {
     return <ModuleLoader label='Loading driver workspace...' />;
@@ -221,6 +229,15 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
             driverMode
           />
         </Suspense>
+      </section>
+
+      <section className='workspace-tab-panel' hidden={activeTab !== 'planner'}>
+        <AuthShiftPlanner
+          token={token}
+          title='Shift Planner'
+          storageKey={plannerStorageKey}
+          migrationKeys={plannerMigrationKeys}
+        />
       </section>
 
       <section className='workspace-tab-panel' hidden={activeTab !== 'service'}>
