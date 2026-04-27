@@ -710,6 +710,12 @@ class MotiveVehicleLocation(BaseModel):
     city: str | None = None
     state: str | None = None
     address: str | None = None
+    display_label: str | None = None
+    display_coords: str | None = None
+    raw_address: str | None = None
+    address_source: str | None = None
+    postal_code: str | None = None
+    description: str | None = None
     located_at: str | None = None
     age_minutes: float | None = None
     speed_kph: float | None = None

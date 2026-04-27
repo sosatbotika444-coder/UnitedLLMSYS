@@ -5,6 +5,7 @@ import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
 import { readClickActivityTarget, setActivityContext, trackActivity } from "./activityTracker";
+import { buildVehicleLocationQuery } from "./locationFormatting";
 import { getAutoDieselPrice } from "./priceSignals";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
@@ -265,13 +266,7 @@ function vehicleFuelPercent(vehicle) {
 }
 
 function vehicleLocationQuery(vehicle) {
-  const location = vehicle?.location || {};
-  const lat = Number(location.lat);
-  const lon = Number(location.lon);
-  if (Number.isFinite(lat) && Number.isFinite(lon)) return `${lat}, ${lon}`;
-  if (location.address) return location.address;
-  const cityState = [location.city, location.state].filter(Boolean).join(", ");
-  return cityState || "";
+  return buildVehicleLocationQuery(vehicle);
 }
 
 function resolveVehicleMpgInfo(vehicle) {

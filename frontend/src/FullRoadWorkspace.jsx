@@ -5,6 +5,7 @@ import {
   getTripStageTimeline,
   recordTripTimelineEvent,
 } from "./profitability";
+import { buildVehicleLocationLabel, buildVehicleLocationQuery, vehicleLocationPoint } from "./locationFormatting";
 import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
@@ -276,8 +277,7 @@ function vehicleLabel(vehicle) {
 }
 
 function vehicleLocationLabel(vehicle) {
-  if (!vehicle?.location) return "Location unavailable";
-  return vehicle.location.address || [vehicle.location.city, vehicle.location.state].filter(Boolean).join(", ") || "Location unavailable";
+  return buildVehicleLocationLabel(vehicle);
 }
 
 function vehicleFuelPercent(vehicle) {
@@ -292,24 +292,11 @@ function vehicleFuelPercent(vehicle) {
 }
 
 function vehicleLocationQuery(vehicle) {
-  const location = vehicle?.location || {};
-  const lat = Number(location.lat);
-  const lon = Number(location.lon);
-
-  // Prefer live GPS coordinates over address text to avoid stale origin points.
-  if (Number.isFinite(lat) && Number.isFinite(lon)) return `${lat}, ${lon}`;
-  if (location.address) return location.address;
-  const cityState = [location.city, location.state].filter(Boolean).join(", ");
-  if (cityState) return cityState;
-  return "";
+  return buildVehicleLocationQuery(vehicle);
 }
 
 function locationPoint(vehicle) {
-  if (!vehicle?.location) return null;
-  const lat = Number(vehicle.location.lat);
-  const lon = Number(vehicle.location.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return { lat, lon };
+  return vehicleLocationPoint(vehicle);
 }
 
 function findVehicleForLoad(loadRow, vehicles) {

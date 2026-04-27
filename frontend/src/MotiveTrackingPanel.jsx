@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { buildVehicleLocationLabel } from "./locationFormatting";
 import MotiveFleetMap from "./MotiveFleetMap";
 import MapStage from "./MapStage";
 
@@ -171,8 +172,7 @@ function hasCoordinates(vehicle) {
 }
 
 function vehicleLocationTitle(vehicle) {
-  if (!vehicle?.location) return "Location unavailable";
-  return vehicle.location.address || [vehicle.location.city, vehicle.location.state].filter(Boolean).join(", ") || "Location unavailable";
+  return buildVehicleLocationLabel(vehicle);
 }
 
 function vehicleTone(vehicle) {

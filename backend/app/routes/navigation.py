@@ -27,6 +27,7 @@ from app.ai_settings import (
 from app.auth import require_user_department
 from app.config import get_settings
 from app.database import get_db
+from app.geo import format_coordinate_label, parse_coordinate_query, reverse_geocode_point
 from app.models import RoutingFuelStop, RoutingRequest, RoutingRoute, User
 from app.official_stations import (
     ShortlistedOfficialStation,
@@ -621,6 +622,13 @@ def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSugg
 
 @lru_cache(maxsize=512)
 def geocode_address(query: str) -> GeocodedPoint:
+    coordinate_point = parse_coordinate_query(query)
+    if coordinate_point:
+        lat, lon = coordinate_point
+        reverse_match = reverse_geocode_point(lat, lon, settings.tomtom_api_key)
+        label = (reverse_match or {}).get("label") or format_coordinate_label(lat, lon)
+        return GeocodedPoint(label=label, lat=lat, lon=lon)
+
     encoded_query = quote(query)
     params = urlencode({"key": settings.tomtom_api_key, "limit": 1})
     data = http_json(f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?{params}")

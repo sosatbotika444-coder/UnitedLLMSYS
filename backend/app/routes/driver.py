@@ -95,7 +95,8 @@ def _truck_match(vehicle: dict, query: str) -> tuple[int, str] | None:
 def _location_label(vehicle: dict) -> str:
     location = vehicle.get("location") or {}
     return str(
-        location.get("address")
+        location.get("display_label")
+        or location.get("address")
         or ", ".join(part for part in [location.get("city"), location.get("state")] if part)
         or "Location unavailable"
     ).strip()

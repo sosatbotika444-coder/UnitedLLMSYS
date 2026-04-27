@@ -6,6 +6,7 @@ import {
   getPriceSignalMeta,
   parsePriceTarget
 } from "./priceSignals";
+import { buildVehicleLocationLabel, buildVehicleLocationQuery } from "./locationFormatting";
 import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
@@ -253,8 +254,11 @@ function vehicleLabel(vehicle) {
 }
 
 function vehicleLocationLabel(vehicle) {
-  if (!vehicle?.location) return "";
-  return vehicle.location.address || [vehicle.location.city, vehicle.location.state].filter(Boolean).join(", ") || "";
+  return buildVehicleLocationLabel(vehicle, "");
+}
+
+function vehicleLocationQuery(vehicle) {
+  return buildVehicleLocationQuery(vehicle);
 }
 
 function truckOptionLabel(vehicle) {
@@ -823,7 +827,8 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
   );
 
   useEffect(() => {
-    if (!driverMode || !selectedVehicleLocation) {
+    const originQuery = vehicleLocationQuery(selectedVehicle);
+    if (!driverMode || !originQuery) {
       return;
     }
 
@@ -831,9 +836,9 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
       if (current.origin && current.origin !== "Chicago, IL") {
         return current;
       }
-      return { ...current, origin: selectedVehicleLocation };
+      return { ...current, origin: originQuery };
     });
-  }, [driverMode, selectedVehicleLocation]);
+  }, [driverMode, selectedVehicle]);
 
   useEffect(() => {
     const nextCurrentFuelGallons = selectedVehiclePreset.currentFuelGallons.toFixed(1);
@@ -914,8 +919,9 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
   }, [activePriceTarget, visibleStops]);
 
   function useLiveTruckLocationForOrigin() {
-    if (!selectedVehicleLocation) return;
-    setRouteForm((current) => ({ ...current, origin: selectedVehicleLocation }));
+    const originQuery = vehicleLocationQuery(selectedVehicle);
+    if (!originQuery) return;
+    setRouteForm((current) => ({ ...current, origin: originQuery }));
     setSuggestionsForField("origin", []);
     setSuggestionLoading("origin", false);
     setLocationFieldFocus("");

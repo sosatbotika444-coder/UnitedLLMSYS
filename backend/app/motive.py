@@ -17,6 +17,7 @@ import certifi
 from fastapi import HTTPException, status
 
 from app.config import Settings
+from app.geo import format_coordinate_label, looks_approximate_location_label, reverse_geocode_point
 
 
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
@@ -783,9 +784,11 @@ class MotiveClient:
             vehicle_metric_units = as_bool(base.get("metric_units"))
             if vehicle_metric_units is None:
                 vehicle_metric_units = company_metric_units
-            current_location = self._merge_locations(
-                self._normalize_current_location(current_v2.get("current_location"), current_v2, bool(vehicle_metric_units)),
-                self._normalize_current_location(current_v3.get("current_location"), current_v3, bool(vehicle_metric_units)),
+            current_location = self._enrich_current_location(
+                self._merge_locations(
+                    self._normalize_current_location(current_v2.get("current_location"), current_v2, bool(vehicle_metric_units)),
+                    self._normalize_current_location(current_v3.get("current_location"), current_v3, bool(vehicle_metric_units)),
+                )
             )
             vehicle_summary = self._build_vehicle_summary(
                 vehicle_id=vehicle_id,
@@ -939,7 +942,10 @@ class MotiveClient:
                 continue
 
         history_points = [
-            self._normalize_current_location(unwrap_record(item), {}, bool(vehicle.get("metric_units")))
+            self._enrich_current_location(
+                self._normalize_current_location(unwrap_record(item), {}, bool(vehicle.get("metric_units"))),
+                allow_reverse_geocode=False,
+            )
             for item in unwrap_records(history_payload)
         ]
         history_points = [point for point in history_points if point]
@@ -1545,6 +1551,63 @@ class MotiveClient:
             "hvb_lifetime_energy_output": as_float(location.get("hvb_lifetime_energy_output")),
             "eld_device": self._normalize_eld_device(location.get("eld_device")),
         }
+
+    def _location_display_label(self, location: dict | None, raw_address: str | None = None) -> str:
+        if not location:
+            return ""
+        address = first_text(location.get("address"), raw_address)
+        city_state = ", ".join(part for part in [first_text(location.get("city")), first_text(location.get("state"))] if part)
+        coordinates = format_coordinate_label(location.get("lat"), location.get("lon"))
+
+        if looks_approximate_location_label(address):
+            if city_state and coordinates:
+                return f"{city_state} ({coordinates})"
+            return coordinates or city_state or address or ""
+        return address or city_state or coordinates or ""
+
+    def _enrich_current_location(self, location: dict | None, allow_reverse_geocode: bool = True) -> dict | None:
+        if not location:
+            return None
+
+        enriched = location.copy()
+        raw_address = first_text(enriched.get("address"), enriched.get("description"))
+        reverse_match = None
+        if (
+            allow_reverse_geocode
+            and self.settings.tomtom_api_key
+            and enriched.get("lat") is not None
+            and enriched.get("lon") is not None
+            and (
+                not raw_address
+                or looks_approximate_location_label(raw_address)
+                or not first_text(enriched.get("city"))
+                or not first_text(enriched.get("state"))
+            )
+        ):
+            reverse_match = reverse_geocode_point(enriched.get("lat"), enriched.get("lon"), self.settings.tomtom_api_key)
+
+        if reverse_match:
+            reverse_label = first_text(reverse_match.get("label"))
+            if reverse_label:
+                enriched["address"] = reverse_label
+            reverse_city = first_text(reverse_match.get("city"))
+            reverse_state = first_text(reverse_match.get("state"))
+            if reverse_city:
+                enriched["city"] = reverse_city
+            if reverse_state:
+                enriched["state"] = reverse_state
+            reverse_postal_code = first_text(reverse_match.get("postal_code"))
+            if reverse_postal_code:
+                enriched["postal_code"] = reverse_postal_code
+            enriched["address_source"] = "tomtom_reverse_geocode"
+        else:
+            enriched["address_source"] = "motive_current_location"
+
+        if raw_address:
+            enriched["raw_address"] = raw_address
+        enriched["display_coords"] = format_coordinate_label(enriched.get("lat"), enriched.get("lon"))
+        enriched["display_label"] = self._location_display_label(enriched, raw_address=raw_address)
+        return enriched
 
     def _merge_locations(self, primary: dict | None, secondary: dict | None) -> dict | None:
         if not primary and not secondary:

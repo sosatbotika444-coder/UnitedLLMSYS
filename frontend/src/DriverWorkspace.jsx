@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import AuthShiftPlanner, { DEFAULT_SHIFT_PLANNER_STORAGE_KEY } from './AuthShiftPlanner';
+import { buildVehicleLocationLabel } from './locationFormatting';
 import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
 
@@ -50,8 +51,7 @@ async function apiRequest(path, options = {}, token = '') {
 }
 
 function vehicleLocation(vehicle) {
-  const location = vehicle?.location || {};
-  return location.address || [location.city, location.state].filter(Boolean).join(', ') || 'Location unavailable';
+  return buildVehicleLocationLabel(vehicle);
 }
 
 function vehicleFuel(vehicle, match) {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
+import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const STREET_FOCUS_ZOOM = 15;
@@ -38,7 +39,7 @@ function markerPopup(vehicle) {
     vehicle.vehicle_state ? `Engine: ${vehicle.vehicle_state}` : null,
     location.speed_mph !== null && location.speed_mph !== undefined ? `Speed: ${Number(location.speed_mph).toFixed(1)} mph` : null,
     location.city || location.state ? `Area: ${[location.city, location.state].filter(Boolean).join(", ")}` : null,
-    location.address || null,
+    buildVehicleLocationLabel(vehicle, "") || null,
     location.located_at ? `Updated: ${location.located_at}` : null,
   ]
     .filter(Boolean)

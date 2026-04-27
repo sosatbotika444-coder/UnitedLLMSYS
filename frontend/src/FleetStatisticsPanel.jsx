@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const quickFocusOptions = [
@@ -95,8 +96,7 @@ function vehicleLabel(vehicle) {
 }
 
 function vehicleLocationLabel(vehicle) {
-  if (!vehicle?.location) return "Location unavailable";
-  return vehicle.location.address || [vehicle.location.city, vehicle.location.state].filter(Boolean).join(", ") || "Location unavailable";
+  return buildVehicleLocationLabel(vehicle);
 }
 
 function vehicleFuelPercent(vehicle) {
