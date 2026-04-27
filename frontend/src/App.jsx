@@ -762,6 +762,17 @@ function WorkspaceSidebarShell({
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        className="workspace-sidebar-handle"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
+        title={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
+      >
+        <span className="workspace-sidebar-handle-arrow" aria-hidden="true">{expanded ? "‹" : "›"}</span>
+        <span className="workspace-sidebar-handle-text">{expanded ? "Hide" : "Menu"}</span>
+      </button>
     </aside>
   );
 }
