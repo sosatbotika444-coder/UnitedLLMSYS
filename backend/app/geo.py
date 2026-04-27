@@ -18,6 +18,7 @@ APPROXIMATE_DISTANCE_RE = re.compile(
     r"(?:n|s|e|w|ne|nw|se|sw|north|south|east|west|northeast|northwest|southeast|southwest)\s+of\b",
     re.IGNORECASE,
 )
+COARSE_AREA_PREFIX_RE = re.compile(r"^(?:city|town|village|county|borough|township)\s+of\s+", re.IGNORECASE)
 REVERSE_GEOCODE_TIMEOUT_SECONDS = 10
 
 
@@ -71,6 +72,22 @@ def looks_approximate_location_label(value: object) -> bool:
     if parse_coordinate_query(text):
         return False
     return bool(APPROXIMATE_DISTANCE_RE.search(text))
+
+
+def looks_coarse_location_label(value: object) -> bool:
+    text = _clean_text(value)
+    if not text:
+        return False
+    if parse_coordinate_query(text):
+        return False
+    if COARSE_AREA_PREFIX_RE.match(text):
+        return True
+    if re.search(r"\d", text):
+        return False
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if len(parts) <= 2:
+        return True
+    return False
 
 
 @lru_cache(maxsize=4096)

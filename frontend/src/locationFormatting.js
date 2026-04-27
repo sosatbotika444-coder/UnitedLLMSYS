@@ -1,4 +1,5 @@
 const APPROXIMATE_DISTANCE_RE = /\b\d+(?:\.\d+)?\s*(?:mi|mile|miles|km|kilometer|kilometers)\s+(?:n|s|e|w|ne|nw|se|sw|north|south|east|west|northeast|northwest|southeast|southwest)\s+of\b/i;
+const COARSE_AREA_PREFIX_RE = /^(?:city|town|village|county|borough|township)\s+of\s+/i;
 
 function finiteNumber(value) {
   const parsed = Number(value);
@@ -18,6 +19,15 @@ export function isApproximateLocationLabel(value) {
   return APPROXIMATE_DISTANCE_RE.test(text);
 }
 
+export function isCoarseLocationLabel(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (COARSE_AREA_PREFIX_RE.test(text)) return true;
+  if (/\d/.test(text)) return false;
+  const parts = text.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.length <= 2;
+}
+
 export function buildLocationLabel(location, fallback = "Location unavailable") {
   if (!location) return fallback;
 
@@ -28,7 +38,7 @@ export function buildLocationLabel(location, fallback = "Location unavailable") 
   const cityState = [location.city, location.state].filter(Boolean).join(", ");
   const coordinates = formatCoordinatePair(location.lat, location.lon);
 
-  if (address && isApproximateLocationLabel(address) && coordinates) {
+  if (address && (isApproximateLocationLabel(address) || isCoarseLocationLabel(address)) && coordinates) {
     return cityState ? `${cityState} (${coordinates})` : `${address} (${coordinates})`;
   }
 
@@ -45,7 +55,7 @@ export function buildVehicleLocationQuery(vehicle) {
   if (coordinates) return coordinates;
 
   const address = String(location.address || "").trim();
-  if (address && !isApproximateLocationLabel(address)) return address;
+  if (address && !isApproximateLocationLabel(address) && !isCoarseLocationLabel(address)) return address;
 
   const cityState = [location.city, location.state].filter(Boolean).join(", ");
   return cityState || address || String(location.display_label || "").trim() || "";

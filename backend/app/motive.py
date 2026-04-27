@@ -17,7 +17,7 @@ import certifi
 from fastapi import HTTPException, status
 
 from app.config import Settings
-from app.geo import format_coordinate_label, looks_approximate_location_label, reverse_geocode_point
+from app.geo import format_coordinate_label, looks_approximate_location_label, looks_coarse_location_label, reverse_geocode_point
 
 
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
@@ -1559,7 +1559,7 @@ class MotiveClient:
         city_state = ", ".join(part for part in [first_text(location.get("city")), first_text(location.get("state"))] if part)
         coordinates = format_coordinate_label(location.get("lat"), location.get("lon"))
 
-        if looks_approximate_location_label(address):
+        if looks_approximate_location_label(address) or looks_coarse_location_label(address):
             if city_state and coordinates:
                 return f"{city_state} ({coordinates})"
             return coordinates or city_state or address or ""
@@ -1580,6 +1580,7 @@ class MotiveClient:
             and (
                 not raw_address
                 or looks_approximate_location_label(raw_address)
+                or looks_coarse_location_label(raw_address)
                 or not first_text(enriched.get("city"))
                 or not first_text(enriched.get("state"))
             )
