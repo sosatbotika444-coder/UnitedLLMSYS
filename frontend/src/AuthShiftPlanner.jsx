@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 export const DEFAULT_SHIFT_PLANNER_STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
+const PLANNER_CLOCK_TICK_MS = 1000;
+const PLANNER_ALARM_REPEAT_MS = 7000;
+const PLANNER_NOTIFICATION_TAG = "unitedlane-planner-alarm";
+const PLANNER_NOTIFICATION_ICON = "/pwa-icon-192.png";
 
 async function apiRequest(path, options = {}, token = "") {
   const headers = {
@@ -211,10 +215,37 @@ export default function AuthShiftPlanner({
   }, [storageKey]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 30000);
-    return () => window.clearInterval(timer);
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const syncNow = () => setNowMs(Date.now());
+    const timer = window.setInterval(syncNow, PLANNER_CLOCK_TICK_MS);
+    window.addEventListener("focus", syncNow);
+    window.addEventListener("pageshow", syncNow);
+    document.addEventListener("visibilitychange", syncNow);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", syncNow);
+      window.removeEventListener("pageshow", syncNow);
+      document.removeEventListener("visibilitychange", syncNow);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      return undefined;
+    }
+
+    const syncPermission = () => setNotificationPermission(Notification.permission);
+    syncPermission();
+    window.addEventListener("focus", syncPermission);
+    document.addEventListener("visibilitychange", syncPermission);
+    return () => {
+      window.removeEventListener("focus", syncPermission);
+      document.removeEventListener("visibilitychange", syncPermission);
+    };
   }, []);
 
   useEffect(() => {
@@ -350,17 +381,15 @@ export default function AuthShiftPlanner({
       navigator.vibrate([220, 120, 220, 120, 420]);
     }
 
-    if (notificationPermission === "granted" && typeof Notification !== "undefined") {
-      readyToAlert.slice(0, 3).forEach((item) => {
-        try {
-          new Notification(item.kind === "break" ? "Break finished" : "Work finished", {
-            body: `${item.title} reached the planned end time.`,
-          });
-        } catch {
-          // Ignore notification errors and keep the inline notice.
-        }
-      });
-    }
+    void ensureAudioReady();
+    const firstAlert = readyToAlert[0];
+    const notificationTitle = readyToAlert.length === 1
+      ? (firstAlert.kind === "break" ? "Break finished" : "Work finished")
+      : `Planner alert: ${readyToAlert.length} items due`;
+    const notificationBody = readyToAlert.length === 1
+      ? `${firstAlert.title} reached the planned end time.`
+      : `${firstAlert.title} reached the planned end time. Plus ${readyToAlert.length - 1} more overdue item${readyToAlert.length - 1 === 1 ? "" : "s"}.`;
+    void showPlannerNotification(notificationTitle, notificationBody);
   }, [items, nowMs, notificationPermission, token]);
 
   useEffect(() => {
@@ -381,14 +410,14 @@ export default function AuthShiftPlanner({
 
     let flip = false;
     const ring = () => {
-      playAlarmSound();
+      void playAlarmSound({ allowResume: true });
       if ("vibrate" in navigator && typeof navigator.vibrate === "function") {
         navigator.vibrate([180, 80, 180]);
       }
     };
 
     ring();
-    alarmIntervalRef.current = window.setInterval(ring, 7000);
+    alarmIntervalRef.current = window.setInterval(ring, PLANNER_ALARM_REPEAT_MS);
     titleIntervalRef.current = window.setInterval(() => {
       if (typeof document === "undefined") return;
       flip = !flip;
@@ -460,7 +489,7 @@ export default function AuthShiftPlanner({
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) return false;
 
-    if (!audioContextRef.current) {
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       audioContextRef.current = new AudioContextCtor();
     }
 
@@ -477,12 +506,7 @@ export default function AuthShiftPlanner({
     }
   }
 
-  function playAlarmSound() {
-    const audioContext = audioContextRef.current;
-    if (!audioContext || audioContext.state !== "running") {
-      return;
-    }
-
+  function playAlarmPattern(audioContext) {
     const pattern = [0, 0.35, 0.7];
     pattern.forEach((offset, index) => {
       const oscillator = audioContext.createOscillator();
@@ -497,6 +521,77 @@ export default function AuthShiftPlanner({
       oscillator.start(audioContext.currentTime + offset);
       oscillator.stop(audioContext.currentTime + offset + 0.28);
     });
+  }
+
+  async function playAlarmSound({ allowResume = true } = {}) {
+    let audioContext = audioContextRef.current;
+    if (!audioContext || audioContext.state === "closed") {
+      if (!allowResume) {
+        return false;
+      }
+      const ready = await ensureAudioReady();
+      if (!ready) {
+        return false;
+      }
+      audioContext = audioContextRef.current;
+    }
+
+    try {
+      if (allowResume && audioContext?.state === "suspended") {
+        await audioContext.resume();
+      }
+      if (!audioContext || audioContext.state !== "running") {
+        setSoundReady(false);
+        return false;
+      }
+      setSoundReady(true);
+      playAlarmPattern(audioContext);
+      return true;
+    } catch {
+      setSoundReady(false);
+      return false;
+    }
+  }
+
+  async function showPlannerNotification(titleText, bodyText) {
+    if (typeof window === "undefined" || typeof Notification === "undefined" || notificationPermission !== "granted") {
+      return false;
+    }
+
+    const options = {
+      body: bodyText,
+      tag: PLANNER_NOTIFICATION_TAG,
+      renotify: true,
+      requireInteraction: true,
+      icon: PLANNER_NOTIFICATION_ICON,
+      badge: PLANNER_NOTIFICATION_ICON,
+      data: {
+        url: window.location.href,
+      },
+    };
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration?.showNotification) {
+          await registration.showNotification(titleText, options);
+          return true;
+        }
+      }
+    } catch {
+      // Fall through to the regular Notification constructor.
+    }
+
+    try {
+      const notification = new Notification(titleText, options);
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function primeAlertSystems({ askNotification = false } = {}) {
@@ -516,6 +611,25 @@ export default function AuthShiftPlanner({
       }
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const unlockSound = () => {
+      void ensureAudioReady();
+    };
+
+    window.addEventListener("pointerdown", unlockSound, { passive: true });
+    window.addEventListener("keydown", unlockSound);
+    window.addEventListener("touchstart", unlockSound, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockSound);
+      window.removeEventListener("keydown", unlockSound);
+      window.removeEventListener("touchstart", unlockSound);
+    };
+  }, []);
 
   async function savePlannerItem(item) {
     const payload = toPlannerPayload(item);
@@ -739,7 +853,7 @@ export default function AuthShiftPlanner({
   }
 
   async function requestAlerts() {
-    await ensureAudioReady();
+    const soundEnabled = await ensureAudioReady();
     if (typeof Notification === "undefined") {
       setNotice("Browser notifications are not available here, but sound and inline planner alarms are active.");
       return;
@@ -748,6 +862,10 @@ export default function AuthShiftPlanner({
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
     if (permission === "granted") {
+      await showPlannerNotification("Planner alerts enabled", "Planner notifications and alarm sound are ready.");
+      if (soundEnabled) {
+        await playAlarmSound({ allowResume: true });
+      }
       setNotice("Browser alerts and sound are enabled. You will be notified when a planned finish time is reached.");
       return;
     }
@@ -776,6 +894,9 @@ export default function AuthShiftPlanner({
             <small className="auth-shift-alert-state">Inline + sound only</small>
           )}
           {soundReady ? <small className="auth-shift-alert-state">Sound ready</small> : null}
+          <button type="button" className="secondary-button" onClick={() => void playAlarmSound({ allowResume: true })}>
+            Test sound
+          </button>
           <button type="button" className="secondary-button" onClick={() => setShowVerified((current) => !current)}>
             {showVerified ? "Hide archive" : `Archive (${verifiedItems.length})`}
           </button>

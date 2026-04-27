@@ -486,6 +486,17 @@ class FuelStop(BaseModel):
     diesel_price: float | None = None
     auto_diesel_price: float | None = None
     unleaded_price: float | None = None
+    retail_price: float | None = None
+    retail_diesel_price: float | None = None
+    retail_auto_diesel_price: float | None = None
+    relay_location_id: str | None = None
+    relay_net_price: float | None = None
+    relay_discount_amount: float | None = None
+    relay_discount_type: str | None = None
+    relay_program: str | None = None
+    relay_price_source: str | None = None
+    relay_price_updated_at: str | None = None
+    relay_applied: bool = False
     parking_spaces: str | None = None
     phone: str | None = None
     fax: str | None = None

@@ -18,7 +18,8 @@ from app.official_stations import (
     station_catalog_runtime_status,
     stop_live_price_refresh_workers,
 )
-from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, motive, navigation, planner, safety
+from app.relay_discounts import relay_discount_runtime_status
+from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, motive, navigation, planner, relay_discounts, safety
 
 import app.models  # noqa: F401
 
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
             "database": settings.database_backend,
             "stationCatalog": station_catalog_runtime_status(),
             "livePrices": live_price_runtime_status(),
+            "relayDiscounts": relay_discount_runtime_status(),
             "motive": motive_snapshot_runtime_status(),
         }
 
@@ -94,6 +96,7 @@ def create_app() -> FastAPI:
     api.include_router(motive.router)
     api.include_router(navigation.router)
     api.include_router(planner.router)
+    api.include_router(relay_discounts.router)
     api.include_router(safety.router)
 
     app.include_router(api)

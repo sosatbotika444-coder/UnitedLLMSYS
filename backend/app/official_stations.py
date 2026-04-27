@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 import certifi
 
 from app.config import get_settings
+from app.relay_discounts import apply_relay_discount, load_relay_discount_records
 from app.schemas import FuelStop, RoutePoint
 
 settings = get_settings()
@@ -126,6 +127,18 @@ def unique_strings(values: list[str]) -> list[str]:
 def fuel_label_key(value: str) -> str:
     return normalize_text(value).replace(" ", "")
 
+
+def station_brand_family(value: str) -> str:
+    normalized = normalize_text(value)
+    if "love" in normalized:
+        return "loves"
+    if "pilot" in normalized or "flying j" in normalized:
+        return "pilot"
+    if "circle k" in normalized:
+        return "circlek"
+    if normalized in {"ta", "petro"} or "travelcenters" in normalized:
+        return "ta"
+    return normalized.replace(" ", "")
 
 
 def choose_fuel_price(price_map: dict[str, float | None], fuel_type: str) -> float | None:
@@ -784,7 +797,7 @@ def clone_record_as_stop(record: dict, fuel_type: str, off_route_m: float, origi
         source_url=str(record.get("source_url") or "") or None,
         amenities=list(record.get("amenities") or []),
         location_type=str(record.get("location_type") or "") or None,
-        official_match=True,
+        official_match=bool(record.get("official_match", True)),
         postal_code=str(record.get("postal_code") or "") or None,
         phone=str(record.get("phone") or "") or None,
         fax=str(record.get("fax") or "") or None,
@@ -1311,6 +1324,7 @@ def finalize_shortlisted_official_stations(shortlisted: list[ShortlistedOfficial
     stops = [item[0] for item in shortlisted]
     deduped: dict[str, FuelStop] = {}
     for stop in stops:
+        apply_relay_discount(stop)
         current = deduped.get(stop.id)
         if current is None or (stop.overall_score or 0) > (current.overall_score or 0):
             deduped[stop.id] = stop
@@ -1345,6 +1359,44 @@ def shortlist_official_stations_along_route(route_points: list[RoutePoint], fuel
             continue
         stop = clone_record_as_stop(record, fuel_type, distance_m, origin_m)
         candidates.append((stop, record, nearest_index))
+
+    for relay_record in load_relay_discount_records():
+        try:
+            lat = float(relay_record.get("lat"))
+            lon = float(relay_record.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        if station_brand_family(relay_record.get("brand") or relay_record.get("name")) in {"loves", "pilot"}:
+            continue
+        if lat < min_lat - lat_padding or lat > max_lat + lat_padding:
+            continue
+        if lon < min_lon - lon_padding or lon > max_lon + lon_padding:
+            continue
+        distance_m, origin_m, nearest_index = distance_to_route(lat, lon, route_points, cumulative_meters)
+        if distance_m > corridor_meters:
+            continue
+        relay_catalog_record = {
+            "id": f"relay:{relay_record.get('location_id') or relay_record.get('address') or relay_record.get('name') or len(candidates)}",
+            "name": relay_record.get("name") or relay_record.get("brand") or "Relay Fuel Stop",
+            "brand": relay_record.get("brand") or relay_record.get("name") or "Relay",
+            "city": relay_record.get("city") or "",
+            "address": relay_record.get("address") or "Address unavailable",
+            "state_code": relay_record.get("state_code") or "",
+            "postal_code": relay_record.get("postal_code") or "",
+            "lat": lat,
+            "lon": lon,
+            "fuel_types": ["Auto Diesel"],
+            "price": relay_record.get("net_price"),
+            "auto_diesel_price": relay_record.get("net_price"),
+            "price_source": f"{relay_record.get('program') or 'Relay'} imported net price",
+            "price_date": relay_record.get("updated_at") or "",
+            "amenities": [],
+            "location_type": "Relay network",
+            "official_match": False,
+            "store_number": relay_record.get("store_number") or "",
+        }
+        stop = clone_record_as_stop(relay_catalog_record, fuel_type, distance_m, origin_m)
+        candidates.append((stop, relay_catalog_record, nearest_index))
 
     candidates.sort(key=lambda item: (item[0].off_route_miles or 9999, item[0].origin_miles or 9999, item[0].name.lower()))
     if SHORTLISTED_ROUTE_STATION_LIMIT is None:

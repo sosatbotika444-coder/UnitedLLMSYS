@@ -427,6 +427,7 @@ function getNetworkLabel(stop) {
 }
 
 function priceStatusLabel(status) {
+  if (status === "relay_import") return "Relay net price";
   if (status === "live") return "Live official price";
   if (status === "live_cache") return "Recently refreshed price";
   if (status === "recent_cache") return "Recent official cache";
@@ -442,16 +443,39 @@ function formatPriceUpdatedAt(value) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
+function retailAutoDieselPrice(stop) {
+  const value = stop?.retail_auto_diesel_price ?? stop?.retail_price;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function relaySavingsLine(stop) {
+  if (!stop?.relay_applied) return "";
+  const retail = retailAutoDieselPrice(stop);
+  const net = getAutoDieselPrice(stop);
+  const explicitDiscount = Number(stop?.relay_discount_amount);
+  const discount = Number.isFinite(explicitDiscount)
+    ? explicitDiscount
+    : (retail !== null && net !== null ? retail - net : null);
+  const parts = [];
+  if (retail !== null) parts.push(`Retail $${retail.toFixed(3)}`);
+  if (discount !== null && Number.isFinite(discount)) parts.push(`Save $${discount.toFixed(3)}`);
+  if (stop?.relay_program) parts.push(stop.relay_program);
+  return parts.join(" | ");
+}
+
 function priceSourceLine(stop, priceSignalMeta) {
   const parts = [priceStatusLabel(stop.price_status), stop.price_source || "Official Love's/Pilot network page"];
-  const updatedAt = formatPriceUpdatedAt(stop.price_updated_at || stop.price_date);
+  const updatedAt = formatPriceUpdatedAt(stop.relay_price_updated_at || stop.price_updated_at || stop.price_date);
   if (updatedAt) parts.push(updatedAt);
+  if (stop.relay_applied && stop.relay_price_source) parts.push(stop.relay_price_source);
   if (priceSignalMeta.target !== null) parts.push(priceSignalMeta.summary);
   return parts.filter(Boolean).join(" | ");
 }
 function StopCard({ stop, compact = false, priceTarget = null }) {
   const tone = getNetworkTone(stop);
   const autoDieselPrice = getAutoDieselPrice(stop);
+  const retailPrice = retailAutoDieselPrice(stop);
   const priceSignalMeta = getPriceSignalMeta(stop, priceTarget);
   const priceSignalClass = getPriceSignalClass(priceSignalMeta.signal);
   return (
@@ -476,9 +500,9 @@ function StopCard({ stop, compact = false, priceTarget = null }) {
 
       <div className={`fuel-price-row fuel-price-row-brand ${priceSignalClass}`.trim()}>
         <div>
-          <strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
+          <strong>{autoDieselPrice !== null ? `${stop.relay_applied ? "Net " : ""}$${autoDieselPrice.toFixed(3)}/gal` : "Auto diesel price not published"}</strong>
           <span>{priceSourceLine(stop, priceSignalMeta)}</span>
-
+          {stop.relay_applied ? <span>{relaySavingsLine(stop)}</span> : null}
         </div>
         {stop.source_url ? (
           <a className="fuel-source-link" href={stop.source_url} target="_blank" rel="noreferrer">
@@ -488,9 +512,9 @@ function StopCard({ stop, compact = false, priceTarget = null }) {
       </div>
 
       <div className="fuel-stop-stat-grid">
-        <span><strong>Auto Diesel</strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}` : "-"}</span>
+        <span><strong>{stop.relay_applied ? "Net Auto Diesel" : "Auto Diesel"}</strong>{autoDieselPrice !== null ? `$${autoDieselPrice.toFixed(3)}` : "-"}</span>
+        <span><strong>Retail</strong>{retailPrice !== null ? `$${retailPrice.toFixed(3)}` : "-"}</span>
         <span><strong>Unleaded</strong>{stop.unleaded_price !== null && stop.unleaded_price !== undefined ? `$${stop.unleaded_price.toFixed(3)}` : "-"}</span>
-        <span><strong>Phone</strong>{stop.phone || "-"}</span>
         <span><strong>Store</strong>{stop.store_number || "-"}</span>
       </div>
 

@@ -36,6 +36,7 @@ from app.official_stations import (
     refine_shortlisted_detours,
     shortlist_official_stations_along_route,
 )
+from app.relay_discounts import relay_discount_runtime_status
 from app.schemas import (
     ApiCapability,
     FuelStop,
@@ -1935,6 +1936,9 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
         fuel_strategy=fuel_strategy,
     )
     price_support = "UnitedLane uses the cached official Love's/Pilot station catalog for fast routing, then refreshes live official fuel prices for priority route stops within a short time budget and queues the rest in the background."
+    relay_status = relay_discount_runtime_status()
+    if relay_status.get("recordCount"):
+        price_support += f" Relay overlay is active for {relay_status['recordCount']} imported station price records, so matched stops use your Relay net price instead of plain retail."
     if payload.price_target:
         price_support += f" Smart routing also tries to stay at or below ${payload.price_target:.3f}/gal and only goes above that target when the route cannot be completed safely or efficiently otherwise."
     map_link = build_map_link(origin.label, destination.label)

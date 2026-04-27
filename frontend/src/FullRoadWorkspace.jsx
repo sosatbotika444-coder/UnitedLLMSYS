@@ -182,6 +182,25 @@ function formatFuelPrice(value) {
   return `$${parsed.toFixed(3)}/gal`;
 }
 
+function retailFuelPrice(stop) {
+  const parsed = Number(stop?.retail_auto_diesel_price ?? stop?.retail_price);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function relaySavingsText(stop) {
+  if (!stop?.relay_applied) return "";
+  const retail = retailFuelPrice(stop);
+  const net = Number(stop?.auto_diesel_price ?? stop?.diesel_price ?? stop?.price);
+  const explicitDiscount = Number(stop?.relay_discount_amount);
+  const discount = Number.isFinite(explicitDiscount)
+    ? explicitDiscount
+    : (Number.isFinite(net) && retail !== null ? retail - net : null);
+  const parts = [];
+  if (retail !== null) parts.push(`retail $${retail.toFixed(3)}`);
+  if (discount !== null && Number.isFinite(discount)) parts.push(`save $${discount.toFixed(3)}`);
+  return parts.join(" | ");
+}
+
 function positiveNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -456,7 +475,9 @@ function bestRouteMetrics(plan) {
 
 function stopLine(stop) {
   if (!stop) return "";
-  return `${stop.brand || stop.name} - ${formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}`;
+  const price = formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price);
+  const relayLine = relaySavingsText(stop);
+  return relayLine ? `${stop.brand || stop.name} - net ${price} | ${relayLine}` : `${stop.brand || stop.name} - ${price}`;
 }
 
 function formatRelativePing(value) {
@@ -2204,7 +2225,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                         {strategy.stops.map((item) => (
                           <div key={`${index}-${item.sequence}-${item.stop.id}`} className="full-road-fuel-stop-item">
                             <strong>{item.sequence}. {item.stop.brand || item.stop.name}</strong>
-                            <span>{formatGallons(item.gallons_to_buy)} | {formatFuelPrice(item.auto_diesel_price)} | {formatCurrency(item.estimated_cost)}</span>
+                            <span>{formatGallons(item.gallons_to_buy)} | {item.stop?.relay_applied ? "Net " : ""}{formatFuelPrice(item.auto_diesel_price)} | {formatCurrency(item.estimated_cost)}</span>
+                            {item.stop?.relay_applied ? <small>{relaySavingsText(item.stop)}</small> : null}
                             <small>{item.stop.address}</small>
                           </div>
                         ))}
@@ -2217,7 +2239,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
                         {topStops.slice(0, 4).map((stop) => (
                           <div key={`${index}-${stop.id}`} className="full-road-top-stop-card">
                             <strong>{stop.brand || stop.name}</strong>
-                            <span>{formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}</span>
+                            <span>{stop.relay_applied ? "Net " : ""}{formatFuelPrice(stop.auto_diesel_price ?? stop.diesel_price ?? stop.price)}</span>
+                            {stop.relay_applied ? <small>{relaySavingsText(stop)}</small> : null}
                             <small>{stop.address}</small>
                           </div>
                         ))}
