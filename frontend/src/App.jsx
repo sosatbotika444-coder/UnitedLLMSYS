@@ -26,10 +26,13 @@ const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
+const SIDEBAR_STATE_KEY = "unitedlane_workspace_sidebar_state_v1";
 const ROUTE_REQUEST_TIMEOUT_MS = 120000;
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_TRUCK_MPG = 6.0;
 const DEFAULT_CURRENT_FUEL_GALLONS = 100;
+const WORKSPACE_SIDEBAR_WIDTH_EXPANDED = "278px";
+const WORKSPACE_SIDEBAR_WIDTH_COLLAPSED = "92px";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
   { id: "admin", label: "Admin", detail: "Users, bans, statistics" },
@@ -509,6 +512,17 @@ function readStoredUser() {
   }
 }
 
+function readStoredSidebarState() {
+  try {
+    const rawValue = localStorage.getItem(SIDEBAR_STATE_KEY);
+    if (!rawValue) return {};
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 async function apiRequest(path, options = {}, token = "") {
   const { timeoutMs, ...fetchOptions } = options;
   const headers = {
@@ -606,6 +620,149 @@ function WorkspaceShortcutButton({ tab, active, onSelect }) {
       <span>{tab.label}</span>
       <strong>{tab.detail}</strong>
     </button>
+  );
+}
+
+function WorkspaceSidebarShell({
+  expanded,
+  onToggle,
+  modeLabel,
+  brandMeta = "",
+  accountLabel = "Account",
+  accountTitle = "",
+  accountSubtitle = "",
+  accountBadge = "",
+  noteLabel = "",
+  noteTitle = "",
+  noteSubtitle = "",
+  action = null,
+  navSections = [],
+  activeTab = "",
+  onSelectTab = null,
+  footerDate = "",
+  footerTitle = "",
+  footerSubtitle = "",
+  onLogout,
+}) {
+  const hasNav = Array.isArray(navSections) && navSections.length > 0 && typeof onSelectTab === "function";
+
+  return (
+    <aside className={`workspace-sidebar-shell ${expanded ? "is-expanded" : "is-collapsed"}`.trim()}>
+      <div className="workspace-sidebar-stack">
+        <button
+          type="button"
+          className="workspace-sidebar-toggle"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
+          title={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
+        >
+          <span className="workspace-sidebar-toggle-icon" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          {expanded ? (
+            <span className="workspace-sidebar-toggle-copy">
+              <strong>Workspace Menu</strong>
+              <small>{modeLabel}</small>
+            </span>
+          ) : null}
+        </button>
+
+        <div className="workspace-sidebar-body">
+          <div className="workspace-sidebar-brand" title={`United Lane LLC | ${modeLabel}`}>
+            <div className="workspace-sidebar-logo">
+              <UnitedLaneMark className="workspace-sidebar-logo-mark" />
+            </div>
+            {expanded ? (
+              <div className="workspace-sidebar-brand-copy">
+                <strong>United Lane LLC</strong>
+                <span>{modeLabel}</span>
+                <small>{brandMeta}</small>
+              </div>
+            ) : null}
+          </div>
+
+          {expanded && accountTitle ? (
+            <article className="workspace-sidebar-account-card">
+              <span>{accountLabel}</span>
+              <strong>{accountTitle}</strong>
+              <small>{accountSubtitle}</small>
+              {accountBadge ? <em>{accountBadge}</em> : null}
+            </article>
+          ) : null}
+
+          {action ? (
+            <button className="workspace-sidebar-create" type="button" onClick={action.onClick} title={action.label}>
+              {expanded ? (
+                <>
+                  <span>{action.label}</span>
+                  <strong>{action.icon || "+"}</strong>
+                </>
+              ) : (
+                <strong>{action.icon || "+"}</strong>
+              )}
+            </button>
+          ) : null}
+
+          {hasNav ? (
+            <nav className={`workspace-sidebar-nav${expanded ? "" : " workspace-sidebar-nav-collapsed"}`}>
+              {navSections.map((section) => (
+                <section key={section.id} className="workspace-sidebar-section">
+                  {expanded ? <div className="workspace-sidebar-section-title">{section.label}</div> : null}
+                  <div className="workspace-sidebar-section-links">
+                    {section.tabs.map((tabId) => {
+                      const tab = workspaceTabs.find((item) => item.id === tabId);
+                      if (!tab) {
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className={`workspace-sidebar-link ${activeTab === tab.id ? "active" : ""}`}
+                          onClick={() => onSelectTab(tab.id)}
+                          title={`${tab.label} - ${tab.detail}`}
+                        >
+                          <span className="workspace-sidebar-link-icon">{tab.icon}</span>
+                          {expanded ? (
+                            <span className="workspace-sidebar-link-copy">
+                              <strong>{tab.label}</strong>
+                              <small>{tab.detail}</small>
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </nav>
+          ) : expanded && noteTitle ? (
+            <article className="workspace-sidebar-note">
+              {noteLabel ? <span>{noteLabel}</span> : null}
+              <strong>{noteTitle}</strong>
+              <small>{noteSubtitle}</small>
+            </article>
+          ) : null}
+
+          <div className="workspace-sidebar-footer">
+            {expanded && footerTitle ? (
+              <div className="workspace-sidebar-footer-card">
+                <span>{footerDate}</span>
+                <strong>{footerTitle}</strong>
+                <small>{footerSubtitle}</small>
+              </div>
+            ) : null}
+            <button className="secondary-button workspace-sidebar-logout" type="button" onClick={onLogout} title="Logout">
+              {expanded ? "Logout" : "Out"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -1012,6 +1169,7 @@ export default function App() {
   const [activeWorkspace, setActiveWorkspace] = useState("command");
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sitePanel, setSitePanel] = useState("");
+  const [sidebarExpandedByDepartment, setSidebarExpandedByDepartment] = useState(() => readStoredSidebarState());
 
   useEffect(() => {
     if (!token) {
@@ -1142,6 +1300,10 @@ export default function App() {
   }, [selectedDepartment]);
 
   useEffect(() => {
+    localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify(sidebarExpandedByDepartment));
+  }, [sidebarExpandedByDepartment]);
+
+  useEffect(() => {
     if (selectedDepartment !== "driver" && mode === "register") {
       setMode("login");
     }
@@ -1219,6 +1381,7 @@ export default function App() {
   const isAdminWorkspace = activeDepartment === "admin";
   const isFuelService = activeDepartment === "fuel";
   const isDriverWorkspace = activeDepartment === "driver";
+  const sidebarExpanded = sidebarExpandedByDepartment[activeDepartment] !== false;
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
   const activeWorkspaceCopy = workspaceCopy[activeWorkspaceMeta.id] || workspaceCopy.command;
   const workspaceShortcutTabs = workspaceQuickStartCards
@@ -1226,6 +1389,9 @@ export default function App() {
     .filter(Boolean);
   const activeSiteNav = sitePanel || (!user || !isFuelService || activeWorkspace === "command" ? "home" : "");
   const loadStatusTabs = ["All", ...statusOptions];
+  const workspaceShellStyle = {
+    "--workspace-sidebar-width": sidebarExpanded ? WORKSPACE_SIDEBAR_WIDTH_EXPANDED : WORKSPACE_SIDEBAR_WIDTH_COLLAPSED
+  };
   const activityView = useMemo(() => {
     if (!user) {
       return {
@@ -1632,6 +1798,13 @@ export default function App() {
     setSitePanel(panel);
   }
 
+  function toggleWorkspaceSidebar() {
+    setSidebarExpandedByDepartment((current) => ({
+      ...current,
+      [activeDepartment]: !sidebarExpanded
+    }));
+  }
+
   function handleHomeNavigation() {
     setSitePanel("");
 
@@ -1826,37 +1999,24 @@ export default function App() {
           activeItem={activeSiteNav}
         />
 
-        <main className="workspace-app-shell site-workspace-shell workspace-app-shell-admin">
-          <aside className="workspace-sidebar-shell">
-            <div className="workspace-sidebar-brand">
-              <div className="workspace-sidebar-logo">
-                <UnitedLaneMark className="workspace-sidebar-logo-mark" />
-              </div>
-              <div className="workspace-sidebar-brand-copy">
-                <strong>United Lane LLC</strong>
-                <span>Admin</span>
-                <small>{user.username ? `@${user.username}` : user.email}</small>
-              </div>
-            </div>
-
-            <article className="workspace-sidebar-account-card">
-              <span>Admin</span>
-              <strong>{user.full_name}</strong>
-              <small>{user.email}</small>
-              <em>Full access</em>
-            </article>
-
-            <div className="workspace-sidebar-footer">
-              <div className="workspace-sidebar-footer-card">
-                <span>{currentDate}</span>
-                <strong>Admin ready</strong>
-                <small>Users, bans, statistics</small>
-              </div>
-              <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
-                Logout
-              </button>
-            </div>
-          </aside>
+        <main className={`workspace-app-shell site-workspace-shell workspace-app-shell-admin${sidebarExpanded ? "" : " workspace-app-shell-collapsed"}`} style={workspaceShellStyle}>
+          <WorkspaceSidebarShell
+            expanded={sidebarExpanded}
+            onToggle={toggleWorkspaceSidebar}
+            modeLabel="Admin"
+            brandMeta={user.username ? `@${user.username}` : user.email}
+            accountLabel="Admin"
+            accountTitle={user.full_name}
+            accountSubtitle={user.email}
+            accountBadge="Full access"
+            noteLabel="Quick Access"
+            noteTitle="Access center"
+            noteSubtitle="Users, bans, passwords, and platform statistics stay together in one control surface."
+            footerDate={currentDate}
+            footerTitle="Admin ready"
+            footerSubtitle="Users, bans, statistics"
+            onLogout={logout}
+          />
 
           <section className="workspace-main-shell">
             <header className="workspace-main-header">
@@ -1915,37 +2075,24 @@ export default function App() {
           activeItem={activeSiteNav}
         />
 
-        <main className="workspace-app-shell site-workspace-shell workspace-app-shell-driver">
-          <aside className="workspace-sidebar-shell">
-            <div className="workspace-sidebar-brand">
-              <div className="workspace-sidebar-logo">
-                <UnitedLaneMark className="workspace-sidebar-logo-mark" />
-              </div>
-              <div className="workspace-sidebar-brand-copy">
-                <strong>United Lane LLC</strong>
-                <span>Driver</span>
-                <small>Motive truck workspace</small>
-              </div>
-            </div>
-
-            <article className="workspace-sidebar-account-card">
-              <span>Driver</span>
-              <strong>{user.full_name}</strong>
-              <small>Fuel, service, emergency</small>
-              <em>Driver access</em>
-            </article>
-
-            <div className="workspace-sidebar-footer">
-              <div className="workspace-sidebar-footer-card">
-                <span>{currentDate}</span>
-                <strong>Driver ready</strong>
-                <small>Truck route and safety support</small>
-              </div>
-              <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
-                Logout
-              </button>
-            </div>
-          </aside>
+        <main className={`workspace-app-shell site-workspace-shell workspace-app-shell-driver${sidebarExpanded ? "" : " workspace-app-shell-collapsed"}`} style={workspaceShellStyle}>
+          <WorkspaceSidebarShell
+            expanded={sidebarExpanded}
+            onToggle={toggleWorkspaceSidebar}
+            modeLabel="Driver"
+            brandMeta="Motive truck workspace"
+            accountLabel="Driver"
+            accountTitle={user.full_name}
+            accountSubtitle="Fuel, service, emergency"
+            accountBadge="Driver access"
+            noteLabel="Quick Flow"
+            noteTitle="Truck support"
+            noteSubtitle="Open fuel route, service tools, and SOS from one sliding workspace shell."
+            footerDate={currentDate}
+            footerTitle="Driver ready"
+            footerSubtitle="Truck route and safety support"
+            onLogout={logout}
+          />
 
           <section className="workspace-main-shell">
             <header className="workspace-main-header">
@@ -2002,37 +2149,24 @@ export default function App() {
           activeItem={activeSiteNav}
         />
 
-        <main className="workspace-app-shell site-workspace-shell workspace-app-shell-safety">
-          <aside className="workspace-sidebar-shell">
-            <div className="workspace-sidebar-brand">
-              <div className="workspace-sidebar-logo">
-                <UnitedLaneMark className="workspace-sidebar-logo-mark" />
-              </div>
-              <div className="workspace-sidebar-brand-copy">
-                <strong>United Lane LLC</strong>
-                <span>Safety</span>
-                <small>{user.email}</small>
-              </div>
-            </div>
-
-            <article className="workspace-sidebar-account-card">
-              <span>Account</span>
-              <strong>{user.full_name}</strong>
-              <small>{user.email}</small>
-              <em>Safety access</em>
-            </article>
-
-            <div className="workspace-sidebar-footer">
-              <div className="workspace-sidebar-footer-card">
-                <span>{currentDate}</span>
-                <strong>Safety ready</strong>
-                <small>Fleet, services, docs</small>
-              </div>
-              <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
-                Logout
-              </button>
-            </div>
-          </aside>
+        <main className={`workspace-app-shell site-workspace-shell workspace-app-shell-safety${sidebarExpanded ? "" : " workspace-app-shell-collapsed"}`} style={workspaceShellStyle}>
+          <WorkspaceSidebarShell
+            expanded={sidebarExpanded}
+            onToggle={toggleWorkspaceSidebar}
+            modeLabel="Safety"
+            brandMeta={user.email}
+            accountLabel="Account"
+            accountTitle={user.full_name}
+            accountSubtitle={user.email}
+            accountBadge="Safety access"
+            noteLabel="Safety Flow"
+            noteTitle="Fleet oversight"
+            noteSubtitle="Fleet, service map, documents, notes, and AI stay grouped in this sliding panel layout."
+            footerDate={currentDate}
+            footerTitle="Safety ready"
+            footerSubtitle="Fleet, services, docs"
+            onLogout={logout}
+          />
 
           <section className="workspace-main-shell">
             <header className="workspace-main-header">
@@ -2130,73 +2264,25 @@ export default function App() {
         activeItem={activeSiteNav}
       />
 
-      <main className="workspace-app-shell site-workspace-shell">
-        <aside className="workspace-sidebar-shell">
-          <div className="workspace-sidebar-brand">
-            <div className="workspace-sidebar-logo">
-              <UnitedLaneMark className="workspace-sidebar-logo-mark" />
-            </div>
-            <div className="workspace-sidebar-brand-copy">
-              <strong>United Lane LLC</strong>
-              <span>Fuel Service</span>
-              <small>{user.email}</small>
-            </div>
-          </div>
-
-          <article className="workspace-sidebar-account-card">
-            <span>Account</span>
-            <strong>{user.full_name}</strong>
-            <small>{user.email}</small>
-            <em>Fuel Service access</em>
-          </article>
-
-          <button className="workspace-sidebar-create" type="button" onClick={createRow}>
-            <span>New Load</span>
-            <strong>+</strong>
-          </button>
-
-          <nav className="workspace-sidebar-nav">
-            {workspaceNavSections.map((section) => (
-              <section key={section.id} className="workspace-sidebar-section">
-                <div className="workspace-sidebar-section-title">{section.label}</div>
-                <div className="workspace-sidebar-section-links">
-                  {section.tabs.map((tabId) => {
-                    const tab = workspaceTabs.find((item) => item.id === tabId);
-                    if (!tab) {
-                      return null;
-                    }
-
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`workspace-sidebar-link ${activeWorkspace === tab.id ? "active" : ""}`}
-                        onClick={() => setActiveWorkspace(tab.id)}
-                      >
-                        <span className="workspace-sidebar-link-icon">{tab.icon}</span>
-                        <span className="workspace-sidebar-link-copy">
-                          <strong>{tab.label}</strong>
-                          <small>{tab.detail}</small>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </nav>
-
-          <div className="workspace-sidebar-footer">
-            <div className="workspace-sidebar-footer-card">
-              <span>{currentDate}</span>
-              <strong>{savingId ? `Saving load #${savingId}` : "Fuel Service ready"}</strong>
-              <small>{metrics.readiness}% readiness score</small>
-            </div>
-            <button className="secondary-button workspace-sidebar-logout" type="button" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </aside>
+      <main className={`workspace-app-shell site-workspace-shell workspace-app-shell-fuel${sidebarExpanded ? "" : " workspace-app-shell-collapsed"}`} style={workspaceShellStyle}>
+        <WorkspaceSidebarShell
+          expanded={sidebarExpanded}
+          onToggle={toggleWorkspaceSidebar}
+          modeLabel="Fuel Service"
+          brandMeta={user.email}
+          accountLabel="Account"
+          accountTitle={user.full_name}
+          accountSubtitle={user.email}
+          accountBadge="Fuel Service access"
+          action={{ label: "New Load", icon: "+", onClick: createRow }}
+          navSections={workspaceNavSections}
+          activeTab={activeWorkspace}
+          onSelectTab={setActiveWorkspace}
+          footerDate={currentDate}
+          footerTitle={savingId ? `Saving load #${savingId}` : "Fuel Service ready"}
+          footerSubtitle={`${metrics.readiness}% readiness score`}
+          onLogout={logout}
+        />
 
         <section className="workspace-main-shell">
           <header className="workspace-main-header">
