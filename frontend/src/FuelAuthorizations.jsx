@@ -194,26 +194,34 @@ export default function FuelAuthorizations({ token, active = true }) {
     try {
       await apiRequest(path, options, token);
       await loadAuthorizations(statusFilter);
+      return true;
     } catch (actionError) {
       setError(actionError.message);
+      return false;
     } finally {
       setBusyId("");
     }
   }
 
   async function markSent(item) {
-    await runAction(item, `/fuel-authorizations/${item.id}/mark-sent`, { method: "POST", body: JSON.stringify({ note: "Driver instructions sent from Fuel Service." }) });
-    setMessage(`${item.approval_code} marked sent.`);
+    const success = await runAction(item, `/fuel-authorizations/${item.id}/mark-sent`, { method: "POST", body: JSON.stringify({ note: "Driver instructions sent from Fuel Service." }) });
+    if (success) {
+      setMessage(`${item.approval_code} marked sent.`);
+    }
   }
 
   async function cancel(item) {
-    await runAction(item, `/fuel-authorizations/${item.id}/cancel`, { method: "POST", body: JSON.stringify({ note: "Cancelled from Fuel Service board." }) });
-    setMessage(`${item.approval_code} cancelled.`);
+    const success = await runAction(item, `/fuel-authorizations/${item.id}/cancel`, { method: "POST", body: JSON.stringify({ note: "Cancelled from Fuel Service board." }) });
+    if (success) {
+      setMessage(`${item.approval_code} cancelled.`);
+    }
   }
 
   async function reconcile(item) {
-    await runAction(item, `/fuel-authorizations/${item.id}/reconcile`, { method: "POST" });
-    setMessage(`${item.approval_code} reconciled with Motive purchases.`);
+    const success = await runAction(item, `/fuel-authorizations/${item.id}/reconcile`, { method: "POST" });
+    if (success) {
+      setMessage(`${item.approval_code} reconciled with Motive purchases.`);
+    }
   }
 
   async function reconcileOpen() {

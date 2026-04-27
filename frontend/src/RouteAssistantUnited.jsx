@@ -833,7 +833,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
     }
 
     setRouteForm((current) => {
-      if (current.origin && current.origin !== "Chicago, IL") {
+      if (current.origin === originQuery) {
         return current;
       }
       return { ...current, origin: originQuery };

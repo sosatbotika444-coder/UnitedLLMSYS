@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const DASHBOARD_REFRESH_INTERVAL_MS = 60000;
 const watchlistFocusOptions = ["All", "Low Fuel", "Faults", "Stale", "Safety"];
 
 async function apiRequest(path, options = {}, token = "") {
@@ -38,11 +40,36 @@ function compactDate(value) {
   if (!value) return "Unknown";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", { month: "short", dayа: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function clampPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function vehicleFuelPercent(vehicle) {
+  const location = vehicle?.location || {};
+  return clampPercent(
+    location.fuel_level_percent
+    ?? location.fuel_primary_remaining_percentage
+    ?? location.fuel_remaining_percentage
+    ?? location.fuel_percentage
+    ?? null
+  );
+}
+
+function vehicleDriverLabel(vehicle) {
+  return vehicle?.resolved_driver?.full_name || vehicle?.driver?.full_name || vehicle?.permanent_driver?.full_name || "Unassigned";
+}
+
+function vehicleLocationLabel(vehicle) {
+  return buildVehicleLocationLabel(vehicle, "");
 }
 
 function dashboardVehicleMatches(vehicle, term) {
@@ -53,12 +80,17 @@ function dashboardVehicleMatches(vehicle, term) {
     vehicle.model,
     vehicle.vin,
     vehicle.license_plate_number,
-    vehicle.resolved_driver?.full_name,
-    vehicle.driver?.full_name,
-    vehicle.permanent_driver?.full_name,
+    vehicleDriverLabel(vehicle),
+    vehicle.resolved_driver?.email,
+    vehicle.driver?.email,
+    vehicle.permanent_driver?.email,
     vehicle.location?.city,
     vehicle.location?.state,
     vehicle.location?.address,
+    vehicle.location?.display_label,
+    vehicle.location?.raw_address,
+    vehicle.location?.display_coords,
+    vehicleLocationLabel(vehicle),
   ]
     .filter(Boolean)
     .join(" ")
@@ -67,7 +99,8 @@ function dashboardVehicleMatches(vehicle, term) {
 }
 
 function watchlistDetail(kind, vehicle) {
-  if (kind === "Low Fuel") return `${oneDecimal(vehicle.location?.fuel_level_percent)}%`;
+  const fuelPercent = vehicleFuelPercent(vehicle);
+  if (kind === "Low Fuel") return fuelPercent !== null ? `${oneDecimal(fuelPercent)}% fuel remaining` : "Fuel unavailable";
   if (kind === "Faults") return `${number(vehicle.fault_summary?.active_count)} active faults`;
   if (kind === "Stale") return `${oneDecimal(vehicle.location?.age_minutes)} min since last ping`;
   return `${number(vehicle.performance_summary?.pending_review_count)} pending events`;
@@ -86,8 +119,10 @@ export default function MotiveDashboardCards({ token, active = true }) {
     }
 
     let ignore = false;
-    async function load() {
-      setLoading(true);
+    async function load(quiet = false) {
+      if (!quiet) {
+        setLoading(true);
+      }
       setError("");
       try {
         const data = await apiRequest("/motive/fleet", {}, token);
@@ -99,15 +134,19 @@ export default function MotiveDashboardCards({ token, active = true }) {
           setError(fetchError.message);
         }
       } finally {
-        if (!ignore) {
+        if (!ignore && !quiet) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    void load(false);
+    const timer = window.setInterval(() => {
+      void load(true);
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
     return () => {
       ignore = true;
+      window.clearInterval(timer);
     };
   }, [active, token]);
 
@@ -115,8 +154,8 @@ export default function MotiveDashboardCards({ token, active = true }) {
     const vehicles = snapshot?.vehicles || [];
     return {
       lowFuel: vehicles
-        .filter((vehicle) => vehicle.location?.fuel_level_percent !== null && vehicle.location?.fuel_level_percent !== undefined)
-        .sort((left, right) => (left.location?.fuel_level_percent || 0) - (right.location?.fuel_level_percent || 0))
+        .filter((vehicle) => vehicleFuelPercent(vehicle) !== null)
+        .sort((left, right) => (vehicleFuelPercent(left) ?? 0) - (vehicleFuelPercent(right) ?? 0))
         .slice(0, 5),
       faults: [...vehicles]
         .sort((left, right) => (right.fault_summary?.active_count || 0) - (left.fault_summary?.active_count || 0))
@@ -200,7 +239,7 @@ export default function MotiveDashboardCards({ token, active = true }) {
                   type="text"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Truck, VIN, driver, city"
+                  placeholder="Truck, driver, VIN, plate, location"
                 />
               </label>
               <label>
@@ -222,9 +261,9 @@ export default function MotiveDashboardCards({ token, active = true }) {
               <section key={section.id} className="motive-watch-card">
                 <h3>{section.title}</h3>
                 {section.items.length ? section.items.map((vehicle) => (
-                  <div key={`${section.id}-${vehicle.id}`}>
-                    <strong>{vehicle.number}</strong>
-                    <small>{watchlistDetail(section.id, vehicle)}</small>
+                  <div key={`${section.id}-${vehicle.id}`} title={vehicleLocationLabel(vehicle) || "Location unavailable"}>
+                    <strong>{vehicle.number || "Truck"}</strong>
+                    <small>{[watchlistDetail(section.id, vehicle), vehicleDriverLabel(vehicle)].filter(Boolean).join(" | ")}</small>
                   </div>
                 )) : <div className="empty-route-card compact">{section.emptyText}</div>}
               </section>

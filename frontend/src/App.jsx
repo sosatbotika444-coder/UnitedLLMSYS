@@ -243,7 +243,7 @@ function positiveNumber(value) {
 }
 
 function vehicleDriver(vehicle) {
-  return vehicle?.driver || vehicle?.permanent_driver || null;
+  return vehicle?.resolved_driver || vehicle?.driver || vehicle?.permanent_driver || null;
 }
 
 function vehicleDriverName(vehicle) {
@@ -313,9 +313,18 @@ function findVehicleForRow(row, vehicles) {
   const driverText = String(row.driver || "").trim().toLowerCase();
 
   return vehicles.find((vehicle) => {
-    const label = vehicleLabel(vehicle).toLowerCase();
+    const identifiers = [
+      vehicleLabel(vehicle),
+      vehicle?.vin,
+      vehicle?.license_plate_number,
+      vehicle?.number,
+    ].filter(Boolean).join(" ").toLowerCase();
     const driverName = vehicleDriverName(vehicle).toLowerCase();
-    const truckMatch = truckText && (truckText === label || truckText.includes(label) || label.includes(truckText));
+    const truckMatch = truckText && (
+      truckText === identifiers
+      || truckText.includes(identifiers)
+      || identifiers.includes(truckText)
+    );
     const driverMatch = driverText && (driverText === driverName || driverText.includes(driverName) || driverName.includes(driverText));
     return truckMatch || driverMatch;
   }) || null;

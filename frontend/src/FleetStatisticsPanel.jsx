@@ -84,7 +84,7 @@ function average(values) {
 }
 
 function vehicleDriver(vehicle) {
-  return vehicle?.driver || vehicle?.permanent_driver || null;
+  return vehicle?.resolved_driver || vehicle?.driver || vehicle?.permanent_driver || null;
 }
 
 function vehicleDriverName(vehicle) {
@@ -295,6 +295,7 @@ export default function FleetStatisticsPanel({ token, active = true, loadRows = 
       const ageMinutes = Number(vehicle?.location?.age_minutes);
       const truckNumber = vehicleLabel(vehicle);
       const driverName = vehicleDriverName(vehicle);
+      const locationLabel = vehicleLocationLabel(vehicle);
       const loadRoute = [matchedLoad?.pickup_city, matchedLoad?.delivery_city].filter(Boolean).join(" to ");
       const searchBlob = [
         truckNumber,
@@ -305,9 +306,8 @@ export default function FleetStatisticsPanel({ token, active = true, loadRows = 
         vehicle?.model,
         vehicle?.year,
         vehicle?.fuel_type,
-        vehicle?.location?.city,
-        vehicle?.location?.state,
-        vehicle?.location?.address,
+        locationLabel,
+        vehicle?.location?.display_coords,
         matchedLoad?.status,
         matchedLoad?.pickup_city,
         matchedLoad?.delivery_city,

@@ -265,7 +265,7 @@ function normalizeChecklistState(value) {
 }
 
 function vehicleDriver(vehicle) {
-  return vehicle?.driver || vehicle?.permanent_driver || null;
+  return vehicle?.resolved_driver || vehicle?.driver || vehicle?.permanent_driver || null;
 }
 
 function vehicleDriverName(vehicle) {
@@ -310,9 +310,9 @@ function findVehicleForLoad(loadRow, vehicles) {
   const driverTerm = normalizeText(loadRow.driver);
 
   return vehicles.find((vehicle) => {
-    const label = normalizeText(vehicleLabel(vehicle));
+    const identifiers = normalizeText([vehicleLabel(vehicle), vehicle?.vin, vehicle?.license_plate_number, vehicle?.number].filter(Boolean).join(" "));
     const driverName = normalizeText(vehicleDriverName(vehicle));
-    const truckMatch = truckTerm && (label === truckTerm || label.includes(truckTerm) || truckTerm.includes(label));
+    const truckMatch = truckTerm && (identifiers === truckTerm || identifiers.includes(truckTerm) || truckTerm.includes(identifiers));
     const driverMatch = driverTerm && (driverName === driverTerm || driverName.includes(driverTerm) || driverTerm.includes(driverName));
     return truckMatch || driverMatch;
   }) || null;
@@ -328,7 +328,7 @@ function matchedLoadRow(vehicle, loadRows) {
   return loadRows.find((row) => {
     const truckText = normalizeText(row.truck);
     const driverText = normalizeText(row.driver);
-    const vehicleText = normalizeText(vehicleLabel(vehicle));
+    const vehicleText = normalizeText([vehicleLabel(vehicle), vehicle?.vin, vehicle?.license_plate_number, vehicle?.number].filter(Boolean).join(" "));
     const driverName = normalizeText(vehicleDriverName(vehicle));
     return (truckText && (truckText === vehicleText || truckText.includes(vehicleText) || vehicleText.includes(truckText)))
       || (driverText && (driverText === driverName || driverText.includes(driverName) || driverName.includes(driverText)));
@@ -1357,6 +1357,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     selectedTrip?.tankCapacityGallons,
     selectedTrip?.mpg,
     selectedTripVehicle?.id,
+    selectedTripVehicle?.location?.display_label,
     selectedTripVehicle?.location?.address,
     selectedTripLivePoint?.lat,
     selectedTripLivePoint?.lon

@@ -128,6 +128,23 @@ function positiveNumber(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function clampPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function vehicleFuelPercent(vehicle) {
+  const location = vehicle?.location || {};
+  return clampPercent(
+    location.fuel_level_percent
+    ?? location.fuel_primary_remaining_percentage
+    ?? location.fuel_remaining_percentage
+    ?? location.fuel_percentage
+    ?? null
+  );
+}
+
 function vehicleMpgInfo(vehicle) {
   const directMpg = positiveNumber(vehicle?.mpg);
   if (directMpg !== null) {
@@ -194,13 +211,13 @@ function vehicleDriverLabel(vehicle) {
 
 function vehicleAttentionScore(vehicle) {
   let score = 0;
-  const fuelPercent = Number(vehicle?.location?.fuel_level_percent);
+  const fuelPercent = vehicleFuelPercent(vehicle);
   const faultCount = Number(vehicle?.fault_summary?.active_count) || 0;
   const hosStatus = vehicle?.eld_hours?.status;
 
   if (vehicle?.is_stale) score += 5;
   if (vehicle?.is_moving) score += 1;
-  if (Number.isFinite(fuelPercent)) {
+  if (fuelPercent !== null) {
     if (fuelPercent <= 15) score += 5;
     else if (fuelPercent <= 25) score += 3;
   }
@@ -211,14 +228,14 @@ function vehicleAttentionScore(vehicle) {
 }
 
 function vehicleAttentionReason(vehicle) {
-  const fuelPercent = Number(vehicle?.location?.fuel_level_percent);
+  const fuelPercent = vehicleFuelPercent(vehicle);
   const faultCount = Number(vehicle?.fault_summary?.active_count) || 0;
   const hosStatus = vehicle?.eld_hours?.status;
 
   if (vehicle?.is_stale) {
     return "Location ping is stale and should be verified.";
   }
-  if (Number.isFinite(fuelPercent) && fuelPercent <= 25) {
+  if (fuelPercent !== null && fuelPercent <= 25) {
     return `Fuel is down to ${decimalValue(fuelPercent)}%.`;
   }
   if (faultCount > 0) {
@@ -290,7 +307,7 @@ function AttentionVehicleCard({ vehicle, active, onSelect }) {
 
 function VehicleListCard({ vehicle, selected, onSelect }) {
   const mpgInfo = vehicleMpgInfo(vehicle);
-  const fuelPercent = vehicle.location?.fuel_level_percent;
+  const fuelPercent = vehicleFuelPercent(vehicle);
   const faultCount = vehicle.fault_summary?.active_count || 0;
   const driveLeft = formatHosClock(vehicle.eld_hours, "drive_seconds");
 
@@ -474,10 +491,29 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     const vehicles = snapshot?.vehicles || [];
     const term = search.trim().toLowerCase();
     return vehicles.filter((vehicle) => {
-      const locationText = [vehicle.location?.city, vehicle.location?.state, vehicle.location?.address].filter(Boolean).join(" ").toLowerCase();
-      const haystack = [vehicle.number, vehicle.make, vehicle.model, vehicle.vin, vehicle.license_plate_number, locationText].filter(Boolean).join(" ").toLowerCase();
+      const locationText = [
+        buildVehicleLocationLabel(vehicle, ""),
+        vehicle.location?.city,
+        vehicle.location?.state,
+        vehicle.location?.address,
+        vehicle.location?.display_label,
+        vehicle.location?.raw_address,
+        vehicle.location?.display_coords,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const haystack = [
+        vehicle.number,
+        vehicle.make,
+        vehicle.model,
+        vehicle.vin,
+        vehicle.license_plate_number,
+        vehicleDriverLabel(vehicle),
+        vehicle.resolved_driver?.email,
+        vehicle.driver?.email,
+        vehicle.permanent_driver?.email,
+        locationText,
+      ].filter(Boolean).join(" ").toLowerCase();
       const matchesSearch = !term || haystack.includes(term);
-      const fuelPercent = vehicle.location?.fuel_level_percent ?? 100;
+      const fuelPercent = vehicleFuelPercent(vehicle) ?? 100;
       const matchesFilter =
         filter === "All" ||
         (filter === "Moving" && vehicle.is_moving) ||
@@ -561,6 +597,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
   const historyPoints = detail?.history?.points || [];
   const currentVehicle = selectedVehicle || detail?.vehicle || null;
+  const currentFuelPercent = vehicleFuelPercent(currentVehicle);
   const currentVehicleMpg = vehicleMpgInfo(currentVehicle);
   const currentEldHours = currentVehicle?.eld_hours || {};
   const canFocusStreet = hasCoordinates(currentVehicle);
@@ -746,7 +783,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               <div className="motive-list-toolbar motive-list-toolbar-commercial">
                 <label className="workspace-table-search motive-search-box">
                   <span>Search fleet</span>
-                  <input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Truck, VIN, plate, city" />
+                  <input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Truck, driver, VIN, plate, location" />
                 </label>
               </div>
 
@@ -807,7 +844,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <div className="motive-focus-metric-grid">
                     <article className="motive-focus-stat">
                       <span>Fuel</span>
-                      <strong>{currentVehicle.location?.fuel_level_percent !== null && currentVehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(currentVehicle.location.fuel_level_percent)}%` : "Unknown"}</strong>
+                      <strong>{currentFuelPercent !== null ? `${decimalValue(currentFuelPercent)}%` : "Unknown"}</strong>
                       <small>{currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : currentVehicle.fuel_type || "Fuel data unavailable"}</small>
                     </article>
                     <article className="motive-focus-stat">
@@ -881,7 +918,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 {currentVehicle ? (
                   <>
                     <div className="motive-detail-card-grid">
-                      <DetailCard label="Fuel" value={currentVehicle.location?.fuel_level_percent !== null && currentVehicle.location?.fuel_level_percent !== undefined ? `${decimalValue(currentVehicle.location.fuel_level_percent)}%` : "Unknown"} detail={[currentVehicle.fuel_type || "Fuel type unknown", currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : null].filter(Boolean).join(" | ")} />
+                      <DetailCard label="Fuel" value={currentFuelPercent !== null ? `${decimalValue(currentFuelPercent)}%` : "Unknown"} detail={[currentVehicle.fuel_type || "Fuel type unknown", currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : null].filter(Boolean).join(" | ")} />
                       <DetailCard label="MPG" value={currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : "Unknown"} detail={currentVehicleMpg.source || "Motive fuel efficiency unavailable"} />
                       <DetailCard label="Odometer" value={currentVehicle.location?.true_odometer ? `${metricValue(currentVehicle.location.true_odometer)} mi` : currentVehicle.location?.odometer ? `${metricValue(currentVehicle.location.odometer)} mi` : "Unknown"} detail="Latest telematics reading" />
                       <DetailCard label="Engine Hours" value={currentVehicle.location?.true_engine_hours ? decimalValue(currentVehicle.location.true_engine_hours) : currentVehicle.location?.engine_hours ? decimalValue(currentVehicle.location.engine_hours) : "Unknown"} detail="Engine runtime" />
@@ -899,7 +936,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                       <div><span>Driver</span><strong>{vehicleDriverLabel(currentVehicle)}</strong><small>{currentVehicle.resolved_driver?.email || currentVehicle.resolved_driver?.phone || currentVehicle.driver?.email || currentVehicle.driver?.phone || currentVehicle.permanent_driver?.email || "No driver contact"}</small></div>
                       <div><span>Vehicle</span><strong>{[currentVehicle.year, currentVehicle.make, currentVehicle.model].filter(Boolean).join(" ") || "Unknown unit"}</strong><small>{currentVehicle.license_plate_number ? `${currentVehicle.license_plate_state || ""} ${currentVehicle.license_plate_number}`.trim() : "No plate"}</small></div>
                       <div><span>ELD / HOS</span><strong>{currentVehicle.eld_device?.identifier || currentEldHours.source || "Unavailable"}</strong><small>{currentEldHours.summary || currentVehicle.eld_device?.model || "No gateway model"}</small></div>
-                      <div><span>Location</span><strong>{currentVehicle.location?.address || [currentVehicle.location?.city, currentVehicle.location?.state].filter(Boolean).join(", ") || "Unknown"}</strong><small>{formatCoordinates(currentVehicle.location)}</small></div>
+                      <div><span>Location</span><strong>{selectedLocationLabel}</strong><small>{formatCoordinates(currentVehicle.location)}</small></div>
                       <div><span>Last update</span><strong>{formatTimestamp(currentVehicle.location?.located_at)}</strong><small>{currentVehicle.location?.age_minutes !== null && currentVehicle.location?.age_minutes !== undefined ? `${currentVehicle.location.age_minutes} minutes ago` : "Age unavailable"}</small></div>
                       <div><span>Registration</span><strong>{currentVehicle.registration_expiry_date || "No expiry date"}</strong><small>{currentVehicle.status || currentVehicle.availability_status || "Status unavailable"}</small></div>
                     </div>
@@ -929,7 +966,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     {historyPoints.slice(0, 10).map((point, index) => (
                       <div key={`${point.located_at}-${index}`} className="motive-history-row">
                         <strong>{formatTimestamp(point.located_at)}</strong>
-                        <span>{point.address || point.description || "Unknown area"}</span>
+                        <span>{point.display_label || point.address || point.description || "Unknown area"}</span>
                         <small>{point.speed_mph !== null && point.speed_mph !== undefined ? `${decimalValue(point.speed_mph)} mph` : point.event_type || "No speed"}</small>
                       </div>
                     ))}
