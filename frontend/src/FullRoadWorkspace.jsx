@@ -5,6 +5,7 @@ import {
   getTripStageTimeline,
   recordTripTimelineEvent,
 } from "./profitability";
+import { useConfirmDialog } from "./feedback";
 import { buildVehicleLocationLabel, buildVehicleLocationQuery, vehicleLocationPoint } from "./locationFormatting";
 import MapStage from "./MapStage";
 
@@ -1057,6 +1058,7 @@ function LegSummary({ title, plan, nextLabel }) {
 }
 
 export default function FullRoadWorkspace({ token, active = true, loadRows = [] }) {
+  const confirmAction = useConfirmDialog();
   const [fleetSnapshot, setFleetSnapshot] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetError, setFleetError] = useState("");
@@ -1650,6 +1652,17 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
 
   async function archiveTrip(tripId) {
     if (!token || !tripId) return;
+
+    const accepted = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Archive full-road trip",
+      title: "Archive this full-road trip?",
+      description: "The trip will leave the live board and remain accessible only through archived history and exports.",
+      confirmLabel: "Archive trip",
+    });
+    if (!accepted) return;
+
     setTripBusy(true);
     setTripError("");
     setMessage("");

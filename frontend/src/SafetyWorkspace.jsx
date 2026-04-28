@@ -2,35 +2,37 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UnitedLaneChat from "./UnitedLaneChat";
 import SafetyServiceTools from "./SafetyServiceTools";
 import TeamChat from "./TeamChat";
+import { useConfirmDialog } from "./feedback";
+import { UnitedIcon } from "./UnitedLaneIcons";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
 const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif";
 const safetyMobilePrimaryTabs = [
-  { id: "fleet", label: "Fleet" },
-  { id: "investigations", label: "Incidents" },
-  { id: "brief", label: "Brief" },
-  { id: "team-chat", label: "Chat" }
+  { id: "fleet", label: "Fleet", icon: "fleet" },
+  { id: "investigations", label: "Incidents", icon: "warning" },
+  { id: "brief", label: "Brief", icon: "docs" },
+  { id: "team-chat", label: "Chat", icon: "chat" }
 ];
 const safetyMobileMoreTabs = [
-  { id: "automation", label: "Automation" },
-  { id: "services", label: "Service Map" },
-  { id: "emergency", label: "Emergency" },
-  { id: "documents", label: "Documents" },
-  { id: "notes", label: "Notes" },
-  { id: "ai", label: "AI Chat" }
+  { id: "automation", label: "Automation", icon: "dashboard" },
+  { id: "services", label: "Service Map", icon: "service" },
+  { id: "emergency", label: "Emergency", icon: "emergency" },
+  { id: "documents", label: "Documents", icon: "docs" },
+  { id: "notes", label: "Notes", icon: "table" },
+  { id: "ai", label: "AI Chat", icon: "spark" }
 ];
 const safetyTabs = [
-  { id: "fleet", label: "Fleet Safety" },
-  { id: "automation", label: "Automation" },
-  { id: "investigations", label: "Incident Queue" },
-  { id: "brief", label: "Shift Brief" },
-  { id: "services", label: "Service Map" },
-  { id: "emergency", label: "Emergency" },
-  { id: "documents", label: "Documents" },
-  { id: "notes", label: "Notes" },
-  { id: "team-chat", label: "Team Chat" },
-  { id: "ai", label: "AI Chat" }
+  { id: "fleet", label: "Fleet Safety", icon: "fleet" },
+  { id: "automation", label: "Automation", icon: "dashboard" },
+  { id: "investigations", label: "Incident Queue", icon: "warning" },
+  { id: "brief", label: "Shift Brief", icon: "docs" },
+  { id: "services", label: "Service Map", icon: "service" },
+  { id: "emergency", label: "Emergency", icon: "emergency" },
+  { id: "documents", label: "Documents", icon: "docs" },
+  { id: "notes", label: "Notes", icon: "table" },
+  { id: "team-chat", label: "Team Chat", icon: "chat" },
+  { id: "ai", label: "AI Chat", icon: "spark" }
 ];
 const documentSections = [
   { id: "approved", label: "Approved", empty: "No approved documents yet." },
@@ -999,7 +1001,7 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
   );
 }
 
-function SafetyInvestigationPanel({ token, user, data, loading, refreshing, error, onRefresh }) {
+function SafetyInvestigationPanel({ token, user, data, loading, refreshing, error, onRefresh, confirmAction }) {
   const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(false);
@@ -1211,7 +1213,14 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
       return;
     }
 
-    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this incident from the database?");
+    const shouldDelete = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Delete incident",
+      title: "Delete this incident?",
+      description: "The incident record, notes, and linked investigation context will be removed from the shared safety queue.",
+      confirmLabel: "Delete incident",
+    });
     if (!shouldDelete) return;
 
     setCaseSaving(true);
@@ -1442,7 +1451,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
   );
 }
 
-function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, onRefresh }) {
+function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, onRefresh, confirmAction }) {
   const metrics = data?.metrics || {};
   const queues = data?.queues || EMPTY_SAFETY_LIST;
   const vehicles = data?.vehicles || EMPTY_SAFETY_LIST;
@@ -1691,7 +1700,14 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
       return;
     }
 
-    const shouldDelete = typeof window === "undefined" || window.confirm("Delete this shift brief from the database?");
+    const shouldDelete = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Delete shift brief",
+      title: "Delete this shift brief?",
+      description: "The handoff note, checklist, and stored action board state will be removed from shared history.",
+      confirmLabel: "Delete brief",
+    });
     if (!shouldDelete) return;
 
     setBriefSaving(true);
@@ -1949,6 +1965,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
   );
 }
 export default function SafetyWorkspace({ token, user, mobile = false }) {
+  const confirmAction = useConfirmDialog();
   const [activeTab, setActiveTab] = useState("fleet");
   const [fleetData, setFleetData] = useState(null);
   const [fleetLoading, setFleetLoading] = useState(true);
@@ -2014,6 +2031,7 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
           <div className="mobile-internal-tabs safety-mobile-tabs">
             {[...safetyMobilePrimaryTabs, { id: "more", label: "More" }].map((tab) => (
               <button key={tab.id} type="button" className={mobileActiveNav === tab.id ? "active" : ""} onClick={() => selectMobilePrimaryTab(tab.id)}>
+                <UnitedIcon name={tab.icon || "more"} size={16} />
                 {tab.label}
               </button>
             ))}
@@ -2022,6 +2040,7 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
             <div className="mobile-more-grid">
               {safetyMobileMoreTabs.map((tab) => (
                 <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>
+                  <UnitedIcon name={tab.icon || "spark"} size={16} />
                   {tab.label}
                 </button>
               ))}
@@ -2037,6 +2056,7 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
               className={`workspace-inline-tab ${activeTab === tab.id ? "active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
+              <UnitedIcon name={tab.icon || "spark"} size={16} />
               {tab.label}
             </button>
           ))}
@@ -2052,11 +2072,11 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
       </section>
 
       <section hidden={activeTab !== "investigations"}>
-        <SafetyInvestigationPanel token={token} user={user} data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+        <SafetyInvestigationPanel token={token} user={user} data={fleetData} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} confirmAction={confirmAction} />
       </section>
 
       <section hidden={activeTab !== "brief"}>
-        <SafetyShiftBriefPanel token={token} data={fleetData} user={user} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} />
+        <SafetyShiftBriefPanel token={token} data={fleetData} user={user} loading={fleetLoading} refreshing={fleetRefreshing} error={fleetError} onRefresh={loadFleet} confirmAction={confirmAction} />
       </section>
 
       {activeTab === "services" ? (
@@ -2089,7 +2109,3 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
     </section>
   );
 }
-
-
-
-

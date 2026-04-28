@@ -1,5 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { setActivityContext, trackActivity } from "./activityTracker";
+import { useConfirmDialog } from "./feedback";
+import { UnitedIcon } from "./UnitedLaneIcons";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
@@ -12,10 +14,10 @@ const departmentLabels = {
   driver: "Driver"
 };
 const adminWorkspaceTabs = [
-  { id: "access", label: "Accounts", detail: "Users, roles, bans, and system stats" },
-  { id: "live", label: "Live", detail: "Who is online, what they opened, and what they clicked" },
-  { id: "fleet", label: "Fleet", detail: "All trucks, tracking, HOS, and live map" },
-  { id: "service", label: "Service", detail: "Fuel service map and nearby support" }
+  { id: "access", label: "Accounts", detail: "Users, roles, bans, and system stats", icon: "admin" },
+  { id: "live", label: "Live", detail: "Who is online, what they opened, and what they clicked", icon: "spark" },
+  { id: "fleet", label: "Fleet", detail: "All trucks, tracking, HOS, and live map", icon: "fleet" },
+  { id: "service", label: "Service", detail: "Fuel service map and nearby support", icon: "service" }
 ];
 const emptyCreateForm = {
   full_name: "",
@@ -227,6 +229,7 @@ function UserRow({ user, currentUserId, busyId, onPatch, onDelete, onResetPasswo
 }
 
 export default function AdminPanel({ token, user }) {
+  const confirmAction = useConfirmDialog();
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
   const [liveSnapshot, setLiveSnapshot] = useState(null);
@@ -397,7 +400,16 @@ export default function AdminPanel({ token, user }) {
   }
 
   async function deleteUser(targetUser) {
-    if (!window.confirm(`Delete ${targetUser.full_name || targetUser.email}? This removes their saved workspace data too.`)) return;
+    const accepted = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Delete account",
+      title: `Delete ${targetUser.full_name || targetUser.email}?`,
+      description: "This removes the account and its saved workspace data from the platform.",
+      confirmLabel: "Delete account",
+    });
+    if (!accepted) return;
+
     setBusyId(targetUser.id);
     setError("");
     setMessage("");
@@ -459,6 +471,7 @@ export default function AdminPanel({ token, user }) {
             className={`workspace-inline-tab ${activeTab === tab.id ? "active" : ""}`.trim()}
             onClick={() => setActiveTab(tab.id)}
           >
+            <UnitedIcon name={tab.icon || "spark"} size={16} />
             {tab.label}
           </button>
         ))}

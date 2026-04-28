@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useConfirmDialog } from "./feedback";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const statusOptions = [
@@ -141,6 +142,7 @@ function AuthorizationCard({ item, busy, onMarkSent, onCancel, onReconcile, onCo
 }
 
 export default function FuelAuthorizations({ token, active = true }) {
+  const confirmAction = useConfirmDialog();
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("open");
   const [loading, setLoading] = useState(false);
@@ -211,6 +213,16 @@ export default function FuelAuthorizations({ token, active = true }) {
   }
 
   async function cancel(item) {
+    const accepted = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Cancel fuel authorization",
+      title: `Cancel ${item.approval_code}?`,
+      description: "The driver-facing fuel authorization will move to cancelled and stop being treated as an active approval.",
+      confirmLabel: "Cancel approval",
+    });
+    if (!accepted) return;
+
     const success = await runAction(item, `/fuel-authorizations/${item.id}/cancel`, { method: "POST", body: JSON.stringify({ note: "Cancelled from Fuel Service board." }) });
     if (success) {
       setMessage(`${item.approval_code} cancelled.`);
@@ -225,6 +237,16 @@ export default function FuelAuthorizations({ token, active = true }) {
   }
 
   async function reconcileOpen() {
+    const accepted = await confirmAction({
+      tone: "info",
+      icon: "approvals",
+      meta: "Bulk reconciliation",
+      title: "Reconcile all open authorizations?",
+      description: "This checks every open approval against Motive purchases and may update multiple records at once.",
+      confirmLabel: "Run reconciliation",
+    });
+    if (!accepted) return;
+
     setBusyId("bulk");
     setError("");
     setMessage("");

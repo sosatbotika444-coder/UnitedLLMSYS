@@ -1,12 +1,15 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import AuthShiftPlanner from "./AuthShiftPlanner";
+import DesignSystemShowcase from "./DesignSystemShowcase";
 import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
 import { readClickActivityTarget, setActivityContext, trackActivity } from "./activityTracker";
+import { useConfirmDialog } from "./feedback";
 import { buildVehicleLocationQuery } from "./locationFormatting";
 import { getAutoDieselPrice } from "./priceSignals";
+import { UnitedIcon } from "./UnitedLaneIcons";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
 
@@ -35,23 +38,23 @@ const WORKSPACE_SIDEBAR_WIDTH_EXPANDED = "278px";
 const WORKSPACE_SIDEBAR_WIDTH_COLLAPSED = "92px";
 const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delayed"];
 const departmentOptions = [
-  { id: "admin", label: "Admin", detail: "Users, bans, statistics" },
-  { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking" },
-  { id: "safety", label: "Safety", detail: "Fleet, services, AI" },
-  { id: "driver", label: "Driver", detail: "My truck, fuel, service" }
+  { id: "admin", label: "Admin", detail: "Users, bans, statistics", icon: "admin" },
+  { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking", icon: "fuel" },
+  { id: "safety", label: "Safety", detail: "Fleet, services, AI", icon: "safety" },
+  { id: "driver", label: "Driver", detail: "My truck, fuel, service", icon: "driver" }
 ];
 const workspaceTabs = [
-  { id: "command", label: "Dashboard", detail: "Main view", icon: "DB" },
-  { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "TR" },
-  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
-  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "PF" },
-  { id: "fullroad", label: "Full Road", detail: "Live trip chain", icon: "FR" },
-  { id: "routing", label: "Routing", detail: "Build route", icon: "RT" },
-  { id: "history", label: "Route History", detail: "All builds", icon: "RH" },
-  { id: "approvals", label: "Approvals", detail: "Fuel limits", icon: "FA" },
-  { id: "loads", label: "Loads", detail: "Edit loads", icon: "LD" },
-  { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "TC" },
-  { id: "settings", label: "Settings", detail: "Theme", icon: "ST" }
+  { id: "command", label: "Dashboard", detail: "Main view", icon: "dashboard" },
+  { id: "tracking", label: "Tracking", detail: "Fleet live", icon: "fleet" },
+  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "chart" },
+  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "profit" },
+  { id: "fullroad", label: "Full Road", detail: "Live trip chain", icon: "road" },
+  { id: "routing", label: "Routing", detail: "Build route", icon: "route" },
+  { id: "history", label: "Route History", detail: "All builds", icon: "history" },
+  { id: "approvals", label: "Approvals", detail: "Fuel limits", icon: "approvals" },
+  { id: "loads", label: "Loads", detail: "Edit loads", icon: "table" },
+  { id: "chat", label: "Team Chat", detail: "All workspaces", icon: "chat" },
+  { id: "settings", label: "Settings", detail: "Theme and system", icon: "settings" }
 ];
 const workspaceNavSections = [
   { id: "start", label: "Start Here", tabs: ["command", "loads", "tracking", "routing"] },
@@ -85,20 +88,20 @@ const workspaceQuickStartCards = [
   }
 ];
 const mobileFuelTabs = [
-  { id: "command", label: "Home", icon: "HM" },
-  { id: "loads", label: "Loads", icon: "LD" },
-  { id: "routing", label: "Route", icon: "RT" },
-  { id: "chat", label: "Chat", icon: "CH" },
-  { id: "more", label: "More", icon: "MR" }
+  { id: "command", label: "Home", icon: "home" },
+  { id: "loads", label: "Loads", icon: "table" },
+  { id: "routing", label: "Route", icon: "route" },
+  { id: "chat", label: "Chat", icon: "chat" },
+  { id: "more", label: "More", icon: "more" }
 ];
 const mobileFuelMoreTabs = [
-  { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "TR" },
-  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "SC" },
-  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "PF" },
-  { id: "fullroad", label: "Full Road", detail: "Truck to pickup to delivery", icon: "FR" },
-  { id: "history", label: "Route History", detail: "All routing builds", icon: "RH" },
-  { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "FA" },
-  { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "ST" }
+  { id: "tracking", label: "Tracking", detail: "Live fleet board", icon: "fleet" },
+  { id: "statistics", label: "Statistics", detail: "Filter all trucks", icon: "chart" },
+  { id: "profitability", label: "Profitability", detail: "Detention and lane margin", icon: "profit" },
+  { id: "fullroad", label: "Full Road", detail: "Truck to pickup to delivery", icon: "road" },
+  { id: "history", label: "Route History", detail: "All routing builds", icon: "history" },
+  { id: "approvals", label: "Approvals", detail: "Pre-approved stops", icon: "approvals" },
+  { id: "settings", label: "Settings", detail: "Theme and preferences", icon: "settings" }
 ];
 const themeOptions = [
   { id: "light", label: "Luxe Light", detail: "Bright executive workspace", accent: "Ivory, blue, emerald" },
@@ -498,7 +501,7 @@ function normalizeRow(row) {
 }
 
 function ModuleLoader({ label = "Loading workspace module..." }) {
-  return <div className="module-loader">{label}</div>;
+  return <div className="module-loader"><UnitedIcon name="spark" size={18} />{label}</div>;
 }
 
 function readStoredUser() {
@@ -584,6 +587,9 @@ function MetricCard({ label, value, detail, tone = "neutral" }) {
 function DepartmentCard({ option, active, onSelect }) {
   return (
     <button type="button" className={`area-selector-card${active ? " active" : ""}`} onClick={() => onSelect(option.id)}>
+      <span className="area-selector-icon">
+        <UnitedIcon name={option.icon || "spark"} size={18} />
+      </span>
       <strong>{option.label}</strong>
       <small>{option.detail}</small>
     </button>
@@ -603,6 +609,10 @@ function WorkspaceStartCard({ item, active, onSelect }) {
       onClick={() => onSelect(item.id)}
     >
       <span>{item.step}</span>
+      <div className="workspace-start-card-icon">
+        <UnitedIcon name={tabMeta.icon || "spark"} size={18} />
+        <small>{tabMeta.label}</small>
+      </div>
       <strong>{item.title}</strong>
       <small>{item.detail}</small>
       <em>{active ? "Current workspace" : `${tabMeta.label} workspace`}</em>
@@ -617,6 +627,9 @@ function WorkspaceShortcutButton({ tab, active, onSelect }) {
       className={`workspace-shortcut-button${active ? " active" : ""}`}
       onClick={() => onSelect(tab.id)}
     >
+      <span className="workspace-shortcut-icon">
+        <UnitedIcon name={tab.icon || "spark"} size={16} />
+      </span>
       <span>{tab.label}</span>
       <strong>{tab.detail}</strong>
     </button>
@@ -657,11 +670,7 @@ function WorkspaceSidebarShell({
           aria-label={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
           title={`${expanded ? "Collapse" : "Expand"} ${modeLabel} sidebar`}
         >
-          <span className="workspace-sidebar-toggle-icon" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
+          <span className="workspace-sidebar-toggle-icon" aria-hidden="true"><UnitedIcon name="menu" size={18} /></span>
           {expanded ? (
             <span className="workspace-sidebar-toggle-copy">
               <strong>Workspace Menu</strong>
@@ -698,10 +707,10 @@ function WorkspaceSidebarShell({
               {expanded ? (
                 <>
                   <span>{action.label}</span>
-                  <strong>{action.icon || "+"}</strong>
+                  <strong><UnitedIcon name={action.icon || "plus"} size={16} /></strong>
                 </>
               ) : (
-                <strong>{action.icon || "+"}</strong>
+                <strong><UnitedIcon name={action.icon || "plus"} size={16} /></strong>
               )}
             </button>
           ) : null}
@@ -726,7 +735,7 @@ function WorkspaceSidebarShell({
                           onClick={() => onSelectTab(tab.id)}
                           title={`${tab.label} - ${tab.detail}`}
                         >
-                          <span className="workspace-sidebar-link-icon">{tab.icon}</span>
+                          <span className="workspace-sidebar-link-icon"><UnitedIcon name={tab.icon || "spark"} size={18} /></span>
                           {expanded ? (
                             <span className="workspace-sidebar-link-copy">
                               <strong>{tab.label}</strong>
@@ -757,6 +766,7 @@ function WorkspaceSidebarShell({
               </div>
             ) : null}
             <button className="secondary-button workspace-sidebar-logout" type="button" onClick={onLogout} title="Logout">
+              <UnitedIcon name="logout" size={16} />
               {expanded ? "Logout" : "Out"}
             </button>
           </div>
@@ -839,10 +849,11 @@ function InstallAppButton({ mobile = false }) {
           ) : (
             <p>Use the browser Install option or Add to Home Screen. Chrome and Edge may show the install prompt automatically.</p>
           )}
-          <button type="button" onClick={() => setHelpOpen(false)}>Close</button>
+          <button type="button" onClick={() => setHelpOpen(false)}><UnitedIcon name="error" size={16} />Close</button>
         </section>
       ) : null}
       <button className="install-app-button" type="button" onClick={installApp}>
+        <UnitedIcon name="mobile" size={18} />
         <span>Install</span>
         <strong>App</strong>
       </button>
@@ -854,7 +865,7 @@ function MobileBottomNav({ items, activeId, onSelect }) {
     <nav className="mobile-bottom-nav" aria-label="Mobile workspace navigation">
       {items.map((item) => (
         <button key={item.id} type="button" className={activeId === item.id ? "active" : ""} onClick={() => onSelect(item.id)}>
-          <span>{item.icon || item.label.slice(0, 2).toUpperCase()}</span>
+          <span><UnitedIcon name={item.icon || "spark"} size={18} /></span>
           <strong>{item.mobileLabel || item.label}</strong>
         </button>
       ))}
@@ -875,7 +886,7 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
         </div>
         <div className="mobile-workspace-top-actions">
           <InstallAppButton mobile />
-          <button className="mobile-logout-button" type="button" onClick={onLogout}>Logout</button>
+          <button className="mobile-logout-button" type="button" onClick={onLogout}><UnitedIcon name="logout" size={16} />Logout</button>
         </div>
       </header>
 
@@ -1019,7 +1030,7 @@ function MobileLoadCard({ row, savingId, smartFillId, fleetLoading, vehicles, on
 
       <footer>
         <span>{savingId === row.id ? "Saving..." : "Auto-saves on field exit"}</span>
-        <button className="delete-button" type="button" onClick={() => onDelete(row.id)}>Delete</button>
+        <button className="delete-button" type="button" onClick={() => onDelete(row.id)}><UnitedIcon name="warning" size={16} />Delete</button>
       </footer>
     </article>
   );
@@ -1037,13 +1048,13 @@ function MobileQuickActions({ onSelect, onCreateLoad }) {
   return (
     <section className="mobile-quick-actions">
       <button type="button" className="mobile-quick-create" onClick={onCreateLoad}>
-        <span>New</span>
+        <span><UnitedIcon name="plus" size={16} />New</span>
         <strong>Create Load</strong>
         <small>Start dispatch work</small>
       </button>
       {actions.map((action) => (
         <button key={action.id} type="button" className={`mobile-quick-card mobile-quick-${action.tone}`} onClick={() => onSelect(action.id)}>
-          <span>{action.label}</span>
+          <span><UnitedIcon name={(workspaceTabs.find((item) => item.id === action.id)?.icon) || "spark"} size={16} />{action.label}</span>
           <strong>{action.detail}</strong>
         </button>
       ))}
@@ -1084,7 +1095,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
       <section className="mobile-workspace-section mobile-loads-workspace">
         <div className="mobile-load-controls">
           <label>Search loads<input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Driver, truck, city" /></label>
-          <button className="primary-button" type="button" onClick={createRow}>New Load</button>
+          <button className="primary-button" type="button" onClick={createRow}><UnitedIcon name="plus" size={16} />New Load</button>
         </div>
         <div className="mobile-chip-strip">
           {loadStatusTabs.map((status) => {
@@ -1126,6 +1137,9 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
             {themeOptions.map((option) => (
               <button key={option.id} type="button" className={`theme-option-card ${theme === option.id ? "active" : ""}`} onClick={() => setTheme(option.id)}>
                 <span className={`theme-option-swatch theme-option-swatch-${option.id}`} />
+                <span className="theme-option-icon">
+                  <UnitedIcon name={option.id === "dark" ? "moon" : option.id === "blue" ? "theme" : "sun"} size={16} />
+                </span>
                 <strong>{option.label}</strong>
                 <small>{option.detail}</small>
                 <em>{option.accent}</em>
@@ -1133,6 +1147,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
             ))}
           </div>
         </article>
+        <DesignSystemShowcase compact />
       </section>
     );
   }
@@ -1156,6 +1171,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
 }
 export default function App() {
   const isMobileViewport = useIsMobileViewport();
+  const confirmAction = useConfirmDialog();
   const [mode, setMode] = useState("login");
   const [registerForm, setRegisterForm] = useState(emptyRegister);
   const [loginForm, setLoginForm] = useState(emptyLogin);
@@ -1296,13 +1312,17 @@ export default function App() {
   }, [token, user?.department]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
     const body = document.body;
     body.classList.remove("theme-light", "theme-dark", "theme-blue");
     body.classList.add(`theme-${theme}`);
+    body.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
 
     return () => {
       body.classList.remove("theme-light", "theme-dark", "theme-blue");
+      delete body.dataset.theme;
     };
   }, [theme]);
 
@@ -1759,9 +1779,20 @@ export default function App() {
   async function deleteRow(id) {
     if (!token || !isFuelService) return;
 
+    const accepted = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Delete load",
+      title: `Delete load #${id}?`,
+      description: "This removes the dispatch row and its current planning context from the board.",
+      confirmLabel: "Delete load",
+    });
+    if (!accepted) return;
+
     try {
       await apiRequest(`/loads/${id}`, { method: "DELETE" }, token);
       setRows((currentRows) => currentRows.filter((row) => row.id !== id));
+      setMessage(`Load #${id} deleted.`);
     } catch (deleteError) {
       setError(deleteError.message);
     }
@@ -1869,6 +1900,7 @@ export default function App() {
 
             <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Accounts are created by Admin only."}</div>
             <button className="secondary-button auth-docs-button" type="button" onClick={() => openSitePanel("docs")}>
+              <UnitedIcon name="docs" size={16} />
               Docs
             </button>
 
@@ -2228,12 +2260,12 @@ export default function App() {
             <div><span>More Tools</span><strong>Fuel Service</strong></div>
             {mobileFuelMoreTabs.map((tab) => (
               <button key={tab.id} type="button" className={activeWorkspace === tab.id ? "active" : ""} onClick={() => openMobileWorkspace(tab.id)}>
-                <span>{tab.icon}</span><div><strong>{tab.label}</strong><small>{tab.detail}</small></div>
+                <span><UnitedIcon name={tab.icon || "spark"} size={18} /></span><div><strong>{tab.label}</strong><small>{tab.detail}</small></div>
               </button>
             ))}
           </section>
         ) : null}
-        action={activeWorkspace === "loads" ? <button className="primary-button" type="button" onClick={createRow}>New Load</button> : null}
+        action={activeWorkspace === "loads" ? <button className="primary-button" type="button" onClick={createRow}><UnitedIcon name="plus" size={16} />New Load</button> : null}
       >
         <MobileFuelWorkspaceContent
           activeWorkspace={activeWorkspace}
@@ -2285,7 +2317,7 @@ export default function App() {
           accountTitle={user.full_name}
           accountSubtitle={user.email}
           accountBadge="Fuel Service access"
-          action={{ label: "New Load", icon: "+", onClick: createRow }}
+          action={{ label: "New Load", icon: "plus", onClick: createRow }}
           navSections={workspaceNavSections}
           activeTab={activeWorkspace}
           onSelectTab={setActiveWorkspace}
@@ -2319,6 +2351,7 @@ export default function App() {
                 <small>{activeWorkspaceMeta.detail}</small>
               </div>
               <button className="primary-button header-action-button" type="button" onClick={() => { createRow(); setActiveWorkspace("loads"); }}>
+                <UnitedIcon name="plus" size={16} />
                 Create Load
               </button>
             </div>
@@ -2439,6 +2472,7 @@ export default function App() {
                   />
                 </label>
                 <button className="primary-button workspace-table-create" type="button" onClick={createRow}>
+                  <UnitedIcon name="plus" size={16} />
                   New Load
                 </button>
               </div>
@@ -2769,7 +2803,8 @@ export default function App() {
                                 </button>
                               </td>
                               <td className="action-cell">
-                                <button className="delete-button" onClick={() => deleteRow(row.id)}>
+                                <button className="delete-button" type="button" onClick={() => deleteRow(row.id)}>
+                                  <UnitedIcon name="warning" size={16} />
                                   Delete
                                 </button>
                               </td>
@@ -2810,6 +2845,9 @@ export default function App() {
                       onClick={() => setTheme(option.id)}
                     >
                       <span className={`theme-option-swatch theme-option-swatch-${option.id}`} />
+                      <span className="theme-option-icon">
+                        <UnitedIcon name={option.id === "dark" ? "moon" : option.id === "blue" ? "theme" : "sun"} size={16} />
+                      </span>
                       <strong>{option.label}</strong>
                       <small>{option.detail}</small>
                       <em>{option.accent}</em>
@@ -2843,6 +2881,7 @@ export default function App() {
                 </div>
               </article>
             </section>
+            <DesignSystemShowcase />
           </section>
         </section>
       </main>

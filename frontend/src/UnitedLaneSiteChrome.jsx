@@ -1,3 +1,5 @@
+import { UnitedIcon } from "./UnitedLaneIcons";
+
 const safetyEmail = <a href="mailto:safety@unitedlanellc.com">safety@unitedlanellc.com</a>;
 const smsFormLink = <a href="https://form.jotform.com/243344477274058" target="_blank" rel="noreferrer">https://form.jotform.com/243344477274058</a>;
 const privacyPolicyLink = <a href="https://unitedlanellc.com/privacy-and-terms" target="_blank" rel="noreferrer">https://unitedlanellc.com/privacy-and-terms</a>;
@@ -403,15 +405,19 @@ export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = ""
 
           <nav className="site-nav" aria-label="Site navigation">
             <button className={getNavButtonClass(activeItem, "home")} type="button" onClick={onHome}>
+              <UnitedIcon name="home" size={16} />
               HOME
             </button>
             <button className={getNavButtonClass(activeItem, "about")} type="button" onClick={onAbout}>
+              <UnitedIcon name="about" size={16} />
               ABOUT US
             </button>
             <button className={getNavButtonClass(activeItem, "docs")} type="button" onClick={onDocs}>
+              <UnitedIcon name="docs" size={16} />
               DOCS
             </button>
             <button className={getNavButtonClass(activeItem, "privacy")} type="button" onClick={onPrivacy}>
+              <UnitedIcon name="privacy" size={16} />
               PRIVACY & TERMS
             </button>
           </nav>
@@ -438,6 +444,7 @@ export function SiteDialog({ panel, onClose }) {
         onClick={(event) => event.stopPropagation()}
       >
         <button className="site-dialog-close" type="button" onClick={onClose}>
+          <UnitedIcon name="error" size={16} />
           CLOSE
         </button>
         <span className="site-dialog-eyebrow">{panel.eyebrow}</span>

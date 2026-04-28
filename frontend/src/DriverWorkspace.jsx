@@ -3,24 +3,25 @@ import AuthShiftPlanner, { DEFAULT_SHIFT_PLANNER_STORAGE_KEY } from './AuthShift
 import { buildVehicleLocationLabel } from './locationFormatting';
 import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
+import { UnitedIcon } from './UnitedLaneIcons';
 
 const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
 const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 const driverMobileTabs = [
-  { id: 'fuel', label: 'Fuel' },
-  { id: 'planner', label: 'Planner' },
-  { id: 'service', label: 'Service' },
-  { id: 'emergency', label: 'SOS' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'profile', label: 'Profile' }
+  { id: 'fuel', label: 'Fuel', icon: 'fuel' },
+  { id: 'planner', label: 'Planner', icon: 'docs' },
+  { id: 'service', label: 'Service', icon: 'service' },
+  { id: 'emergency', label: 'SOS', icon: 'emergency' },
+  { id: 'chat', label: 'Chat', icon: 'chat' },
+  { id: 'profile', label: 'Profile', icon: 'driver' }
 ];
 const driverTabs = [
-  { id: 'fuel', label: 'Fuel Route' },
-  { id: 'planner', label: 'Planner' },
-  { id: 'service', label: 'Service' },
-  { id: 'emergency', label: 'Emergency' },
-  { id: 'chat', label: 'Team Chat' },
-  { id: 'profile', label: 'Profile' }
+  { id: 'fuel', label: 'Fuel Route', icon: 'fuel' },
+  { id: 'planner', label: 'Planner', icon: 'docs' },
+  { id: 'service', label: 'Service', icon: 'service' },
+  { id: 'emergency', label: 'Emergency', icon: 'emergency' },
+  { id: 'chat', label: 'Team Chat', icon: 'chat' },
+  { id: 'profile', label: 'Profile', icon: 'driver' }
 ];
 
 async function apiRequest(path, options = {}, token = '') {
@@ -101,7 +102,7 @@ function vehicleStatus(vehicle) {
 }
 
 function ModuleLoader({ label }) {
-  return <div className='module-loader'>{label}</div>;
+  return <div className='module-loader'><UnitedIcon name='spark' size={18} />{label}</div>;
 }
 
 function DriverMetric({ label, value, detail, tone = 'neutral' }) {
@@ -189,9 +190,9 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
 
       {mobile ? (
         <section className='driver-mobile-action-rail'>
-          <button type='button' onClick={() => setActiveTab('emergency')}><span>SOS</span><strong>Emergency</strong></button>
-          <button type='button' onClick={() => setActiveTab('service')}><span>Fix</span><strong>Service</strong></button>
-          <button type='button' onClick={() => setActiveTab('chat')}><span>Team</span><strong>Chat</strong></button>
+          <button type='button' onClick={() => setActiveTab('emergency')}><span><UnitedIcon name='emergency' size={16} />SOS</span><strong>Emergency</strong></button>
+          <button type='button' onClick={() => setActiveTab('service')}><span><UnitedIcon name='service' size={16} />Fix</span><strong>Service</strong></button>
+          <button type='button' onClick={() => setActiveTab('chat')}><span><UnitedIcon name='chat' size={16} />Team</span><strong>Chat</strong></button>
         </section>
       ) : (
         <section className='safety-fleet-metrics driver-metric-grid'>
@@ -213,6 +214,7 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
             className={mobile ? (activeTab === tab.id ? 'active' : '') : `workspace-inline-tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
+            <UnitedIcon name={tab.icon || 'spark'} size={16} />
             {tab.label}
           </button>
         ))}

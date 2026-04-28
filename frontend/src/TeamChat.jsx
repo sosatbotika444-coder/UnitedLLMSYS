@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmDialog } from "./feedback";
 import { useIsMobileViewport } from "./useViewportMode";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -138,6 +139,7 @@ function TeamChatMessage({ message, replyCount, highlighted, canModerate, onRepl
 }
 
 export default function TeamChat({ token, user, active = true, room = "general", mobile = false }) {
+  const confirmAction = useConfirmDialog();
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -331,7 +333,16 @@ export default function TeamChat({ token, user, active = true, room = "general",
   }
 
   async function deleteMessage(message) {
-    if (!window.confirm("Delete this message from Team Chat?")) return;
+    const accepted = await confirmAction({
+      tone: "danger",
+      icon: "warning",
+      meta: "Delete team message",
+      title: "Delete this Team Chat message?",
+      description: "The message will remain in the thread as deleted for context, but its content will no longer be visible.",
+      confirmLabel: "Delete message",
+    });
+    if (!accepted) return;
+
     setError("");
     try {
       const updated = await apiRequest(`/chat/messages/${message.id}`, { method: "DELETE" }, token);
