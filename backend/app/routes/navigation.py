@@ -36,6 +36,7 @@ from app.official_stations import (
     refine_shortlisted_detours,
     shortlist_official_stations_along_route,
 )
+from app.provider_errors import build_provider_request_error, provider_http_exception
 from app.relay_discounts import relay_discount_runtime_status
 from app.schemas import (
     ApiCapability,
@@ -79,6 +80,10 @@ BRAND_SEARCH_DETOUR_SECONDS = 2400
 OFFICIAL_SITE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
 }
+FALLBACK_PROVIDER_HEADERS = {
+    "User-Agent": "UnitedLLMSYS/1.0",
+    "Accept": "application/json",
+}
 LOVES_SITEMAP_URL = "https://www.loves.com/sitemap-locations.xml"
 PILOT_SITEMAP_URL = "https://locations.pilotflyingj.com/sitemap.xml"
 MAX_LOVES_CITY_CANDIDATES = 6
@@ -100,6 +105,8 @@ FUEL_SAFETY_BUFFER_RATIO = 0.05
 FUEL_SAFETY_BUFFER_MIN_MILES = 10.0
 FUEL_SAFETY_BUFFER_MAX_MILES = 35.0
 FUEL_EPSILON = 0.001
+TOMTOM_SEARCH_ACCESS: bool | None = None
+TOMTOM_ROUTING_ACCESS: bool | None = None
 SORT_CODE_MAP = {
     "cheapest": "price",
     "lowest_retail": "price",
@@ -151,24 +158,43 @@ def http_request(url: str, method: str = "GET", body: bytes | None = None, heade
         with urlopen(request, timeout=25, context=ssl_context) as response:
             return response.read().decode("utf-8", errors="replace")
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Navigation provider error: {exc}") from exc
+        raise provider_http_exception(
+            "Navigation services",
+            exc,
+            access_hint="Check TomTom Search and Routing access on the backend key. OpenStreetMap / OSRM fallback is used where possible.",
+        ) from exc
+
+
+def raw_http_request(url: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None, timeout_seconds: int = 25) -> str:
+    request = Request(url, data=body, headers=headers or {}, method=method)
+    with urlopen(request, timeout=timeout_seconds, context=ssl_context) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def http_json(url: str, method: str = "GET", body: dict | None = None, headers: dict | None = None):
+    try:
+        return raw_http_json(url, method=method, body=body, headers=headers)
+    except Exception as exc:
+        raise provider_http_exception(
+            "Navigation services",
+            exc,
+            access_hint="Check TomTom Search and Routing access on the backend key. OpenStreetMap / OSRM fallback is used where possible.",
+        ) from exc
+
+
+def raw_http_json(url: str, method: str = "GET", body: dict | None = None, headers: dict | None = None, timeout_seconds: int = 25):
     data = None
     request_headers = headers.copy() if headers else {}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         request_headers["Content-Type"] = "application/json"
-    return json.loads(http_request(url, method=method, body=data, headers=request_headers))
+    return json.loads(raw_http_request(url, method=method, body=data, headers=request_headers, timeout_seconds=timeout_seconds))
 
 
 
 def safe_http_request(url: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None) -> str | None:
-    request = Request(url, data=body, headers=headers or {}, method=method)
     try:
-        with urlopen(request, timeout=20, context=ssl_context) as response:
-            return response.read().decode("utf-8", errors="replace")
+        return raw_http_request(url, method=method, body=body, headers=headers, timeout_seconds=20)
     except Exception:
         return None
 
@@ -577,69 +603,227 @@ def build_location_secondary_text(address: dict) -> str:
     return ", ".join(parts)
 
 
-def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSuggestion]:
-    trimmed_query = (query or "").strip()
-    if len(trimmed_query) < 2 or not settings.tomtom_api_key:
+def build_fallback_location_secondary_text(address: dict) -> str:
+    parts: list[str] = []
+    for value in [
+        address.get("city"),
+        address.get("town"),
+        address.get("village"),
+        address.get("county"),
+        address.get("state"),
+        address.get("country"),
+    ]:
+        cleaned = str(value or "").strip()
+        if cleaned and cleaned not in parts:
+            parts.append(cleaned)
+    return ", ".join(parts[:3])
+
+
+def fallback_location_suggestions(query: str, limit: int = 6) -> list[LocationSuggestion]:
+    params = urlencode({
+        "q": query,
+        "format": "jsonv2",
+        "limit": max(1, min(limit, 8)),
+        "addressdetails": 1,
+        "countrycodes": "us,ca",
+    })
+    try:
+        data = raw_http_json(f"https://nominatim.openstreetmap.org/search?{params}", headers=FALLBACK_PROVIDER_HEADERS)
+    except Exception:
         return []
 
-    encoded_query = quote(trimmed_query)
-    params = urlencode({
-        "key": settings.tomtom_api_key,
-        "limit": max(1, min(limit, 8)),
-        "typeahead": "true",
-        "language": "en-US",
-        "countrySet": "US,CA",
-    })
-    data = http_json(f"https://api.tomtom.com/search/2/search/{encoded_query}.json?{params}")
-    seen: set[str] = set()
+    if not isinstance(data, list):
+        return []
+
     suggestions: list[LocationSuggestion] = []
-
-    for item in data.get("results", []):
-        position = item.get("position") or {}
-        lat = position.get("lat")
-        lon = position.get("lon")
-        if lat is None or lon is None:
+    seen: set[str] = set()
+    for item in data:
+        if not isinstance(item, dict):
             continue
-
-        address = item.get("address") or {}
-        label = address.get("freeformAddress") or item.get("poi", {}).get("name") or trimmed_query
-        secondary_text = build_location_secondary_text(address)
-        suggestion_type = item.get("entityType") or item.get("type")
-        dedupe_key = f"{label.strip().lower()}|{round(float(lat), 5)}|{round(float(lon), 5)}"
+        try:
+            lat = float(item.get("lat"))
+            lon = float(item.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        label = str(item.get("display_name") or item.get("name") or query).strip()
+        secondary_text = build_fallback_location_secondary_text(item.get("address") or {})
+        dedupe_key = f"{label.casefold()}|{round(lat, 5)}|{round(lon, 5)}"
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
         suggestions.append(LocationSuggestion(
-            id=str(item.get("id") or dedupe_key),
+            id=str(item.get("place_id") or dedupe_key),
             label=label,
             secondary_text=secondary_text,
-            lat=float(lat),
-            lon=float(lon),
-            type=str(suggestion_type) if suggestion_type else None,
+            lat=lat,
+            lon=lon,
+            type=str(item.get("type")) if item.get("type") else None,
         ))
-
     return suggestions
 
 
+def fallback_geocode_address(query: str) -> GeocodedPoint:
+    params = urlencode({
+        "q": query,
+        "format": "jsonv2",
+        "limit": 1,
+        "addressdetails": 1,
+        "countrycodes": "us,ca",
+    })
+    try:
+        data = raw_http_json(f"https://nominatim.openstreetmap.org/search?{params}", headers=FALLBACK_PROVIDER_HEADERS)
+    except Exception as exc:
+        raise provider_http_exception("OpenStreetMap geocoding", exc) from exc
+
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Address not found: {query}")
+
+    first = data[0] if isinstance(data[0], dict) else {}
+    try:
+        lat = float(first.get("lat"))
+        lon = float(first.get("lon"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Fallback geocoding returned an invalid coordinate.") from exc
+    label = str(first.get("display_name") or query).strip() or query
+    return GeocodedPoint(label=label, lat=lat, lon=lon)
+
+
+def osrm_route_to_navigation_route(route: dict) -> dict:
+    geometry = route.get("geometry") or {}
+    coordinates = geometry.get("coordinates") or []
+    points = []
+    for coordinate in coordinates:
+        if not isinstance(coordinate, list) or len(coordinate) < 2:
+            continue
+        lon, lat = coordinate[0], coordinate[1]
+        points.append({"latitude": lat, "longitude": lon})
+    return {
+        "summary": {
+            "lengthInMeters": int(route.get("distance") or 0),
+            "travelTimeInSeconds": int(route.get("duration") or 0),
+            "trafficDelayInSeconds": 0,
+        },
+        "legs": [{"points": points}],
+    }
+
+
+def fallback_routes(origin: GeocodedPoint, destination: GeocodedPoint) -> list[dict]:
+    route_points = f"{round(float(origin.lon), 5)},{round(float(origin.lat), 5)};{round(float(destination.lon), 5)},{round(float(destination.lat), 5)}"
+    params = urlencode({
+        "alternatives": "true",
+        "overview": "full",
+        "geometries": "geojson",
+        "steps": "false",
+        "annotations": "false",
+    })
+    try:
+        data = raw_http_json(
+            f"https://router.project-osrm.org/route/v1/driving/{route_points}?{params}",
+            headers=FALLBACK_PROVIDER_HEADERS,
+        )
+    except Exception as exc:
+        raise provider_http_exception("OSRM routing", exc) from exc
+
+    routes = data.get("routes") if isinstance(data, dict) else []
+    if not isinstance(routes, list) or not routes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No route alternatives found")
+    return [osrm_route_to_navigation_route(route) for route in routes if isinstance(route, dict)]
+
+
+def build_navigation_data_source(origin_source: str, destination_source: str, routing_source: str) -> str:
+    if origin_source == destination_source:
+        geocoding_label = origin_source
+    else:
+        geocoding_label = f"Mixed geocoding ({origin_source} + {destination_source})"
+    return f"{geocoding_label} + {routing_source} + parsed official Love's/Pilot station catalog + UnitedLane guidance"
+
+
+def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSuggestion]:
+    global TOMTOM_SEARCH_ACCESS
+    trimmed_query = (query or "").strip()
+    if len(trimmed_query) < 2:
+        return []
+
+    if settings.tomtom_api_key and TOMTOM_SEARCH_ACCESS is not False:
+        encoded_query = quote(trimmed_query)
+        params = urlencode({
+            "key": settings.tomtom_api_key,
+            "limit": max(1, min(limit, 8)),
+            "typeahead": "true",
+            "language": "en-US",
+            "countrySet": "US,CA",
+        })
+        try:
+            data = raw_http_json(f"https://api.tomtom.com/search/2/search/{encoded_query}.json?{params}")
+            TOMTOM_SEARCH_ACCESS = True
+        except Exception as exc:
+            error = build_provider_request_error("TomTom search", exc)
+            if error.code in {401, 403}:
+                TOMTOM_SEARCH_ACCESS = False
+            data = {}
+
+        if isinstance(data, dict):
+            seen: set[str] = set()
+            suggestions: list[LocationSuggestion] = []
+
+            for item in data.get("results", []):
+                position = item.get("position") or {}
+                lat = position.get("lat")
+                lon = position.get("lon")
+                if lat is None or lon is None:
+                    continue
+
+                address = item.get("address") or {}
+                label = address.get("freeformAddress") or item.get("poi", {}).get("name") or trimmed_query
+                secondary_text = build_location_secondary_text(address)
+                suggestion_type = item.get("entityType") or item.get("type")
+                dedupe_key = f"{label.strip().lower()}|{round(float(lat), 5)}|{round(float(lon), 5)}"
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                suggestions.append(LocationSuggestion(
+                    id=str(item.get("id") or dedupe_key),
+                    label=label,
+                    secondary_text=secondary_text,
+                    lat=float(lat),
+                    lon=float(lon),
+                    type=str(suggestion_type) if suggestion_type else None,
+                ))
+            if suggestions:
+                return suggestions
+
+    return fallback_location_suggestions(trimmed_query, limit=limit)
+
+
 @lru_cache(maxsize=512)
-def geocode_address(query: str) -> GeocodedPoint:
+def geocode_address(query: str) -> tuple[GeocodedPoint, str]:
+    global TOMTOM_SEARCH_ACCESS
     coordinate_point = parse_coordinate_query(query)
     if coordinate_point:
         lat, lon = coordinate_point
         reverse_match = reverse_geocode_point(lat, lon, settings.tomtom_api_key)
         label = (reverse_match or {}).get("label") or format_coordinate_label(lat, lon)
-        return GeocodedPoint(label=label, lat=lat, lon=lon)
+        return GeocodedPoint(label=label, lat=lat, lon=lon), "Direct coordinates"
 
-    encoded_query = quote(query)
-    params = urlencode({"key": settings.tomtom_api_key, "limit": 1})
-    data = http_json(f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?{params}")
-    results = data.get("results", [])
-    if not results:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Address not found: {query}")
-    first = results[0]
-    position = first.get("position", {})
-    address = first.get("address", {})
-    return GeocodedPoint(label=address.get("freeformAddress", query), lat=position.get("lat"), lon=position.get("lon"))
+    if settings.tomtom_api_key and TOMTOM_SEARCH_ACCESS is not False:
+        encoded_query = quote(query)
+        params = urlencode({"key": settings.tomtom_api_key, "limit": 1})
+        try:
+            data = raw_http_json(f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?{params}")
+            TOMTOM_SEARCH_ACCESS = True
+        except Exception as exc:
+            error = build_provider_request_error("TomTom geocoding", exc)
+            if error.code in {401, 403}:
+                TOMTOM_SEARCH_ACCESS = False
+            data = {}
+        results = data.get("results", []) if isinstance(data, dict) else []
+        if results:
+            first = results[0]
+            position = first.get("position", {})
+            address = first.get("address", {})
+            return GeocodedPoint(label=address.get("freeformAddress", query), lat=position.get("lat"), lon=position.get("lon")), "TomTom geocoding"
+
+    return fallback_geocode_address(query), "OpenStreetMap geocoding"
 
 
 def build_map_link(origin: str, destination: str) -> str:
@@ -652,15 +836,31 @@ def build_station_map_link(origin: GeocodedPoint, stop: FuelStop) -> str:
 
 @lru_cache(maxsize=256)
 def get_routes_cached(origin_lat: float, origin_lon: float, destination_lat: float, destination_lon: float, vehicle_type: str):
-    route_points = f"{origin_lat},{origin_lon}:{destination_lat},{destination_lon}"
-    params = urlencode({
-        "key": settings.tomtom_api_key,
-        "maxAlternatives": 2,
-        "routeRepresentation": "polyline",
-        "computeTravelTimeFor": "all",
-        "travelMode": "truck" if vehicle_type.lower() == "truck" else "car",
-    })
-    return http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points}/json?{params}").get("routes", [])
+    global TOMTOM_ROUTING_ACCESS
+    if settings.tomtom_api_key and TOMTOM_ROUTING_ACCESS is not False:
+        route_points = f"{origin_lat},{origin_lon}:{destination_lat},{destination_lon}"
+        params = urlencode({
+            "key": settings.tomtom_api_key,
+            "maxAlternatives": 2,
+            "routeRepresentation": "polyline",
+            "computeTravelTimeFor": "all",
+            "travelMode": "truck" if vehicle_type.lower() == "truck" else "car",
+        })
+        try:
+            data = raw_http_json(f"https://api.tomtom.com/routing/1/calculateRoute/{route_points}/json?{params}")
+            TOMTOM_ROUTING_ACCESS = True
+        except Exception as exc:
+            error = build_provider_request_error("TomTom routing", exc)
+            if error.code in {401, 403}:
+                TOMTOM_ROUTING_ACCESS = False
+            data = {}
+        routes = data.get("routes", []) if isinstance(data, dict) else []
+        if routes:
+            return routes, "TomTom routing"
+
+    origin = GeocodedPoint(label="Origin", lat=origin_lat, lon=origin_lon)
+    destination = GeocodedPoint(label="Destination", lat=destination_lat, lon=destination_lon)
+    return fallback_routes(origin, destination), "OSRM routing"
 
 
 def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: str):
@@ -1873,12 +2073,9 @@ def tomtom_capabilities(current_user: User = Depends(require_user_department("fu
 
 @router.post("/route-assistant", response_model=RouteAssistantResponse)
 def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends(require_user_department("fuel", "driver")), db: Session = Depends(get_db)):
-    if not settings.tomtom_api_key:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="TOMTOM_API_KEY is missing on the backend")
-
-    origin = geocode_address(payload.origin)
-    destination = geocode_address(payload.destination)
-    raw_routes = get_routes(origin, destination, payload.vehicle_type)
+    origin, origin_source = geocode_address(payload.origin)
+    destination, destination_source = geocode_address(payload.destination)
+    raw_routes, routing_source = get_routes(origin, destination, payload.vehicle_type)
     if not raw_routes:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No route alternatives found")
 
@@ -1942,7 +2139,7 @@ def route_assistant(payload: RouteAssistantRequest, current_user: User = Depends
     if payload.price_target:
         price_support += f" Smart routing also tries to stay at or below ${payload.price_target:.3f}/gal and only goes above that target when the route cannot be completed safely or efficiently otherwise."
     map_link = build_map_link(origin.label, destination.label)
-    data_source = "TomTom routing + parsed official Love's/Pilot station catalog + UnitedLane guidance"
+    data_source = build_navigation_data_source(origin_source, destination_source, routing_source)
     try:
         route_audit = save_route_audit(
             db=db,

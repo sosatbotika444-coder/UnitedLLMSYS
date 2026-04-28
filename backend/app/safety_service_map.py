@@ -9,10 +9,9 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 import certifi
-from fastapi import HTTPException, status
-
 from app.config import Settings
 from app.official_stations import get_official_station_catalog, haversine_m
+from app.provider_errors import ProviderRequestError, build_provider_request_error
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 EMERGENCY_CACHE_LOCK = threading.Lock()
@@ -22,6 +21,7 @@ DEFAULT_RADIUS_MILES = 80
 MAX_RADIUS_MILES = 180
 MAX_SERVICE_RESULTS = 80
 MAX_EMERGENCY_RESULTS = 28
+TOMTOM_POI_ACCESS: bool | None = None
 
 SERVICE_CATEGORY_DEFS = [
     {"id": "all", "label": "All Services", "keywords": []},
@@ -110,7 +110,11 @@ def _http_json(url: str) -> dict:
         with urlopen(request, timeout=20, context=ssl_context) as response:
             return json.loads(response.read().decode("utf-8", errors="replace"))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Service search provider error: {exc}") from exc
+        raise build_provider_request_error(
+            "Emergency POI search",
+            exc,
+            access_hint="Showing official nearby truck stops instead of the live emergency POI feed.",
+        ) from exc
 
 
 def _vehicle_options(snapshot: dict) -> list[dict]:
@@ -237,15 +241,16 @@ def _emergency_cache_key(query: str, lat: float, lon: float, radius_m: int, limi
     return (_normalize_text(query), round(lat, 3), round(lon, 3), int(radius_m), int(limit))
 
 
-def _cached_tomtom_poi_search(query: str, lat: float, lon: float, radius_m: int, limit: int, settings: Settings) -> list[dict]:
-    if not settings.tomtom_api_key:
-        return []
+def _cached_tomtom_poi_search(query: str, lat: float, lon: float, radius_m: int, limit: int, settings: Settings) -> tuple[list[dict], str | None]:
+    global TOMTOM_POI_ACCESS
+    if not settings.tomtom_api_key or TOMTOM_POI_ACCESS is False:
+        return [], None
     cache_key = _emergency_cache_key(query, lat, lon, radius_m, limit)
     now = time.time()
     with EMERGENCY_CACHE_LOCK:
         cached = EMERGENCY_CACHE.get(cache_key)
         if cached and now - float(cached.get("stored_at") or 0.0) < EMERGENCY_CACHE_TTL_SECONDS:
-            return list(cached.get("items") or [])
+            return list(cached.get("items") or []), None
 
     params = urlencode({
         "key": settings.tomtom_api_key,
@@ -256,13 +261,19 @@ def _cached_tomtom_poi_search(query: str, lat: float, lon: float, radius_m: int,
         "language": "en-US",
     })
     url = f"https://api.tomtom.com/search/2/poiSearch/{quote(query)}.json?{params}"
-    data = _http_json(url)
+    try:
+        data = _http_json(url)
+        TOMTOM_POI_ACCESS = True
+    except ProviderRequestError as exc:
+        if exc.code in {401, 403}:
+            TOMTOM_POI_ACCESS = False
+        return [], str(exc)
     results = data.get("results") if isinstance(data, dict) else []
     if not isinstance(results, list):
         results = []
     with EMERGENCY_CACHE_LOCK:
         EMERGENCY_CACHE[cache_key] = {"stored_at": now, "items": results}
-    return list(results)
+    return list(results), None
 
 def _poi_item_from_result(result: dict, lat: float, lon: float, scenario_id: str) -> dict | None:
     poi = result.get("poi") or {}
@@ -369,7 +380,7 @@ def _sort_service_items(items: list[dict], *, emergency: bool) -> list[dict]:
     return sorted(items, key=sort_key)
 
 
-def _emergency_items(lat: float, lon: float, radius_miles: int, scenario_id: str, settings: Settings) -> list[dict]:
+def _emergency_items(lat: float, lon: float, radius_miles: int, scenario_id: str, settings: Settings) -> tuple[list[dict], str | None]:
     scenario = SCENARIO_DEFS.get(scenario_id) or SCENARIO_DEFS["mechanical"]
     official_matches = _official_items(lat, lon, radius_miles, "all")
     category_ids = scenario.get("categories") or []
@@ -379,13 +390,17 @@ def _emergency_items(lat: float, lon: float, radius_miles: int, scenario_id: str
     ]
     radius_m = radius_miles * 1609
     live_items: list[dict] = []
+    provider_warning = None
     for query in scenario.get("queries") or []:
-        for result in _cached_tomtom_poi_search(query, lat, lon, radius_m, 12, settings):
+        results, warning = _cached_tomtom_poi_search(query, lat, lon, radius_m, 12, settings)
+        if warning and provider_warning is None:
+            provider_warning = warning
+        for result in results:
             item = _poi_item_from_result(result, lat, lon, scenario_id)
             if item:
                 live_items.append(item)
     merged = _merge_items(filtered_official, live_items, limit=MAX_EMERGENCY_RESULTS * 2)
-    return _sort_service_items(merged, emergency=True)[:MAX_EMERGENCY_RESULTS]
+    return _sort_service_items(merged, emergency=True)[:MAX_EMERGENCY_RESULTS], provider_warning
 
 
 def _category_counts(items: list[dict]) -> list[dict]:
@@ -429,8 +444,12 @@ def build_service_map_snapshot(
     lat = float(selected_vehicle.get("lat"))
     lon = float(selected_vehicle.get("lon"))
     if mode == "emergency":
-        items = _emergency_items(lat, lon, radius, scenario_id, settings)
-        source_note = "Emergency view combines nearby official truck stops with live emergency POI search."
+        items, provider_warning = _emergency_items(lat, lon, radius, scenario_id, settings)
+        if provider_warning:
+            warnings.append("Live emergency POI search is temporarily unavailable. Showing official nearby truck stops instead.")
+            source_note = "Emergency view is currently using nearby official truck stops because the live POI provider is unavailable."
+        else:
+            source_note = "Emergency view combines nearby official truck stops with live emergency POI search."
     else:
         items = _sort_service_items(_official_items(lat, lon, radius, category_id), emergency=False)
         source_note = "Service Map uses the official Love's / Pilot station catalog and local filtering for speed."
