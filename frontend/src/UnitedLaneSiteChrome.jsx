@@ -390,7 +390,7 @@ export function UnitedLaneMark({ className = "" }) {
   );
 }
 
-export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = "" }) {
+export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = "", action = null }) {
   return (
     <header className="site-header">
       <div className="site-header-frame">
@@ -421,6 +421,13 @@ export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = ""
               PRIVACY & TERMS
             </button>
           </nav>
+
+          {action ? (
+            <button className="primary-button site-header-cta" type="button" onClick={action.onClick}>
+              <UnitedIcon name={action.icon || "spark"} size={16} />
+              {action.label}
+            </button>
+          ) : null}
         </div>
 
         <div className="site-header-divider" />

@@ -40,6 +40,24 @@ class UserActivityEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
 
+class CommercialLead(Base):
+    __tablename__ = "commercial_leads"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    email: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    fleet_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    priority: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    selected_plan: Mapped[str] = mapped_column(String(64), default="growth", nullable=False, index=True)
+    landing_variant: Mapped[str] = mapped_column(String(16), default="a", nullable=False)
+    estimated_annual_gain: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source_page: Mapped[str] = mapped_column(String(120), default="commercial-landing", nullable=False, index=True)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="new", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
 class PlannerItem(Base):
     __tablename__ = "planner_items"
 

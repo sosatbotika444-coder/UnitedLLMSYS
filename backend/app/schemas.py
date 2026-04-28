@@ -89,6 +89,34 @@ class ActivityEventResponse(BaseModel):
     createdAt: datetime | None = None
 
 
+class CommercialLeadCreate(BaseModel):
+    name: str = Field(default="", max_length=255)
+    email: EmailStr
+    fleetSize: int = Field(ge=1, le=5000)
+    role: str = Field(min_length=2, max_length=120)
+    priority: str = Field(min_length=2, max_length=255)
+    selectedPlan: str = Field(min_length=2, max_length=64)
+    landingVariant: str = Field(min_length=1, max_length=16)
+    estimatedAnnualGain: int = Field(ge=0, le=100000000)
+    sourcePage: str = Field(default="commercial-landing", max_length=120)
+    notes: str = Field(default="", max_length=2000)
+
+
+class CommercialLeadResponse(BaseModel):
+    id: int
+    name: str = ""
+    email: EmailStr
+    fleetSize: int = 0
+    role: str = ""
+    priority: str = ""
+    selectedPlan: str = ""
+    landingVariant: str = ""
+    estimatedAnnualGain: int = 0
+    sourcePage: str = ""
+    status: str = "new"
+    createdAt: datetime | None = None
+
+
 class AdminLiveUser(BaseModel):
     actorName: str = ""
     actorEmail: str = ""

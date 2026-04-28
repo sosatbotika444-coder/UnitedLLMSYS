@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import AuthShiftPlanner from "./AuthShiftPlanner";
+import CommercialLanding from "./CommercialLanding";
 import DesignSystemShowcase from "./DesignSystemShowcase";
 import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
@@ -502,6 +502,13 @@ function normalizeRow(row) {
 
 function ModuleLoader({ label = "Loading workspace module..." }) {
   return <div className="module-loader"><UnitedIcon name="spark" size={18} />{label}</div>;
+}
+
+function scrollToMarketingSection(sectionId) {
+  if (typeof document === "undefined") return;
+  const node = document.getElementById(sectionId);
+  if (!node) return;
+  node.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function readStoredUser() {
@@ -1426,9 +1433,9 @@ export default function App() {
   const activityView = useMemo(() => {
     if (!user) {
       return {
-        page: mode === "register" ? "auth-register" : "auth-login",
+        page: "commercial-landing",
         workspace: selectedDepartment,
-        label: `${getDepartmentMeta(selectedDepartment).label} ${mode === "register" ? "Register" : "Login"}`,
+        label: `${getDepartmentMeta(selectedDepartment).label} ${mode === "register" ? "Register" : "Client sign in"}`,
       };
     }
 
@@ -1482,7 +1489,7 @@ export default function App() {
     trackActivity({
       token,
       eventType: user ? "workspace_view" : "page_enter",
-      eventName: user ? "Opened workspace" : "Opened auth screen",
+      eventName: user ? "Opened workspace" : "Opened commercial landing",
       page: activityView.page,
       workspace: activityView.workspace,
       label: activityView.label,
@@ -1865,6 +1872,132 @@ export default function App() {
 
   if (!user) {
     const isRestoringSession = Boolean(token);
+    const authPanel = (
+      <section className="auth-panel auth-panel-compact commercial-auth-card">
+        <div className="auth-panel-head">
+          <span className="brand-pill">Private Client Access</span>
+          <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+          <p>{selectedDepartmentMeta.label}</p>
+        </div>
+
+        {message ? <div className="notice success">{message}</div> : null}
+        {error ? <div className="notice error">{error}</div> : null}
+        {isRestoringSession ? <div className="notice info">Checking access...</div> : null}
+
+        <div className="auth-department-grid">
+          {departmentOptions.map((option) => (
+            <DepartmentCard key={option.id} option={option} active={selectedDepartment === option.id} onSelect={setSelectedDepartment} />
+          ))}
+        </div>
+
+        <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Office accounts are created by Admin only."}</div>
+        <button className="secondary-button auth-docs-button" type="button" onClick={() => openSitePanel("docs")}>
+          <UnitedIcon name="docs" size={16} />
+          Product Docs
+        </button>
+
+        {isRestoringSession ? null : (
+          <>
+            <div className="tabs">
+              <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
+                Login
+              </button>
+              {selectedDepartment === "driver" ? (
+                <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
+                  Register
+                </button>
+              ) : null}
+            </div>
+
+            {selectedDepartment === "driver" ? (
+              <DriverAuth
+                mode={mode}
+                loading={loading}
+                onBusyChange={setLoading}
+                onAuthenticated={handleAuthenticated}
+                onError={setError}
+                onMessage={setMessage}
+              />
+            ) : mode === "login" ? (
+              <form
+                className="auth-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitAuth("/auth/login", loginForm);
+                }}
+              >
+                <label>
+                  {selectedDepartment === "admin" ? "Username or Email" : "Email"}
+                  <input
+                    type={selectedDepartment === "admin" ? "text" : "email"}
+                    value={loginForm.email}
+                    onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                    placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
+                    required
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={loginForm.password}
+                    onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                    placeholder="Enter password"
+                    required
+                  />
+                </label>
+                <button type="submit" className="primary-button auth-submit" disabled={loading}>
+                  {loading ? "Signing in..." : "Continue"}
+                </button>
+              </form>
+            ) : (
+              <form
+                className="auth-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitAuth("/auth/register", registerForm);
+                }}
+              >
+                <label>
+                  Full Name
+                  <input
+                    type="text"
+                    value={registerForm.full_name}
+                    onChange={(event) => setRegisterForm({ ...registerForm, full_name: event.target.value })}
+                    placeholder="Full name"
+                    required
+                  />
+                </label>
+                <label>
+                  {selectedDepartment === "admin" ? "Username or Email" : "Email"}
+                  <input
+                    type={selectedDepartment === "admin" ? "text" : "email"}
+                    value={registerForm.email}
+                    onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
+                    placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
+                    required
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    value={registerForm.password}
+                    onChange={(event) => setRegisterForm({ ...registerForm, password: event.target.value })}
+                    placeholder="Minimum 6 characters"
+                    minLength="6"
+                    required
+                  />
+                </label>
+                <button type="submit" className="primary-button auth-submit" disabled={loading}>
+                  {loading ? "Creating..." : "Create Account"}
+                </button>
+              </form>
+            )}
+          </>
+        )}
+      </section>
+    );
 
     return (
       <div className="site-page-shell">
@@ -1874,140 +2007,18 @@ export default function App() {
           onDocs={() => openSitePanel("docs")}
           onPrivacy={() => openSitePanel("privacy")}
           activeItem={activeSiteNav}
+          action={{
+            label: isMobileViewport ? "Get Audit" : "Book Demo",
+            icon: "spark",
+            onClick: () => {
+              setSitePanel("");
+              scrollToMarketingSection("lead-capture");
+            }
+          }}
         />
 
-        <main className={`auth-shell site-auth-shell ${isMobileViewport ? "mobile-auth-shell" : ""}`}>
-          <section className="auth-showcase auth-showcase-planner">
-            <AuthShiftPlanner />
-          </section>
+        <CommercialLanding authPanel={authPanel} mobile={isMobileViewport} />
 
-          <section className="auth-panel auth-panel-compact">
-            <div className="auth-panel-head">
-              <span className="brand-pill">United Lane LLC</span>
-              <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
-              <p>{selectedDepartmentMeta.label}</p>
-            </div>
-
-            {message ? <div className="notice success">{message}</div> : null}
-            {error ? <div className="notice error">{error}</div> : null}
-            {isRestoringSession ? <div className="notice info">Checking access...</div> : null}
-
-            <div className="auth-department-grid">
-              {departmentOptions.map((option) => (
-                <DepartmentCard key={option.id} option={option} active={selectedDepartment === option.id} onSelect={setSelectedDepartment} />
-              ))}
-            </div>
-
-            <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Accounts are created by Admin only."}</div>
-            <button className="secondary-button auth-docs-button" type="button" onClick={() => openSitePanel("docs")}>
-              <UnitedIcon name="docs" size={16} />
-              Docs
-            </button>
-
-            {isRestoringSession ? null : (
-              <>
-                <div className="tabs">
-                  <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
-                    Login
-                  </button>
-                  {selectedDepartment === "driver" ? (
-                    <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">
-                      Register
-                    </button>
-                  ) : null}
-                </div>
-
-                {selectedDepartment === "driver" ? (
-                  <DriverAuth
-                    mode={mode}
-                    loading={loading}
-                    onBusyChange={setLoading}
-                    onAuthenticated={handleAuthenticated}
-                    onError={setError}
-                    onMessage={setMessage}
-                  />
-                ) : mode === "login" ? (
-                  <form
-                    className="auth-form"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      submitAuth("/auth/login", loginForm);
-                    }}
-                  >
-                    <label>
-                      {selectedDepartment === "admin" ? "Username or Email" : "Email"}
-                      <input
-                        type={selectedDepartment === "admin" ? "text" : "email"}
-                        value={loginForm.email}
-                        onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
-                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
-                        required
-                      />
-                    </label>
-                    <label>
-                      Password
-                      <input
-                        type="password"
-                        value={loginForm.password}
-                        onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-                        placeholder="Enter password"
-                        required
-                      />
-                    </label>
-                    <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                      {loading ? "Signing in..." : "Continue"}
-                    </button>
-                  </form>
-                ) : (
-                  <form
-                    className="auth-form"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      submitAuth("/auth/register", registerForm);
-                    }}
-                  >
-                    <label>
-                      Full Name
-                      <input
-                        type="text"
-                        value={registerForm.full_name}
-                        onChange={(event) => setRegisterForm({ ...registerForm, full_name: event.target.value })}
-                        placeholder="Full name"
-                        required
-                      />
-                    </label>
-                    <label>
-                      {selectedDepartment === "admin" ? "Username or Email" : "Email"}
-                      <input
-                        type={selectedDepartment === "admin" ? "text" : "email"}
-                        value={registerForm.email}
-                        onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
-                        placeholder={selectedDepartment === "admin" ? "redevil" : "name@company.com"}
-                        required
-                      />
-                    </label>
-                    <label>
-                      Password
-                      <input
-                        type="password"
-                        value={registerForm.password}
-                        onChange={(event) => setRegisterForm({ ...registerForm, password: event.target.value })}
-                        placeholder="Minimum 6 characters"
-                        minLength="6"
-                        required
-                      />
-                    </label>
-                    <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                      {loading ? "Creating..." : "Create Account"}
-                    </button>
-                  </form>
-                )}
-              </>
-            )}
-          </section>
-        </main>
-
-        <InstallAppButton />
         {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );

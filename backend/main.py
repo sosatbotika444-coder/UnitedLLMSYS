@@ -19,7 +19,7 @@ from app.official_stations import (
     stop_live_price_refresh_workers,
 )
 from app.relay_discounts import relay_discount_runtime_status
-from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, motive, navigation, planner, relay_discounts, safety
+from app.routes import activity, admin, auth, chat, driver, fuel_authorizations, full_road, loads, marketing, motive, navigation, planner, relay_discounts, safety
 
 import app.models  # noqa: F401
 
@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     api.include_router(fuel_authorizations.router)
     api.include_router(full_road.router)
     api.include_router(loads.router)
+    api.include_router(marketing.router)
     api.include_router(motive.router)
     api.include_router(navigation.router)
     api.include_router(planner.router)
