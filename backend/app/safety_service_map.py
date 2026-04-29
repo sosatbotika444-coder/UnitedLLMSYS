@@ -156,7 +156,7 @@ def _bounding_box(lat: float, lon: float, radius_miles: int) -> tuple[float, flo
 
 def _categories_for_text(text: str) -> list[str]:
     matched = []
-    for item in SERVICE_CATEGORY_DEFS:
+    for item in SERVICE_CATEGORY_DEFS: 
         if item["id"] == "all":
             continue
         if _contains_keyword(text, item["keywords"]):

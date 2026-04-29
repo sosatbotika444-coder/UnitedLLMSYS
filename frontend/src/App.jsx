@@ -1891,11 +1891,6 @@ export default function App() {
         </div>
 
         <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Office accounts are created by Admin only."}</div>
-        <button className="secondary-button auth-docs-button" type="button" onClick={() => openSitePanel("docs")}>
-          <UnitedIcon name="docs" size={16} />
-          Product Docs
-        </button>
-
         {isRestoringSession ? null : (
           <>
             <div className="tabs">
@@ -2001,25 +1996,7 @@ export default function App() {
 
     return (
       <div className="site-page-shell">
-        <SiteHeader
-          onHome={handleHomeNavigation}
-          onAbout={() => openSitePanel("about")}
-          onDocs={() => openSitePanel("docs")}
-          onPrivacy={() => openSitePanel("privacy")}
-          activeItem={activeSiteNav}
-          action={{
-            label: isMobileViewport ? "Get Audit" : "Book Demo",
-            icon: "spark",
-            onClick: () => {
-              setSitePanel("");
-              scrollToMarketingSection("lead-capture");
-            }
-          }}
-        />
-
         <CommercialLanding authPanel={authPanel} mobile={isMobileViewport} />
-
-        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );
   }

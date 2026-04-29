@@ -14781,6 +14781,34 @@ body.theme-dark .full-road-health-badge.tone-dark {
   color: var(--text) !important;
 }
 
+.home-focus-shell {
+  min-height: 100vh;
+  padding: 24px 22px 36px;
+  display: grid;
+  grid-template-columns: minmax(360px, 620px) minmax(360px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.home-focus-panel,
+.home-focus-planner {
+  min-width: 0;
+}
+
+.home-focus-panel .auth-panel,
+.home-focus-planner .auth-shift-planner {
+  width: 100%;
+  max-width: none;
+}
+
+.home-focus-panel .auth-panel {
+  margin: 0;
+}
+
+.home-focus-planner {
+  display: grid;
+}
+
 .auth-shift-planner-head,
 .auth-shift-list-head,
 .auth-shift-item-head,
@@ -15089,6 +15117,12 @@ body.theme-dark .full-road-health-badge.tone-dark {
     width: min(100%, 620px);
   }
 
+  .home-focus-shell {
+    width: min(100%, 760px);
+    min-height: auto;
+    grid-template-columns: 1fr;
+  }
+
   .auth-showcase-planner {
     order: 2;
     min-height: auto !important;
@@ -15106,6 +15140,11 @@ body.theme-dark .full-road-health-badge.tone-dark {
 }
 
 @media (max-width: 720px) {
+  .home-focus-shell {
+    padding: 16px;
+    gap: 16px;
+  }
+
   .auth-showcase-planner,
   .auth-shift-planner {
     padding: 14px !important;
