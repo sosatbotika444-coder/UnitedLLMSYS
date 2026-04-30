@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useConfirmDialog } from "./feedback";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const statusOptions = [
   { id: "open", label: "Open" },
   { id: "approved", label: "Approved" },

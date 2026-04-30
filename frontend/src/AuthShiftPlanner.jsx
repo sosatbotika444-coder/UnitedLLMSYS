@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 export const DEFAULT_SHIFT_PLANNER_STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
 const PLANNER_CLOCK_TICK_MS = 1000;
 const PLANNER_ALARM_REPEAT_MS = 7000;

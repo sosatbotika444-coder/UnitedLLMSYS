@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const quickFocusOptions = [
   { id: "all", label: "All Trucks" },
   { id: "lowFuel", label: "Low Fuel" },

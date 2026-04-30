@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirmDialog } from "./feedback";
 import { useIsMobileViewport } from "./useViewportMode";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MESSAGE_LIMIT = 120;
 const departmentLabels = {
   fuel: "Fuel Service",

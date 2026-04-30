@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-3998.up.railway.app/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 
 async function apiRequest(path, options = {}, token = '') {
   const headers = {

@@ -3,7 +3,7 @@ import { buildVehicleLocationLabel } from "./locationFormatting";
 import MotiveFleetMap from "./MotiveFleetMap";
 import MapStage from "./MapStage";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const filterOptions = ["All", "Moving", "Stopped", "Stale", "Low Fuel", "Faults"];
 
 async function apiRequest(path, options = {}, token = "") {
