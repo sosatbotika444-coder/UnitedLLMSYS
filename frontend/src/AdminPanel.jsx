@@ -3,7 +3,7 @@ import { setActivityContext, trackActivity } from "./activityTracker";
 import { useConfirmDialog } from "./feedback";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const SafetyServiceTools = lazy(() => import("./SafetyServiceTools"));
 const departmentOptions = ["admin", "fuel", "safety", "driver"];

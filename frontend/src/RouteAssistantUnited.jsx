@@ -11,7 +11,7 @@ import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-3998.up.railway.app/api";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
 const defaultFilters = {
   sort_by: "best",

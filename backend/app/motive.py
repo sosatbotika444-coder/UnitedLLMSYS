@@ -1468,6 +1468,7 @@ class MotiveClient:
             summary = f"{self._format_hos_duration(available_time.get('drive_seconds'))} drive / {self._format_hos_duration(available_time.get('shift_seconds'))} shift left."
 
         return {
+            
             "source": source,
             "status": status_label,
             "summary": summary,
