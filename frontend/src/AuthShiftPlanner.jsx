@@ -879,7 +879,11 @@ export default function AuthShiftPlanner({
   return (
     <section className="auth-shift-planner">
       <div className="auth-shift-planner-head">
-        <strong>{title}</strong>
+        <div className="auth-shift-heading-copy">
+          <span className="auth-shift-kicker">{token ? "Account planner" : "Browser planner"}</span>
+          <strong>{title}</strong>
+          <small>Plan tasks, breaks, and callbacks without losing the page.</small>
+        </div>
         <div className="auth-shift-head-actions">
           <small className="auth-shift-alert-state">{persistenceLabel}</small>
           {notificationAvailable ? (
@@ -928,118 +932,129 @@ export default function AuthShiftPlanner({
         </div>
       ) : null}
 
-      <form className="auth-shift-form" onSubmit={addPlannerItem}>
-        <div className="auth-shift-form-grid auth-shift-form-grid-compact">
-          <label>
-            Type
-            <select value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
-              <option value="task">Task</option>
-              <option value="break">Break</option>
-            </select>
-          </label>
-          <label className="auth-shift-title-field">
-            What needs to be done
-            <input
-              type="text"
-              value={draft.title}
-              onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-              placeholder={draft.kind === "break" ? "Break reason" : "Load follow-up, broker call, check tracking"}
-            />
-          </label>
-          <label>
-            Planned finish
-            <input
-              type="datetime-local"
-              value={draft.dueAt}
-              onChange={(event) => setDraft((current) => ({ ...current, dueAt: event.target.value }))}
-            />
-          </label>
-          <button type="submit" className="primary-button auth-shift-add-button" disabled={plannerSaving}>
-            {plannerSaving ? "Saving..." : "Add"}
-          </button>
-        </div>
-
-        <div className="auth-shift-quick-actions auth-shift-quick-actions-compact">
-          <div className="auth-shift-quick-group compact">
-            <span>Time</span>
-            <div>
-              <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(15) }))}>15m</button>
-              <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(30) }))}>30m</button>
-              <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(60) }))}>1h</button>
-              <button type="button" className="secondary-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(120) }))}>2h</button>
-            </div>
-          </div>
-
-          <div className="auth-shift-quick-group compact">
-            <span>Breaks</span>
-            <div>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(15)} disabled={plannerSaving}>Break 15m</button>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(30)} disabled={plannerSaving}>Break 30m</button>
-              <button type="button" className="secondary-button" onClick={() => quickBreak(45)} disabled={plannerSaving}>Break 45m</button>
-            </div>
+      <section className="auth-shift-surface-card auth-shift-composer-card">
+        <div className="auth-shift-section-head">
+          <div>
+            <strong>Add a task or break</strong>
+            <small>Start time is saved automatically. Use presets when you need a quick reminder.</small>
           </div>
         </div>
-      </form>
 
-      <div className="auth-shift-list-head compact">
-        <div>
-          <strong>Live</strong>
-          <small>{remoteSyncing && !items.length ? "Loading saved planner" : liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
+        <form className="auth-shift-form" onSubmit={addPlannerItem}>
+          <div className="auth-shift-form-grid auth-shift-form-grid-compact">
+            <label className="auth-shift-field auth-shift-field-type">
+              <span>Type</span>
+              <select value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
+                <option value="task">Task</option>
+                <option value="break">Break</option>
+              </select>
+            </label>
+            <label className="auth-shift-field auth-shift-title-field">
+              <span>What needs to be done</span>
+              <input
+                type="text"
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                placeholder={draft.kind === "break" ? "Break reason" : "Load follow-up, broker call, check tracking"}
+              />
+            </label>
+            <label className="auth-shift-field auth-shift-field-due">
+              <span>Planned finish</span>
+              <input
+                type="datetime-local"
+                value={draft.dueAt}
+                onChange={(event) => setDraft((current) => ({ ...current, dueAt: event.target.value }))}
+              />
+            </label>
+            <button type="submit" className="primary-button auth-shift-add-button" disabled={plannerSaving}>
+              {plannerSaving ? "Saving..." : "Add item"}
+            </button>
+          </div>
+
+          <div className="auth-shift-quick-actions auth-shift-quick-actions-compact">
+            <div className="auth-shift-quick-group compact">
+              <span>Time presets</span>
+              <div>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(15) }))}>15m</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(30) }))}>30m</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(60) }))}>1h</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => setDraft((current) => ({ ...current, dueAt: offsetMinutes(120) }))}>2h</button>
+              </div>
+            </div>
+
+            <div className="auth-shift-quick-group compact">
+              <span>Quick breaks</span>
+              <div>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(15)} disabled={plannerSaving}>Break 15m</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(30)} disabled={plannerSaving}>Break 30m</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(45)} disabled={plannerSaving}>Break 45m</button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section className="auth-shift-surface-card auth-shift-live-card">
+        <div className="auth-shift-list-head compact">
+          <div>
+            <strong>Live queue</strong>
+            <small>{remoteSyncing && !items.length ? "Loading saved planner" : liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
+          </div>
         </div>
-      </div>
 
-      {liveItems.length ? (
-        <div className="auth-shift-list">
-          {liveItems.map((item) => {
-            const tone = plannerTone(item, nowMs);
-            return (
-              <article key={item.id} className={`auth-shift-item auth-shift-item-${tone}`.trim()}>
-                <div className="auth-shift-item-head">
-                  <div>
-                    <span className={`auth-shift-kind auth-shift-kind-${item.kind}`}>{plannerKindLabel(item.kind)}</span>
-                    <strong>{item.title}</strong>
-                    <small>{plannerStatusLabel(item, nowMs)}</small>
+        {liveItems.length ? (
+          <div className="auth-shift-list">
+            {liveItems.map((item) => {
+              const tone = plannerTone(item, nowMs);
+              return (
+                <article key={item.id} className={`auth-shift-item auth-shift-item-${tone}`.trim()}>
+                  <div className="auth-shift-item-head">
+                    <div>
+                      <span className={`auth-shift-kind auth-shift-kind-${item.kind}`}>{plannerKindLabel(item.kind)}</span>
+                      <strong>{item.title}</strong>
+                      <small>{plannerStatusLabel(item, nowMs)}</small>
+                    </div>
                   </div>
-                </div>
 
-                <div className="auth-shift-item-meta">
-                  <span>Start {formatClock(item.startedAt)}</span>
-                  <span>Due {formatClock(item.dueAt)}</span>
-                  {item.completedAt ? <span>Finished {formatClock(item.completedAt)}</span> : null}
-                </div>
+                  <div className="auth-shift-item-meta">
+                    <span>Start {formatClock(item.startedAt)}</span>
+                    <span>Due {formatClock(item.dueAt)}</span>
+                    {item.completedAt ? <span>Finished {formatClock(item.completedAt)}</span> : null}
+                  </div>
 
-                <div className="auth-shift-item-actions">
-                  {!item.completedAt ? (
-                    <button type="button" className="primary-button" onClick={() => finishItem(item.id)} disabled={plannerSaving}>
-                      Finish now
+                  <div className="auth-shift-item-actions">
+                    {!item.completedAt ? (
+                      <button type="button" className="primary-button" onClick={() => finishItem(item.id)} disabled={plannerSaving}>
+                        Finish now
+                      </button>
+                    ) : null}
+                    {!item.verifiedAt ? (
+                      <button type="button" className="secondary-button" onClick={() => verifyItem(item.id)} disabled={plannerSaving}>
+                        Verify & hide
+                      </button>
+                    ) : null}
+                    {!item.verifiedAt ? (
+                      <button type="button" className="secondary-button" onClick={() => extendItem(item.id, 10)} disabled={plannerSaving}>
+                        +10 min
+                      </button>
+                    ) : null}
+                    <button type="button" className="secondary-button" onClick={() => removeItem(item.id)} disabled={plannerSaving}>
+                      Delete
                     </button>
-                  ) : null}
-                  {!item.verifiedAt ? (
-                    <button type="button" className="secondary-button" onClick={() => verifyItem(item.id)} disabled={plannerSaving}>
-                      Verify & hide
-                    </button>
-                  ) : null}
-                  {!item.verifiedAt ? (
-                    <button type="button" className="secondary-button" onClick={() => extendItem(item.id, 10)} disabled={plannerSaving}>
-                      +10 min
-                    </button>
-                  ) : null}
-                  <button type="button" className="secondary-button" onClick={() => removeItem(item.id)} disabled={plannerSaving}>
-                    Delete
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="empty-route-card compact">
-          {remoteSyncing ? "Loading your saved planner..." : "Planner is clear. Add work items or breaks, then verify them when the shift step is done."}
-        </div>
-      )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="empty-route-card compact">
+            {remoteSyncing ? "Loading your saved planner..." : "Planner is clear. Add work items or breaks, then verify them when the shift step is done."}
+          </div>
+        )}
+      </section>
 
       {showVerified && verifiedItems.length ? (
-        <div className="auth-shift-archive">
+        <section className="auth-shift-surface-card auth-shift-archive">
           <div className="auth-shift-list-head compact">
             <div>
               <strong>Verified archive</strong>
@@ -1064,7 +1079,7 @@ export default function AuthShiftPlanner({
               </article>
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
     </section>
   );
