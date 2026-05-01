@@ -17638,3 +17638,486 @@ textarea[aria-invalid="true"] {
     scroll-behavior: auto !important;
   }
 }
+
+/* Final UI alignment pass */
+:root {
+  --ul-shell-max-width: 1440px;
+  --ul-shell-gap: clamp(18px, 2vw, 28px);
+  --ul-section-gap: clamp(14px, 1.6vw, 22px);
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.site-page-shell,
+.site-auth-shell,
+.site-workspace-shell,
+.workspace-app-shell,
+.workspace-sidebar-shell,
+.workspace-sidebar-stack,
+.workspace-sidebar-body,
+.workspace-main-shell,
+.workspace-main-header,
+.workspace-main-heading,
+.workspace-main-meta,
+.workspace-content-stack,
+.workspace-tab-panel,
+.workspace-tab-panel > *,
+.panel,
+.workspace-tool-surface,
+.workspace-table-panel,
+.sheet-frame,
+.sheet-scroll,
+.dispatch-sheet,
+.team-chat-panel,
+.team-chat-shell,
+.team-chat-sidebar,
+.team-chat-main,
+.team-chat-log,
+.team-chat-toolbar,
+.team-chat-toolbar-actions,
+.team-chat-composer,
+.team-chat-composer-actions,
+.motive-panel,
+.motive-workbench-grid,
+.motive-list-panel-commercial,
+.motive-focus-column,
+.motive-focus-card,
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel,
+.motive-preview-grid,
+.motive-preview-block,
+.motive-detail-card-grid,
+.motive-vehicle-card-grid,
+.motive-focus-metric-grid,
+.motive-detail-list,
+.motive-history-list,
+.full-road-main-grid,
+.route-main-grid,
+.workspace-shortcut-row,
+.workspace-start-grid,
+.home-focus-shell,
+.home-focus-panel,
+.home-focus-planner,
+.service-card-grid,
+.services-summary-grid,
+.safety-document-lanes,
+.safety-upload-row,
+.driver-profile-grid {
+  min-width: 0;
+}
+
+.primary-button,
+.secondary-button,
+.delete-button,
+.ghost-button,
+.workspace-inline-tab,
+.tabs button,
+.workspace-sidebar-link,
+.workspace-sidebar-create,
+.workspace-sidebar-logout,
+.workspace-shortcut-button,
+.team-chat-filter-row button,
+.team-chat-message-actions button,
+.team-chat-composer-context button,
+.mobile-more-sheet button,
+.mobile-bottom-nav button {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+.panel-head,
+.sheet-panel-head,
+.auth-panel-head,
+.workspace-main-heading,
+.workspace-main-guidance,
+.workspace-main-usercard,
+.motive-subhead,
+.motive-focus-head,
+.motive-vehicle-card-top,
+.motive-vehicle-card-foot,
+.motive-map-location-card,
+.motive-detail-list > div,
+.team-chat-live-card,
+.team-chat-message-head,
+.driver-match-card,
+.driver-auth-selected,
+.driver-match-panel-head,
+.workspace-sidebar-brand-copy,
+.workspace-sidebar-link-copy,
+.workspace-sidebar-account-card,
+.workspace-sidebar-note,
+.workspace-sidebar-footer-card,
+.workspace-start-card,
+.workspace-shortcut-button,
+.statistics-table td,
+.statistics-table th,
+.dispatch-sheet td,
+.dispatch-sheet th {
+  overflow-wrap: anywhere;
+}
+
+.tabs,
+.workspace-inline-tabs,
+.motive-filter-tabs,
+.motive-map-tabs,
+.statistics-quick-tabs {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px !important;
+  align-items: stretch !important;
+}
+
+.tabs button,
+.workspace-inline-tab {
+  flex: 0 1 auto;
+}
+
+.site-auth-shell.home-focus-shell {
+  width: min(100%, var(--ul-shell-max-width));
+  min-height: calc(100vh - 112px);
+  margin: 0 auto;
+  padding: clamp(18px, 2vw, 28px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  gap: var(--ul-shell-gap);
+  align-items: start !important;
+  justify-items: stretch !important;
+  place-items: start stretch !important;
+}
+
+.home-focus-panel,
+.home-focus-planner {
+  display: grid;
+  align-self: stretch;
+}
+
+.home-focus-panel .auth-panel,
+.home-focus-planner .auth-shift-planner {
+  width: 100%;
+  max-width: none;
+}
+
+.auth-panel.commercial-auth-card {
+  width: 100% !important;
+  max-width: none !important;
+  padding: clamp(20px, 2vw, 30px) !important;
+}
+
+.auth-department-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+}
+
+.auth-lock-note,
+.driver-match-empty,
+.driver-match-card small,
+.driver-match-card span {
+  line-height: 1.5;
+}
+
+.driver-match-panel,
+.driver-auth-selected {
+  align-items: start;
+}
+
+.workspace-app-shell.site-workspace-shell {
+  width: min(100%, var(--ul-shell-max-width));
+  margin: 0 auto;
+  display: grid !important;
+  grid-template-columns: var(--workspace-sidebar-width, 278px) minmax(0, 1fr) !important;
+  gap: var(--ul-shell-gap);
+  align-items: start;
+  padding: clamp(16px, 1.8vw, 24px) !important;
+}
+
+.workspace-sidebar-shell {
+  height: auto !important;
+  min-height: 0 !important;
+  align-self: start;
+}
+
+.workspace-sidebar-stack {
+  min-height: 0;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
+}
+
+.workspace-sidebar-handle-arrow {
+  font-size: 0;
+}
+
+.workspace-sidebar-handle-arrow::before {
+  display: inline-block;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.workspace-sidebar-handle[aria-expanded="true"] .workspace-sidebar-handle-arrow::before {
+  content: "<";
+}
+
+.workspace-sidebar-handle[aria-expanded="false"] .workspace-sidebar-handle-arrow::before {
+  content: ">";
+}
+
+.workspace-main-shell {
+  gap: var(--ul-section-gap);
+  padding: clamp(18px, 2vw, 28px) !important;
+}
+
+.workspace-main-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start !important;
+  padding: clamp(18px, 2vw, 24px) !important;
+}
+
+.workspace-main-meta {
+  justify-content: flex-end;
+  align-items: stretch !important;
+}
+
+.workspace-main-usercard {
+  min-width: min(240px, 100%);
+}
+
+.workspace-main-guidance,
+.motive-map-location-card,
+.panel-filter-summary {
+  max-width: min(100%, 820px);
+}
+
+.workspace-shortcut-row,
+.workspace-start-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+}
+
+.route-main-grid,
+.full-road-main-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.92fr) !important;
+}
+
+.inline-filter-grid,
+.inline-filter-grid-compact,
+.full-road-queue-toolbar,
+.toolbar,
+.route-builder {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  align-items: end;
+}
+
+.sheet-frame {
+  width: 100%;
+  overflow: hidden;
+}
+
+.sheet-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.dispatch-sheet {
+  width: max-content !important;
+  min-width: max(100%, 1180px);
+}
+
+.statistics-table {
+  min-width: max(100%, 1320px);
+}
+
+.dispatch-sheet td,
+.dispatch-sheet th {
+  vertical-align: top;
+}
+
+.dispatch-sheet input,
+.dispatch-sheet textarea,
+.dispatch-sheet select {
+  min-width: 0;
+}
+
+.statistics-table strong,
+.statistics-table small,
+.dispatch-sheet td strong,
+.dispatch-sheet td small {
+  white-space: normal;
+}
+
+.motive-workbench-grid {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) !important;
+  gap: 18px;
+  align-items: start;
+}
+
+.motive-list-panel-commercial,
+.motive-focus-card,
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel,
+.motive-preview-block {
+  padding: clamp(14px, 1.6vw, 18px) !important;
+}
+
+.motive-list-panel-commercial {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  max-height: calc(100vh - 118px);
+  overflow: auto;
+}
+
+.motive-attention-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+}
+
+.motive-detail-card-grid,
+.motive-preview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+}
+
+.motive-vehicle-card-grid,
+.motive-focus-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+}
+
+.motive-vehicle-card-top,
+.motive-vehicle-card-foot,
+.motive-focus-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.motive-vehicle-card-foot small:last-child {
+  max-width: 100%;
+  text-align: left;
+}
+
+.motive-fleet-map-shell {
+  min-height: clamp(360px, 54vh, 640px);
+}
+
+.motive-fleet-map-shell,
+.motive-fleet-map,
+.safety-service-map-shell,
+.safety-service-map-canvas,
+.live-route-map {
+  width: 100%;
+}
+
+.motive-map-marker,
+.tt-marker,
+.safety-service-map-marker {
+  max-width: min(320px, calc(100vw - 120px));
+}
+
+.motive-map-marker-label,
+.tt-marker-label,
+.safety-service-map-marker-label {
+  max-width: min(180px, 32vw);
+}
+
+.team-chat-shell {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  min-height: clamp(620px, 72vh, 820px);
+}
+
+.team-chat-sidebar,
+.team-chat-main,
+.team-chat-log {
+  min-height: 0;
+}
+
+.team-chat-toolbar,
+.team-chat-toolbar-actions,
+.team-chat-composer-actions,
+.team-chat-composer-context {
+  flex-wrap: wrap;
+}
+
+.team-chat-toolbar-actions input {
+  flex: 1 1 260px;
+  width: auto;
+  min-width: 0;
+}
+
+.team-chat-message-actions {
+  row-gap: 8px;
+}
+
+@media (max-width: 1360px) {
+  .motive-workbench-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .motive-list-panel-commercial {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 1200px) {
+  .workspace-app-shell.site-workspace-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-sidebar-shell {
+    position: static !important;
+    top: auto !important;
+    width: 100% !important;
+  }
+
+  .workspace-sidebar-stack {
+    max-height: none;
+  }
+
+  .workspace-main-header,
+  .route-main-grid,
+  .full-road-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .site-auth-shell.home-focus-shell {
+    grid-template-columns: 1fr;
+    width: min(100%, 760px);
+    min-height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-auth-shell.home-focus-shell {
+    padding: 14px;
+    gap: 16px;
+  }
+
+  .auth-panel.commercial-auth-card,
+  .home-focus-planner .auth-shift-planner,
+  .workspace-main-shell,
+  .motive-list-panel-commercial,
+  .motive-focus-card,
+  .motive-map-panel,
+  .motive-detail-panel,
+  .motive-history-panel,
+  .team-chat-sidebar,
+  .team-chat-toolbar,
+  .team-chat-composer {
+    padding: 16px !important;
+  }
+
+  .dispatch-sheet {
+    min-width: 980px;
+  }
+
+  .statistics-table {
+    min-width: 1120px;
+  }
+}
