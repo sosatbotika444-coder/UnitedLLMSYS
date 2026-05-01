@@ -18452,3 +18452,27 @@ body.theme-dark .auth-shift-item-meta span {
     width: 100%;
   }
 }
+
+/* Full-width workspace mode */
+.workspace-app-shell.site-workspace-shell,
+.site-workspace-shell.workspace-app-shell {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-left: clamp(14px, 1.5vw, 24px) !important;
+  padding-right: clamp(14px, 1.5vw, 24px) !important;
+}
+
+.workspace-app-shell.site-workspace-shell .workspace-main-shell,
+.site-workspace-shell.workspace-app-shell .workspace-main-shell {
+  width: 100%;
+  max-width: none;
+}
+
+.workspace-app-shell.site-workspace-shell .workspace-content-stack,
+.site-workspace-shell.workspace-app-shell .workspace-content-stack,
+.workspace-app-shell.site-workspace-shell .workspace-tab-panel,
+.site-workspace-shell.workspace-app-shell .workspace-tab-panel {
+  width: 100%;
+  max-width: none;
+}
