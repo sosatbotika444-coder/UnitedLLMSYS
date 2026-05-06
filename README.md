@@ -39,6 +39,9 @@ MOTIVE_CLIENT_ID=optional-oauth-client-id
 MOTIVE_CLIENT_SECRET=optional-oauth-client-secret
 MOTIVE_REDIRECT_URI=optional-oauth-redirect-uri
 MOTIVE_USER_ID=optional-fleet-admin-user-id
+TELEGRAM_BOT_ENABLED=false
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_POLLING_DROP_PENDING_UPDATES=false
 ```
 
 ### Frontend
@@ -79,6 +82,14 @@ Backend health check:
 
 - `http://localhost:8000/api/health`
 - `http://localhost:8000/docs`
+
+Telegram bot local run:
+
+```bash
+cd backend
+.venv\Scripts\activate
+python run_telegram_bot.py
+```
 
 ### Frontend
 
@@ -127,6 +138,9 @@ DATABASE_POOL_TIMEOUT_SECONDS=30
 DATABASE_POOL_RECYCLE_SECONDS=1800
 GZIP_MINIMUM_SIZE=1024
 TOMTOM_API_KEY=your-tomtom-api-key
+TELEGRAM_BOT_ENABLED=true
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_POLLING_DROP_PENDING_UPDATES=false
 ```
 
 9. Deploy.
@@ -185,6 +199,38 @@ VITE_TOMTOM_API_KEY=your-tomtom-api-key
 4. Set `VITE_API_URL` in Netlify.
 5. Set `CORS_ORIGINS` in Railway to the Netlify URL.
 6. Redeploy both services after env changes.
+
+## Telegram bot
+
+The project now includes an `aiogram` polling bot for truck routing.
+
+Driver flow:
+
+- Send `/route` to start the full wizard.
+- Or send one line like `Chicago, IL -> Dallas, TX`.
+- The bot replies with a route image, smart fuel plan, and fuel approval text for the driver.
+
+Railway setup:
+
+1. Keep the existing backend API service with the normal `uvicorn` start command.
+2. Add a second Railway service from the same repo and same `backend/` root directory.
+3. Set that second service start command to `python run_telegram_bot.py`.
+4. Copy the same DB and API env vars into that bot service, especially `DATABASE_URL`, `TOMTOM_API_KEY`, `MOTIVE_API_KEY`, and `TELEGRAM_BOT_TOKEN`.
+
+Recommended Railway env:
+
+```env
+TELEGRAM_BOT_ENABLED=true
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_POLLING_DROP_PENDING_UPDATES=false
+```
+
+Notes:
+
+- Run the bot as a separate Railway service or worker from the same `backend/` folder.
+- Use the start command `python run_telegram_bot.py`.
+- The polling bot deletes any existing Telegram webhook on startup, then starts long polling.
+- Route images use `TOMTOM_API_KEY` for the map background. If that key is missing, the bot still sends a fallback schematic route image.
 
 
 ## Railway build fallback

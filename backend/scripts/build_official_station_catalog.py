@@ -12,6 +12,6 @@ if __name__ == "__main__":
 
 
 #as manu akm  
-#b is conquerrorr ing bikn in the pas t of it so it can be tjhr nbpk n b[ n[v  
+#првиет смотри вот этоти смотри чтобы получить максимальный и оперативный вариант надо сдт о1
 
 

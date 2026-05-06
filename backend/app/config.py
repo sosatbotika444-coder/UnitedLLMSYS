@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     station_catalog_blocking_rebuild_on_miss_enabled: bool = False
     route_live_price_blocking_limit: int = 18
     route_live_price_timeout_seconds: float = 12.0
+    telegram_bot_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_webhook_base_url: str = ""
+    telegram_webhook_secret: str = ""
+    telegram_bot_auto_set_webhook: bool = True
+    telegram_polling_drop_pending_updates: bool = False
+    telegram_bot_system_username: str = "telegram.bot"
+    telegram_bot_system_email: str = "telegram.bot@system.unitedlanesys.local"
+    telegram_route_image_width: int = 1280
+    telegram_route_image_height: int = 720
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), env_file_encoding="utf-8-sig", extra="ignore")
 
@@ -77,6 +87,11 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_urls(cls, value: str) -> str:
         return value.rstrip("/")
+
+    @field_validator("telegram_webhook_base_url")
+    @classmethod
+    def normalize_optional_url(cls, value: str) -> str:
+        return value.strip().rstrip("/")
 
     @property
     def cors_origin_list(self) -> list[str]:

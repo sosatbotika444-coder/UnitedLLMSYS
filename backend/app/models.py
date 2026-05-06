@@ -303,6 +303,33 @@ class RoutingFuelStop(Base):
 
 
 
+class TelegramDriverProfile(Base):
+    __tablename__ = "telegram_driver_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    chat_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    telegram_user_id: Mapped[str] = mapped_column(String(64), default="", index=True, nullable=False)
+    telegram_username: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    first_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    last_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    truck_number: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    driver_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    vehicle_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    vehicle_type: Mapped[str] = mapped_column(String(32), default="Truck", nullable=False)
+    fuel_type: Mapped[str] = mapped_column(String(32), default="Auto Diesel", nullable=False)
+    tank_capacity_gallons: Mapped[float] = mapped_column(Float, default=200.0, nullable=False)
+    mpg: Mapped[float] = mapped_column(Float, default=6.0, nullable=False)
+    default_current_fuel_gallons: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
+    price_target: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_origin: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    last_destination: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    last_routing_request_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active_step: Mapped[str] = mapped_column(String(64), default="", index=True, nullable=False)
+    pending_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class FuelAuthorization(Base):
     __tablename__ = "fuel_authorizations"
 
