@@ -19,7 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import hash_password, normalize_email, normalize_username
 from app.config import get_settings
-from app.models import TelegramDriverProfile, User
+from app.models import FullRoadTrip, Load, TelegramDriverProfile, User
+from app.motive import MotiveClient
 from app.routes.fuel_authorizations import create_authorization_record
 from app.routes.navigation import route_assistant
 from app.schemas import FuelAuthorizationCreate, RouteAssistantRequest, RouteAssistantResponse
@@ -27,6 +28,7 @@ from app.schemas import FuelAuthorizationCreate, RouteAssistantRequest, RouteAss
 
 settings = get_settings()
 ssl_context = ssl.create_default_context(cafile=certifi.where())
+motive_client = MotiveClient(settings)
 ROUTE_COLORS = ["#1D4ED8", "#0F766E", "#EA580C"]
 SKIP_TOKENS = {"/skip", "skip", "-"}
 OFF_TOKENS = {"off", "none", "no", "0"}
@@ -228,6 +230,193 @@ def format_price(value: float | None) -> str:
     return f"${value:.3f}/gal"
 
 
+def compact_truck_value(value: object) -> str:
+    return re.sub(r"[^0-9a-zA-Z]+", "", str(value or "").strip().casefold())
+
+
+def truck_lookup_keys(value: object) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    values: list[str] = []
+    variants = [text, text.split("/", 1)[0]]
+    variants.extend(re.split(r"[\s/#-]+", text))
+    variants.extend(re.findall(r"\d+", text))
+    for item in variants:
+        normalized = compact_truck_value(item)
+        if normalized and normalized not in values:
+            values.append(normalized)
+        if normalized.isdigit():
+            stripped = normalized.lstrip("0")
+            if stripped and stripped not in values:
+                values.append(stripped)
+    return values
+
+
+def google_maps_route_link(plan: RouteAssistantResponse) -> str:
+    origin = f"{plan.origin.lat},{plan.origin.lon}"
+    destination = f"{plan.destination.lat},{plan.destination.lon}"
+    waypoints: list[str] = []
+    if plan.fuel_strategy and plan.fuel_strategy.status == "planned":
+        for item in plan.fuel_strategy.stops[:3]:
+            waypoints.append(f"{item.stop.lat},{item.stop.lon}")
+    elif plan.selected_stop:
+        waypoints.append(f"{plan.selected_stop.lat},{plan.selected_stop.lon}")
+    params = {
+        "api": 1,
+        "origin": origin,
+        "destination": destination,
+        "travelmode": "driving",
+    }
+    if waypoints:
+        params["waypoints"] = "|".join(waypoints)
+    return f"https://www.google.com/maps/dir/?{urlencode(params)}"
+
+
+def shortest_text(*values: object) -> str:
+    for value in values:
+        text = clean_text(value)
+        if text:
+            return text
+    return ""
+
+
+def find_motive_truck_defaults(truck_number: str) -> dict:
+    lookup_keys = truck_lookup_keys(truck_number)
+    if not lookup_keys:
+        return {}
+    snapshot = motive_client.fetch_snapshot(force_refresh=False, allow_stale=True)
+    for vehicle in snapshot.get("vehicles") or []:
+        candidate_keys = truck_lookup_keys(vehicle.get("number")) + truck_lookup_keys(vehicle.get("id")) + truck_lookup_keys(vehicle.get("license_plate_number"))
+        if not any(item in candidate_keys for item in lookup_keys):
+            continue
+        location = vehicle.get("location") or {}
+        detail = motive_client.fetch_vehicle_detail(int(vehicle.get("id")), force_refresh=False) if vehicle.get("id") else {}
+        fuel_percent = location.get("fuel_level_percent")
+        try:
+            fuel_percent = float(fuel_percent) if fuel_percent not in (None, "") else None
+        except (TypeError, ValueError):
+            fuel_percent = None
+        tank_capacity = None
+        for value in (
+            detail.get("tank_capacity_gallons"),
+            detail.get("fuel_tank_capacity_gallons"),
+            (detail.get("specs") or {}).get("tank_capacity_gallons") if isinstance(detail.get("specs"), dict) else None,
+        ):
+            try:
+                if value not in (None, "") and float(value) > 0:
+                    tank_capacity = float(value)
+                    break
+            except (TypeError, ValueError):
+                continue
+        mpg = detail.get("mpg")
+        try:
+            mpg = float(mpg) if mpg not in (None, "") else None
+        except (TypeError, ValueError):
+            mpg = None
+        current_fuel_gallons = None
+        if tank_capacity and fuel_percent is not None:
+            current_fuel_gallons = round(tank_capacity * (fuel_percent / 100.0), 1)
+        driver = vehicle.get("resolved_driver") or vehicle.get("driver") or vehicle.get("permanent_driver") or {}
+        return {
+            "vehicle_id": int(vehicle.get("id")) if vehicle.get("id") else None,
+            "truck_number": shortest_text(vehicle.get("number"), truck_number),
+            "driver_name": shortest_text(driver.get("full_name"), detail.get("driver_name")),
+            "tank_capacity_gallons": tank_capacity,
+            "mpg": mpg,
+            "current_fuel_gallons": current_fuel_gallons,
+            "fuel_percent": fuel_percent,
+        }
+    return {}
+
+
+def find_db_truck_defaults(db: Session, truck_number: str) -> dict:
+    term = truck_number.strip()
+    if not term:
+        return {}
+    like_term = f"%{term}%"
+    trip = db.scalar(
+        select(FullRoadTrip)
+        .where(FullRoadTrip.truck_number.ilike(like_term))
+        .order_by(FullRoadTrip.updated_at.desc(), FullRoadTrip.id.desc())
+    )
+    if trip:
+        return {
+            "vehicle_id": trip.vehicle_id,
+            "truck_number": trip.truck_number,
+            "driver_name": trip.driver_name,
+            "tank_capacity_gallons": trip.tank_capacity_gallons or None,
+            "mpg": trip.mpg or None,
+            "current_fuel_gallons": trip.current_fuel_gallons or None,
+        }
+    load = db.scalar(
+        select(Load)
+        .where(Load.truck.ilike(like_term))
+        .order_by(Load.id.desc())
+    )
+    if load:
+        current_fuel = None
+        try:
+            fuel_level = float(load.fuel_level)
+            tank_capacity = float(load.tank_capacity)
+            current_fuel = round(tank_capacity * (fuel_level / 100.0), 1)
+        except (TypeError, ValueError):
+            current_fuel = None
+        try:
+            mpg = float(load.mpg)
+        except (TypeError, ValueError):
+            mpg = None
+        try:
+            tank = float(load.tank_capacity)
+        except (TypeError, ValueError):
+            tank = None
+        return {
+            "vehicle_id": load.vehicle_id,
+            "truck_number": load.truck,
+            "driver_name": load.driver,
+            "tank_capacity_gallons": tank,
+            "mpg": mpg,
+            "current_fuel_gallons": current_fuel,
+        }
+    return {}
+
+
+def apply_truck_defaults(db: Session, profile: TelegramDriverProfile, truck_number: str) -> dict:
+    merged: dict = {}
+    try:
+        merged.update(find_motive_truck_defaults(truck_number))
+    except Exception:
+        pass
+    db_defaults = find_db_truck_defaults(db, truck_number)
+    for key, value in db_defaults.items():
+        if merged.get(key) in (None, "", 0):
+            merged[key] = value
+
+    profile.truck_number = shortest_text(merged.get("truck_number"), truck_number, profile.truck_number)
+    if merged.get("vehicle_id"):
+        profile.vehicle_id = merged["vehicle_id"]
+    if merged.get("driver_name"):
+        profile.driver_name = merged["driver_name"]
+    if merged.get("tank_capacity_gallons"):
+        profile.tank_capacity_gallons = float(merged["tank_capacity_gallons"])
+    if merged.get("mpg"):
+        profile.mpg = float(merged["mpg"])
+    if merged.get("current_fuel_gallons"):
+        profile.default_current_fuel_gallons = float(merged["current_fuel_gallons"])
+    db.commit()
+    db.refresh(profile)
+    return merged
+
+
+def truck_defaults_ready(profile: TelegramDriverProfile) -> bool:
+    return bool(
+        profile.truck_number
+        and profile.default_current_fuel_gallons > 0
+        and profile.tank_capacity_gallons > 0
+        and profile.mpg > 0
+    )
+
+
 def profile_summary(profile: TelegramDriverProfile) -> str:
     price_target = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
     last_route = "not built yet"
@@ -267,7 +456,7 @@ def prompt_for_step(profile: TelegramDriverProfile, step: str) -> str:
         return "Send point B. Example: Dallas, TX"
     if step == "truck_number":
         current = profile.truck_number or "none"
-        return f"Send truck number. Current saved: {current}. Use /skip to keep it."
+        return f"Send truck number. Current saved: {current}. I will try to pull driver/fuel/tank/mpg automatically."
     if step == "driver_name":
         current = profile.driver_name or "none"
         return f"Send driver name. Current saved: {current}. Use /skip to keep it."
@@ -282,7 +471,7 @@ def prompt_for_step(profile: TelegramDriverProfile, step: str) -> str:
         return f"Send truck MPG. Current saved: {profile.mpg:.2f}. Use /skip to keep it."
     if step == "price_target":
         current = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
-        return f"Send target diesel price per gallon. Use /skip to keep {current}, or send off to disable it."
+        return f"{route_profile_status(profile)}\nTarget price: send value, /skip for {current}, or off."
     return "Send the next value."
 
 
@@ -386,6 +575,17 @@ def build_route_request(profile: TelegramDriverProfile) -> RouteAssistantRequest
     )
 
 
+def route_profile_status(profile: TelegramDriverProfile) -> str:
+    parts = [
+        f"Truck {profile.truck_number or '-'}",
+        f"Driver {profile.driver_name or '-'}",
+        f"Fuel {profile.default_current_fuel_gallons:.1f} gal",
+        f"Tank {profile.tank_capacity_gallons:.1f} gal",
+        f"MPG {profile.mpg:.2f}",
+    ]
+    return " | ".join(parts)
+
+
 def consume_step_input(db: Session, profile: TelegramDriverProfile, text: str) -> tuple[bool, str | None]:
     draft = dict(profile.pending_payload or {})
     step = profile.active_step
@@ -408,8 +608,18 @@ def consume_step_input(db: Session, profile: TelegramDriverProfile, text: str) -
             draft["truck_number"] = profile.truck_number
         else:
             draft["truck_number"] = cleaned
+            apply_truck_defaults(db, profile, cleaned)
+            draft["truck_number"] = profile.truck_number or cleaned
+            if profile.driver_name and not clean_text(draft.get("driver_name")):
+                draft["driver_name"] = profile.driver_name
+            if profile.default_current_fuel_gallons and not draft.get("current_fuel_gallons"):
+                draft["current_fuel_gallons"] = profile.default_current_fuel_gallons
+            if profile.tank_capacity_gallons and not draft.get("tank_capacity_gallons"):
+                draft["tank_capacity_gallons"] = profile.tank_capacity_gallons
+            if profile.mpg and not draft.get("mpg"):
+                draft["mpg"] = profile.mpg
         profile.pending_payload = draft
-        profile.active_step = "driver_name"
+        profile.active_step = "price_target" if truck_defaults_ready(profile) else "driver_name"
     elif step == "driver_name":
         if should_skip(cleaned):
             draft["driver_name"] = profile.driver_name
@@ -623,17 +833,17 @@ def render_route_image(plan: RouteAssistantResponse) -> bytes:
 def build_route_caption(plan: RouteAssistantResponse, approval_code: str | None, truck_number: str) -> str:
     primary_route = plan.routes[0] if plan.routes else None
     lines = [
-        f"Truck {truck_number or 'unit'} route",
+        f"Truck {truck_number or 'unit'}",
         f"{plan.origin.label} -> {plan.destination.label}",
     ]
     if primary_route:
         lines.append(f"{format_miles(primary_route.distance_meters)} | {format_duration(primary_route.travel_time_seconds)}")
     if plan.fuel_strategy:
         if plan.fuel_strategy.status == "direct":
-            lines.append("Fuel plan: no fuel stop required")
+            lines.append("No fuel stop needed")
         else:
             lines.append(
-                f"Fuel plan: {plan.fuel_strategy.stop_count} stop(s), est {format_money(plan.fuel_strategy.estimated_fuel_cost)}"
+                f"{plan.fuel_strategy.stop_count} fuel stop(s) | {format_money(plan.fuel_strategy.estimated_fuel_cost)}"
             )
     if approval_code:
         lines.append(f"Approval: {approval_code}")
@@ -641,41 +851,34 @@ def build_route_caption(plan: RouteAssistantResponse, approval_code: str | None,
 
 
 def build_route_details(plan: RouteAssistantResponse, approval_record) -> str:
-    lines = [plan.assistant_message]
+    lines: list[str] = []
     primary_route = plan.routes[0] if plan.routes else None
+    route_link = google_maps_route_link(plan)
     if primary_route:
-        lines.append(
-            f"Primary route: {primary_route.label}, {format_miles(primary_route.distance_meters)}, {format_duration(primary_route.travel_time_seconds)}."
-        )
+        lines.append(f"Route: {format_miles(primary_route.distance_meters)} | {format_duration(primary_route.travel_time_seconds)}")
     if plan.fuel_strategy:
         if plan.fuel_strategy.status == "direct":
-            lines.append("Smart fuel says the truck can complete this trip without buying fuel.")
+            lines.append("Fuel: enough to finish without fueling.")
         else:
-            lines.append(
-                f"Smart fuel total: {plan.fuel_strategy.stop_count} stop(s), est cost {format_money(plan.fuel_strategy.estimated_fuel_cost)}."
-            )
+            lines.append(f"Fuel: {plan.fuel_strategy.stop_count} stop(s) | est {format_money(plan.fuel_strategy.estimated_fuel_cost)}")
             for item in plan.fuel_strategy.stops[:3]:
                 lines.append(
-                    f"{item.sequence}. {item.stop.brand or item.stop.name}, {item.stop.city or item.stop.address} | "
-                    f"Buy {item.gallons_to_buy:.1f} gal at {format_price(item.auto_diesel_price or item.stop.price or item.stop.auto_diesel_price)} | "
-                    f"Before {item.fuel_before_gallons:.1f} gal -> after {item.fuel_after_gallons:.1f} gal | "
-                    f"Next {item.next_target_label}."
+                    f"{item.sequence}. {item.stop.brand or item.stop.name} | "
+                    f"{item.stop.city or item.stop.address} | "
+                    f"{item.gallons_to_buy:.1f} gal | "
+                    f"{format_price(item.auto_diesel_price or item.stop.price or item.stop.auto_diesel_price)}"
                 )
     elif plan.selected_stop:
         lines.append(
-            f"Recommended stop: {plan.selected_stop.brand or plan.selected_stop.name}, {plan.selected_stop.address} | "
-            f"Off route {plan.selected_stop.off_route_miles or 0:.1f} mi | "
-            f"Price {format_price(plan.selected_stop.price or plan.selected_stop.auto_diesel_price)}."
+            f"Fuel stop: {plan.selected_stop.brand or plan.selected_stop.name} | "
+            f"{plan.selected_stop.city or plan.selected_stop.address} | "
+            f"{format_price(plan.selected_stop.price or plan.selected_stop.auto_diesel_price)}"
         )
 
     if approval_record is not None:
-        lines.append(f"Fuel approval code: {approval_record.approval_code}.")
-        lines.append(approval_record.driver_message)
-    if plan.map_link:
-        lines.append(f"Driver route map: {plan.map_link}")
-    if plan.station_map_link:
-        lines.append(f"Fuel stop map: {plan.station_map_link}")
-    return "\n\n".join(part for part in lines if clean_text(part))
+        lines.append(f"Approval: {approval_record.approval_code}")
+    lines.append(f"Google Maps: {route_link}")
+    return "\n".join(part for part in lines if clean_text(part))
 
 
 def maybe_create_fuel_authorization(db: Session, bot_user: User, payload: RouteAssistantRequest, plan: RouteAssistantResponse):
