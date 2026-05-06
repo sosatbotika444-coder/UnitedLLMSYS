@@ -32,14 +32,12 @@ motive_client = MotiveClient(settings)
 ROUTE_COLORS = ["#1D4ED8", "#0F766E", "#EA580C"]
 SKIP_TOKENS = {"/skip", "skip", "-"}
 OFF_TOKENS = {"off", "none", "no", "0"}
+BOT_TANK_CAPACITY_GALLONS = 200.0
 WIZARD_STEPS = (
     "origin",
     "destination",
-    "truck_number",
-    "driver_name",
-    "current_fuel_gallons",
-    "tank_capacity_gallons",
     "mpg",
+    "fuel_percentage",
     "price_target",
 )
 
@@ -192,6 +190,23 @@ def parse_positive_float(text: str) -> float | None:
     if not math.isfinite(value) or value <= 0:
         return None
     return round(value, 3)
+
+
+def parse_percentage_float(text: str) -> float | None:
+    normalized = text.replace("%", "").strip()
+    value = parse_positive_float(normalized)
+    if value is None or value > 100:
+        return None
+    return round(value, 1)
+
+
+def gallons_from_percentage(value: float) -> float:
+    return round(BOT_TANK_CAPACITY_GALLONS * (value / 100.0), 1)
+
+
+def percentage_from_gallons(value: float | None) -> float:
+    gallons = max(0.0, min(BOT_TANK_CAPACITY_GALLONS, float(value or 0.0)))
+    return round((gallons / BOT_TANK_CAPACITY_GALLONS) * 100.0, 1)
 
 
 def should_skip(text: str) -> bool:
@@ -418,17 +433,15 @@ def truck_defaults_ready(profile: TelegramDriverProfile) -> bool:
 
 
 def profile_summary(profile: TelegramDriverProfile) -> str:
+    fuel_percentage = percentage_from_gallons(profile.default_current_fuel_gallons)
     price_target = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
     last_route = "not built yet"
     if profile.last_origin and profile.last_destination:
         last_route = f"{profile.last_origin} -> {profile.last_destination}"
     return (
-        "Saved truck profile:\n"
-        f"Truck: {profile.truck_number or '-'}\n"
-        f"Driver: {profile.driver_name or '-'}\n"
-        f"Fuel now: {profile.default_current_fuel_gallons:.1f} gal\n"
-        f"Tank: {profile.tank_capacity_gallons:.1f} gal\n"
+        "Saved route inputs:\n"
         f"MPG: {profile.mpg:.2f}\n"
+        f"Fuel: {fuel_percentage:.1f}% of {BOT_TANK_CAPACITY_GALLONS:.0f} gal\n"
         f"Target: {price_target}\n"
         f"Last route: {last_route}"
     )
@@ -436,15 +449,15 @@ def profile_summary(profile: TelegramDriverProfile) -> str:
 
 def help_message(profile: TelegramDriverProfile) -> str:
     return (
-        "United Lane Telegram routing bot.\n\n"
+        "United Lane route bot.\n\n"
         "Commands:\n"
         "/route - start full route wizard\n"
-        "/profile - show saved truck defaults\n"
+        "/profile - show saved MPG and fuel %\n"
         "/reset - cancel current wizard\n"
         "/help - show this message\n\n"
         "Quick format:\n"
         "Chicago, IL -> Dallas, TX\n\n"
-        "When the wizard asks for a saved field, send /skip to keep the current value.\n\n"
+        "The bot asks only for MPG and fuel % of a fixed 200 gal tank. Use /skip to keep saved values.\n\n"
         f"{profile_summary(profile)}"
     )
 
@@ -454,21 +467,11 @@ def prompt_for_step(profile: TelegramDriverProfile, step: str) -> str:
         return "Send point A. Example: Chicago, IL"
     if step == "destination":
         return "Send point B. Example: Dallas, TX"
-    if step == "truck_number":
-        current = profile.truck_number or "none"
-        return f"Send truck number. Current saved: {current}. I will try to pull driver/fuel/tank/mpg automatically."
-    if step == "driver_name":
-        current = profile.driver_name or "none"
-        return f"Send driver name. Current saved: {current}. Use /skip to keep it."
-    if step == "current_fuel_gallons":
-        return (
-            f"Send current fuel in gallons. Current saved: {profile.default_current_fuel_gallons:.1f}. "
-            "Use /skip to keep it."
-        )
-    if step == "tank_capacity_gallons":
-        return f"Send tank capacity in gallons. Current saved: {profile.tank_capacity_gallons:.1f}. Use /skip to keep it."
     if step == "mpg":
         return f"Send truck MPG. Current saved: {profile.mpg:.2f}. Use /skip to keep it."
+    if step == "fuel_percentage":
+        current = percentage_from_gallons(profile.default_current_fuel_gallons)
+        return f"Send fuel % for a {BOT_TANK_CAPACITY_GALLONS:.0f} gal tank. Current saved: {current:.1f}%. Use /skip to keep it."
     if step == "price_target":
         current = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
         return f"{route_profile_status(profile)}\nTarget price: send value, /skip for {current}, or off."
@@ -534,6 +537,7 @@ def reset_wizard(db: Session, profile: TelegramDriverProfile) -> None:
 
 
 def start_route_wizard(db: Session, profile: TelegramDriverProfile) -> None:
+    profile.tank_capacity_gallons = BOT_TANK_CAPACITY_GALLONS
     profile.active_step = "origin"
     profile.pending_payload = {}
     db.commit()
@@ -544,10 +548,7 @@ def build_route_request(profile: TelegramDriverProfile) -> RouteAssistantRequest
     draft = dict(profile.pending_payload or {})
     origin = clean_text(draft.get("origin"))
     destination = clean_text(draft.get("destination"))
-    vehicle_number = clean_text(draft.get("truck_number") or profile.truck_number)
-    driver_name = clean_text(draft.get("driver_name") or profile.driver_name)
     current_fuel_gallons = float(draft.get("current_fuel_gallons") or profile.default_current_fuel_gallons)
-    tank_capacity_gallons = float(draft.get("tank_capacity_gallons") or profile.tank_capacity_gallons)
     mpg = float(draft.get("mpg") or profile.mpg)
     price_target = draft.get("price_target")
     if price_target is None:
@@ -555,13 +556,13 @@ def build_route_request(profile: TelegramDriverProfile) -> RouteAssistantRequest
     return RouteAssistantRequest(
         origin=origin,
         destination=destination,
-        vehicle_id=profile.vehicle_id,
-        vehicle_number=vehicle_number,
-        driver_name=driver_name,
+        vehicle_id=None,
+        vehicle_number="",
+        driver_name="",
         vehicle_type=profile.vehicle_type or "Truck",
         fuel_type=profile.fuel_type or "Auto Diesel",
         current_fuel_gallons=current_fuel_gallons,
-        tank_capacity_gallons=tank_capacity_gallons,
+        tank_capacity_gallons=BOT_TANK_CAPACITY_GALLONS,
         mpg=mpg,
         allow_no_fuel=False,
         allow_missing_cost=True,
@@ -577,10 +578,8 @@ def build_route_request(profile: TelegramDriverProfile) -> RouteAssistantRequest
 
 def route_profile_status(profile: TelegramDriverProfile) -> str:
     parts = [
-        f"Truck {profile.truck_number or '-'}",
-        f"Driver {profile.driver_name or '-'}",
-        f"Fuel {profile.default_current_fuel_gallons:.1f} gal",
-        f"Tank {profile.tank_capacity_gallons:.1f} gal",
+        f"Fuel {percentage_from_gallons(profile.default_current_fuel_gallons):.1f}%",
+        f"Tank {BOT_TANK_CAPACITY_GALLONS:.0f} gal",
         f"MPG {profile.mpg:.2f}",
     ]
     return " | ".join(parts)
@@ -602,50 +601,6 @@ def consume_step_input(db: Session, profile: TelegramDriverProfile, text: str) -
             return False, "Point B is too short. Send a city, address, or coordinates."
         draft["destination"] = cleaned
         profile.pending_payload = draft
-        profile.active_step = "truck_number"
-    elif step == "truck_number":
-        if should_skip(cleaned):
-            draft["truck_number"] = profile.truck_number
-        else:
-            draft["truck_number"] = cleaned
-            apply_truck_defaults(db, profile, cleaned)
-            draft["truck_number"] = profile.truck_number or cleaned
-            if profile.driver_name and not clean_text(draft.get("driver_name")):
-                draft["driver_name"] = profile.driver_name
-            if profile.default_current_fuel_gallons and not draft.get("current_fuel_gallons"):
-                draft["current_fuel_gallons"] = profile.default_current_fuel_gallons
-            if profile.tank_capacity_gallons and not draft.get("tank_capacity_gallons"):
-                draft["tank_capacity_gallons"] = profile.tank_capacity_gallons
-            if profile.mpg and not draft.get("mpg"):
-                draft["mpg"] = profile.mpg
-        profile.pending_payload = draft
-        profile.active_step = "price_target" if truck_defaults_ready(profile) else "driver_name"
-    elif step == "driver_name":
-        if should_skip(cleaned):
-            draft["driver_name"] = profile.driver_name
-        else:
-            draft["driver_name"] = cleaned
-        profile.pending_payload = draft
-        profile.active_step = "current_fuel_gallons"
-    elif step == "current_fuel_gallons":
-        if should_skip(cleaned):
-            draft["current_fuel_gallons"] = profile.default_current_fuel_gallons
-        else:
-            value = parse_positive_float(cleaned)
-            if value is None:
-                return False, "Fuel must be a positive number in gallons."
-            draft["current_fuel_gallons"] = value
-        profile.pending_payload = draft
-        profile.active_step = "tank_capacity_gallons"
-    elif step == "tank_capacity_gallons":
-        if should_skip(cleaned):
-            draft["tank_capacity_gallons"] = profile.tank_capacity_gallons
-        else:
-            value = parse_positive_float(cleaned)
-            if value is None:
-                return False, "Tank capacity must be a positive number."
-            draft["tank_capacity_gallons"] = value
-        profile.pending_payload = draft
         profile.active_step = "mpg"
     elif step == "mpg":
         if should_skip(cleaned):
@@ -655,6 +610,18 @@ def consume_step_input(db: Session, profile: TelegramDriverProfile, text: str) -
             if value is None:
                 return False, "MPG must be a positive number."
             draft["mpg"] = value
+        profile.pending_payload = draft
+        profile.active_step = "fuel_percentage"
+    elif step == "fuel_percentage":
+        if should_skip(cleaned):
+            draft["current_fuel_gallons"] = profile.default_current_fuel_gallons
+            draft["fuel_percentage"] = percentage_from_gallons(profile.default_current_fuel_gallons)
+        else:
+            value = parse_percentage_float(cleaned)
+            if value is None:
+                return False, "Fuel % must be between 0 and 100."
+            draft["fuel_percentage"] = value
+            draft["current_fuel_gallons"] = gallons_from_percentage(value)
         profile.pending_payload = draft
         profile.active_step = "price_target"
     elif step == "price_target":
@@ -833,7 +800,7 @@ def render_route_image(plan: RouteAssistantResponse) -> bytes:
 def build_route_caption(plan: RouteAssistantResponse, approval_code: str | None, truck_number: str) -> str:
     primary_route = plan.routes[0] if plan.routes else None
     lines = [
-        f"Truck {truck_number or 'unit'}",
+        "Smart Fuel Route",
         f"{plan.origin.label} -> {plan.destination.label}",
     ]
     if primary_route:
@@ -926,13 +893,13 @@ def maybe_create_fuel_authorization(db: Session, bot_user: User, payload: RouteA
 
 
 def persist_profile_after_route(db: Session, profile: TelegramDriverProfile, payload: RouteAssistantRequest, plan: RouteAssistantResponse) -> None:
-    profile.truck_number = payload.vehicle_number
-    profile.driver_name = payload.driver_name
-    profile.vehicle_id = payload.vehicle_id
+    profile.truck_number = ""
+    profile.driver_name = ""
+    profile.vehicle_id = None
     profile.vehicle_type = payload.vehicle_type
     profile.fuel_type = payload.fuel_type
     profile.default_current_fuel_gallons = payload.current_fuel_gallons or profile.default_current_fuel_gallons
-    profile.tank_capacity_gallons = payload.tank_capacity_gallons or profile.tank_capacity_gallons
+    profile.tank_capacity_gallons = BOT_TANK_CAPACITY_GALLONS
     profile.mpg = payload.mpg or profile.mpg
     profile.price_target = payload.price_target
     profile.last_origin = payload.origin
@@ -1005,7 +972,7 @@ def handle_command(db: Session, profile: TelegramDriverProfile, chat_id: str, te
         return
     if command == "/route":
         start_route_wizard(db, profile)
-        send_message(chat_id, "Route wizard started.\nYou can also send one line like `Chicago, IL -> Dallas, TX`.\n\n" + prompt_for_step(profile, "origin"))
+        send_message(chat_id, "Route wizard started.\nSend `A -> B` or go step by step.\n\n" + prompt_for_step(profile, "origin"))
         return
     send_message(chat_id, "Unknown command. Send /help for instructions.")
 
@@ -1019,14 +986,10 @@ def handle_text(db: Session, profile: TelegramDriverProfile, chat_id: str, text:
     if quick_route:
         origin, destination = quick_route
         profile.pending_payload = {"origin": origin, "destination": destination}
-        profile.active_step = "building" if profile.truck_number else "truck_number"
+        profile.active_step = "mpg"
         db.commit()
         db.refresh(profile)
-        if profile.active_step == "truck_number":
-            send_message(chat_id, "Saved route points.\n" + prompt_for_step(profile, "truck_number"))
-            return
-        send_message(chat_id, "Building smart route and fuel plan. Please wait...")
-        execute_route_build(chat_id, profile.id)
+        send_message(chat_id, "Saved route points.\n" + prompt_for_step(profile, "mpg"))
         return
 
     if profile.active_step and profile.active_step in WIZARD_STEPS:

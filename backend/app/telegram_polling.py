@@ -118,7 +118,7 @@ async def command_route(message: Message) -> None:
         start_route_wizard(db, profile)
         response = (
             "Route wizard started.\n"
-            "You can also send one line like `Chicago, IL -> Dallas, TX`.\n\n"
+            "Send `A -> B` or go step by step.\n\n"
             + prompt_for_step(profile, "origin")
         )
     await message.answer(response)
@@ -148,14 +148,10 @@ async def route_message(message: Message, bot: Bot) -> None:
             if quick_route:
                 origin, destination = quick_route
                 profile.pending_payload = {"origin": origin, "destination": destination}
-                profile.active_step = "building" if profile.truck_number else "truck_number"
+                profile.active_step = "mpg"
                 db.commit()
                 db.refresh(profile)
-                if profile.active_step == "truck_number":
-                    response = "Saved route points.\n" + prompt_for_step(profile, "truck_number")
-                else:
-                    response = "Building smart route and fuel plan. Please wait..."
-                    should_build = True
+                response = "Saved route points.\n" + prompt_for_step(profile, "mpg")
             elif profile.active_step and profile.active_step in WIZARD_STEPS:
                 ok, error_text = consume_step_input(db, profile, text)
                 if not ok:
