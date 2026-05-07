@@ -1870,14 +1870,31 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function focusClientAccess() {
+    setSitePanel("");
+    setMode("login");
+    scrollToMarketingSection("client-access");
+  }
+
   if (!user) {
     const isRestoringSession = Boolean(token);
+    const authTitle = mode === "login" ? "Secure sign in" : "Create driver access";
+    const authLead = selectedDepartment === "driver"
+      ? "Match your Motive truck first, then continue into the mobile-first driver workspace."
+      : `This lane covers ${selectedDepartmentMeta.detail.toLowerCase()}. Access is controlled by role inside the platform.`;
     const authPanel = (
       <section className="auth-panel auth-panel-compact commercial-auth-card">
         <div className="auth-panel-head">
           <span className="brand-pill">Private Client Access</span>
-          <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
-          <p>{selectedDepartmentMeta.label}</p>
+          <h2>{authTitle}</h2>
+          <p>{selectedDepartmentMeta.label} workspace</p>
+          <small className="auth-panel-lead">{authLead}</small>
+        </div>
+
+        <div className="auth-panel-badge-row">
+          <span><UnitedIcon name="approvals" size={14} />Role-based</span>
+          <span><UnitedIcon name="privacy" size={14} />Protected</span>
+          <span><UnitedIcon name={selectedDepartmentMeta.icon || "spark"} size={14} />{selectedDepartmentMeta.label}</span>
         </div>
 
         {message ? <div className="notice success">{message}</div> : null}
@@ -1996,7 +2013,17 @@ export default function App() {
 
     return (
       <div className="site-page-shell">
+        <SiteHeader
+          onHome={handleHomeNavigation}
+          onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
+          onPrivacy={() => openSitePanel("privacy")}
+          activeItem={activeSiteNav}
+          action={{ label: "Client Sign In", icon: "user", onClick: focusClientAccess }}
+        />
+
         <CommercialLanding authPanel={authPanel} mobile={isMobileViewport} />
+        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
       </div>
     );
   }
