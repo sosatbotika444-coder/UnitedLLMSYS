@@ -5,23 +5,32 @@ import logging
 
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import BotCommand, BufferedInputFile, Message
+from aiogram.types import BotCommand, BufferedInputFile, KeyboardButton, Message, ReplyKeyboardMarkup
 
 from app.config import get_settings
 from app.database import SessionLocal
 from app.telegram_bot import (
+    BOT_KEYBOARD_ROWS,
     WIZARD_STEPS,
+    apply_truck_defaults,
     bot_enabled,
+    button_command_alias,
     build_route_bundle,
     clean_text,
     consume_step_input,
+    extract_command_argument,
     get_or_create_profile,
     help_message,
     parse_route_pair,
     profile_summary,
     prompt_for_step,
     reset_wizard,
+    route_wizard_intro,
+    start_repeat_route,
     start_route_wizard,
+    status_message,
+    truck_binding_label,
+    truck_binding_message,
 )
 
 
@@ -50,12 +59,34 @@ def _user_payload(message: Message) -> dict:
     }
 
 
+def _reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=label) for label in row] for row in BOT_KEYBOARD_ROWS],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Send A -> B or tap a quick action",
+    )
+
+
+async def _answer(message: Message, text: str) -> None:
+    await message.answer(text, reply_markup=_reply_keyboard(), disable_web_page_preview=True)
+
+
+async def _send_bot_message(bot: Bot, chat_id: int, text: str) -> None:
+    await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=_reply_keyboard(),
+        disable_web_page_preview=True,
+    )
+
+
 async def _deliver_route_bundle(bot: Bot, chat_id: int, profile_id: int) -> None:
     await bot.send_chat_action(chat_id=chat_id, action="typing")
     try:
         bundle = await asyncio.to_thread(build_route_bundle, profile_id)
     except Exception as exc:
-        await bot.send_message(chat_id=chat_id, text=f"{exc}\n\nSend /route and try again.")
+        await _send_bot_message(bot, chat_id, f"{exc}\n\nSend /route and try again.")
         return
 
     await bot.send_chat_action(chat_id=chat_id, action="upload_photo")
@@ -65,7 +96,7 @@ async def _deliver_route_bundle(bot: Bot, chat_id: int, profile_id: int) -> None
         caption=(bundle.caption or "")[:1024],
     )
     for chunk in _message_chunks(bundle.details):
-        await bot.send_message(chat_id=chat_id, text=chunk)
+        await _send_bot_message(bot, chat_id, chunk)
 
 
 @router.message(CommandStart())
@@ -76,7 +107,7 @@ async def command_start(message: Message) -> None:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         reset_wizard(db, profile)
         response = help_message(profile)
-    await message.answer(response)
+    await _answer(message, response)
 
 
 @router.message(Command("help"))
@@ -86,7 +117,18 @@ async def command_help(message: Message) -> None:
     with SessionLocal() as db:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         response = help_message(profile)
-    await message.answer(response)
+    await _answer(message, response)
+
+
+@router.message(Command("menu"))
+async def command_menu(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    with SessionLocal() as db:
+        profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
+        reset_wizard(db, profile)
+        response = help_message(profile)
+    await _answer(message, response)
 
 
 @router.message(Command("profile"))
@@ -96,7 +138,32 @@ async def command_profile(message: Message) -> None:
     with SessionLocal() as db:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         response = profile_summary(profile)
-    await message.answer(response)
+    await _answer(message, response)
+
+
+@router.message(Command("status"))
+async def command_status(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    with SessionLocal() as db:
+        profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
+        response = status_message(profile)
+    await _answer(message, response)
+
+
+@router.message(Command("truck"))
+async def command_truck(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    truck_number = extract_command_argument(message.text or "")
+    with SessionLocal() as db:
+        profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
+        if not truck_number:
+            response = f"Use /truck 5188 to bind a truck.\nCurrent binding: {truck_binding_label(profile)}"
+        else:
+            merged = apply_truck_defaults(db, profile, truck_number)
+            response = truck_binding_message(profile, merged)
+    await _answer(message, response)
 
 
 @router.message(Command("reset"))
@@ -106,7 +173,7 @@ async def command_reset(message: Message) -> None:
     with SessionLocal() as db:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         reset_wizard(db, profile)
-    await message.answer("Current wizard cleared. Send /route to start again.")
+    await _answer(message, "Current wizard cleared. Send /route to start again.")
 
 
 @router.message(Command("route"))
@@ -116,12 +183,21 @@ async def command_route(message: Message) -> None:
     with SessionLocal() as db:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         start_route_wizard(db, profile)
-        response = (
-            "Route wizard started.\n"
-            "Send `A -> B` or go step by step.\n\n"
-            + prompt_for_step(profile, "origin")
-        )
-    await message.answer(response)
+        response = route_wizard_intro(profile)
+    await _answer(message, response)
+
+
+@router.message(Command("reroute"))
+async def command_reroute(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    with SessionLocal() as db:
+        profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
+        if not start_repeat_route(db, profile):
+            response = "No saved last route yet. Build one with /route first."
+        else:
+            response = "Last route loaded.\n" + prompt_for_step(profile, "mpg")
+    await _answer(message, response)
 
 
 @router.message()
@@ -141,7 +217,27 @@ async def route_message(message: Message, bot: Bot) -> None:
         profile = get_or_create_profile(db, str(message.chat.id), _user_payload(message))
         profile_id = int(profile.id)
 
-        if profile.active_step == "building":
+        alias_command = button_command_alias(text)
+
+        if alias_command == "/help":
+            reset_wizard(db, profile)
+            response = help_message(profile)
+        elif alias_command == "/profile":
+            response = profile_summary(profile)
+        elif alias_command == "/status":
+            response = status_message(profile)
+        elif alias_command == "/reset":
+            reset_wizard(db, profile)
+            response = "Current wizard cleared. Send /route to start again."
+        elif alias_command == "/route":
+            start_route_wizard(db, profile)
+            response = route_wizard_intro(profile)
+        elif alias_command == "/reroute":
+            if not start_repeat_route(db, profile):
+                response = "No saved last route yet. Build one with /route first."
+            else:
+                response = "Last route loaded.\n" + prompt_for_step(profile, "mpg")
+        elif profile.active_step == "building":
             response = "A route is already building. Wait for the result or send /reset."
         else:
             quick_route = parse_route_pair(text)
@@ -151,7 +247,7 @@ async def route_message(message: Message, bot: Bot) -> None:
                 profile.active_step = "mpg"
                 db.commit()
                 db.refresh(profile)
-                response = "Saved route points.\n" + prompt_for_step(profile, "mpg")
+                response = f"Saved route points: {origin} -> {destination}\n" + prompt_for_step(profile, "mpg")
             elif profile.active_step and profile.active_step in WIZARD_STEPS:
                 ok, error_text = consume_step_input(db, profile, text)
                 if not ok:
@@ -162,9 +258,9 @@ async def route_message(message: Message, bot: Bot) -> None:
                 else:
                     response = prompt_for_step(profile, profile.active_step)
             else:
-                response = "Send /route to start the wizard, or send `Point A -> Point B`."
+                response = "Use the quick buttons below, send /route, or send Point A -> Point B."
 
-    await message.answer(response)
+    await _answer(message, response)
     if should_build:
         await _deliver_route_bundle(bot, message.chat.id, profile_id)
 
@@ -173,7 +269,11 @@ async def _set_bot_commands(bot: Bot) -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Open help"),
+            BotCommand(command="menu", description="Open quick control panel"),
             BotCommand(command="route", description="Build smart route"),
+            BotCommand(command="reroute", description="Reuse the last route"),
+            BotCommand(command="status", description="Show current bot status"),
+            BotCommand(command="truck", description="Bind truck and sync defaults"),
             BotCommand(command="profile", description="Show saved truck profile"),
             BotCommand(command="reset", description="Reset current wizard"),
             BotCommand(command="help", description="Show help"),

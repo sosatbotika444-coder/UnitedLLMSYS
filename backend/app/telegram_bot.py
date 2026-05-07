@@ -33,6 +33,16 @@ ROUTE_COLORS = ["#1D4ED8", "#0F766E", "#EA580C"]
 SKIP_TOKENS = {"/skip", "skip", "-"}
 OFF_TOKENS = {"off", "none", "no", "0"}
 BOT_TANK_CAPACITY_GALLONS = 200.0
+BOT_BUTTON_ROUTE = "Build Route"
+BOT_BUTTON_REPEAT = "Repeat Route"
+BOT_BUTTON_STATUS = "Status"
+BOT_BUTTON_PROFILE = "Profile"
+BOT_BUTTON_RESET = "Reset"
+BOT_BUTTON_HELP = "Help"
+BOT_KEYBOARD_ROWS = (
+    (BOT_BUTTON_ROUTE, BOT_BUTTON_REPEAT, BOT_BUTTON_STATUS),
+    (BOT_BUTTON_PROFILE, BOT_BUTTON_RESET, BOT_BUTTON_HELP),
+)
 WIZARD_STEPS = (
     "origin",
     "destination",
@@ -115,7 +125,15 @@ def telegram_api_request(method: str, payload: dict | None = None, files: list[t
 
 
 def send_message(chat_id: str, text: str) -> None:
-    telegram_api_request("sendMessage", {"chat_id": chat_id, "text": text[:4096]})
+    telegram_api_request(
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": text[:4096],
+            "disable_web_page_preview": True,
+            "reply_markup": telegram_reply_keyboard(),
+        },
+    )
 
 
 def send_chat_action(chat_id: str, action: str) -> None:
@@ -169,6 +187,33 @@ def clean_text(value: object) -> str:
 
 def normalize_step_value(value: object) -> str:
     return clean_text(value).casefold()
+
+
+BUTTON_COMMAND_ALIASES = {
+    normalize_step_value(BOT_BUTTON_ROUTE): "/route",
+    normalize_step_value(BOT_BUTTON_REPEAT): "/reroute",
+    normalize_step_value(BOT_BUTTON_STATUS): "/status",
+    normalize_step_value(BOT_BUTTON_PROFILE): "/profile",
+    normalize_step_value(BOT_BUTTON_RESET): "/reset",
+    normalize_step_value(BOT_BUTTON_HELP): "/help",
+}
+
+
+def button_command_alias(text: str) -> str | None:
+    return BUTTON_COMMAND_ALIASES.get(normalize_step_value(text))
+
+
+def extract_command_argument(text: str) -> str:
+    return clean_text(str(text or "").partition(" ")[2])
+
+
+def telegram_reply_keyboard() -> dict:
+    return {
+        "keyboard": [[{"text": label} for label in row] for row in BOT_KEYBOARD_ROWS],
+        "resize_keyboard": True,
+        "is_persistent": True,
+        "input_field_placeholder": "Send A -> B or tap a quick action",
+    }
 
 
 def parse_route_pair(text: str) -> tuple[str, str] | None:
@@ -432,49 +477,181 @@ def truck_defaults_ready(profile: TelegramDriverProfile) -> bool:
     )
 
 
+def format_price_target_value(value: float | None) -> str:
+    if value is None:
+        return "off"
+    return f"${value:.3f}/gal"
+
+
+def last_route_label(profile: TelegramDriverProfile) -> str:
+    if profile.last_origin and profile.last_destination:
+        return f"{profile.last_origin} -> {profile.last_destination}"
+    return "not built yet"
+
+
+def truck_binding_label(profile: TelegramDriverProfile) -> str:
+    if not profile.truck_number:
+        return "not bound"
+    parts = [profile.truck_number]
+    if profile.driver_name:
+        parts.append(profile.driver_name)
+    if profile.vehicle_id:
+        parts.append(f"vehicle #{profile.vehicle_id}")
+    return " | ".join(parts)
+
+
+def wizard_state_label(profile: TelegramDriverProfile) -> str:
+    if profile.active_step == "building":
+        return "building smart route"
+    if profile.active_step in WIZARD_STEPS:
+        draft = dict(profile.pending_payload or {})
+        route_bits = []
+        if draft.get("origin"):
+            route_bits.append(str(draft.get("origin")))
+        if draft.get("destination"):
+            route_bits.append(str(draft.get("destination")))
+        route_label = f" | {' -> '.join(route_bits)}" if route_bits else ""
+        return f"waiting for {profile.active_step}{route_label}"
+    return "idle"
+
+
+def profile_header(profile: TelegramDriverProfile) -> str:
+    operator = shortest_text(profile.first_name, profile.telegram_username, "dispatcher")
+    return f"Operator: {operator}"
+
+
 def profile_summary(profile: TelegramDriverProfile) -> str:
     fuel_percentage = percentage_from_gallons(profile.default_current_fuel_gallons)
-    price_target = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
-    last_route = "not built yet"
-    if profile.last_origin and profile.last_destination:
-        last_route = f"{profile.last_origin} -> {profile.last_destination}"
-    return (
-        "Saved route inputs:\n"
-        f"MPG: {profile.mpg:.2f}\n"
-        f"Fuel: {fuel_percentage:.1f}% of {BOT_TANK_CAPACITY_GALLONS:.0f} gal\n"
-        f"Target: {price_target}\n"
-        f"Last route: {last_route}"
+    return "\n".join(
+        [
+            "Saved route profile",
+            profile_header(profile),
+            f"Truck: {truck_binding_label(profile)}",
+            f"Fuel: {fuel_percentage:.1f}% of {BOT_TANK_CAPACITY_GALLONS:.0f} gal",
+            f"MPG: {profile.mpg:.2f}",
+            f"Target: {format_price_target_value(profile.price_target)}",
+            f"Last route: {last_route_label(profile)}",
+        ]
+    )
+
+
+def status_message(profile: TelegramDriverProfile) -> str:
+    fuel_percentage = percentage_from_gallons(profile.default_current_fuel_gallons)
+    return "\n".join(
+        [
+            "United Lane Telegram control panel",
+            profile_header(profile),
+            f"Truck: {truck_binding_label(profile)}",
+            f"Profile: Fuel {fuel_percentage:.1f}% | Tank {BOT_TANK_CAPACITY_GALLONS:.0f} gal | MPG {profile.mpg:.2f} | Target {format_price_target_value(profile.price_target)}",
+            f"Last route: {last_route_label(profile)}",
+            f"Wizard: {wizard_state_label(profile)}",
+            "",
+            "Quick actions:",
+            "- /route to build a fresh smart route",
+            "- /reroute to reuse the last lane",
+            "- /truck 5188 to bind and sync a truck",
+            "- Send Point A -> Point B anytime",
+        ]
     )
 
 
 def help_message(profile: TelegramDriverProfile) -> str:
-    return (
-        "United Lane route bot.\n\n"
-        "Commands:\n"
-        "/route - start full route wizard\n"
-        "/profile - show saved MPG and fuel %\n"
-        "/reset - cancel current wizard\n"
-        "/help - show this message\n\n"
-        "Quick format:\n"
-        "Chicago, IL -> Dallas, TX\n\n"
-        "The bot asks only for MPG and fuel % of a fixed 200 gal tank. Use /skip to keep saved values.\n\n"
-        f"{profile_summary(profile)}"
+    return "\n".join(
+        [
+            "United Lane smart route bot",
+            "",
+            "Commands:",
+            "/route - start full route wizard",
+            "/reroute - rebuild the last saved lane",
+            "/status - open the control panel summary",
+            "/profile - show saved truck, MPG, fuel, and target",
+            "/truck 5188 - bind a truck and sync defaults from fleet/load data",
+            "/reset - cancel the current wizard",
+            "/help - show this message",
+            "",
+            "Quick format:",
+            "Chicago, IL -> Dallas, TX",
+            "",
+            "The bot asks only for MPG and fuel % of a fixed 200 gal tank. Use /skip to keep saved values.",
+            "",
+            profile_summary(profile),
+        ]
     )
+
+
+def route_wizard_intro(profile: TelegramDriverProfile) -> str:
+    return "\n".join(
+        [
+            "Route wizard started.",
+            "Send A -> B or go step by step.",
+            f"Truck: {truck_binding_label(profile)}",
+            route_profile_status(profile),
+            "",
+            prompt_for_step(profile, "origin"),
+        ]
+    )
+
+
+def start_repeat_route(db: Session, profile: TelegramDriverProfile) -> bool:
+    origin = clean_text(profile.last_origin)
+    destination = clean_text(profile.last_destination)
+    if len(origin) < 2 or len(destination) < 2:
+        return False
+    profile.tank_capacity_gallons = BOT_TANK_CAPACITY_GALLONS
+    profile.pending_payload = {"origin": origin, "destination": destination}
+    profile.active_step = "mpg"
+    db.commit()
+    db.refresh(profile)
+    return True
+
+
+def truck_binding_message(profile: TelegramDriverProfile, merged: dict) -> str:
+    synced_fields = []
+    if merged.get("driver_name"):
+        synced_fields.append(f"driver {merged['driver_name']}")
+    if merged.get("vehicle_id"):
+        synced_fields.append(f"vehicle #{merged['vehicle_id']}")
+    if merged.get("fuel_percent") is not None:
+        synced_fields.append(f"fuel {float(merged['fuel_percent']):.1f}%")
+    if merged.get("mpg"):
+        synced_fields.append(f"MPG {float(merged['mpg']):.2f}")
+    if merged.get("tank_capacity_gallons"):
+        synced_fields.append(f"tank {float(merged['tank_capacity_gallons']):.0f} gal")
+
+    lines = [
+        f"Truck saved: {profile.truck_number}",
+        f"Current binding: {truck_binding_label(profile)}",
+    ]
+    if synced_fields:
+        lines.append("Synced defaults: " + " | ".join(synced_fields))
+    else:
+        lines.append("No live fleet defaults were found, so the bot kept the saved profile values.")
+    lines.append("")
+    lines.append(profile_summary(profile))
+    return "\n".join(lines)
 
 
 def prompt_for_step(profile: TelegramDriverProfile, step: str) -> str:
     if step == "origin":
         return "Send point A. Example: Chicago, IL"
     if step == "destination":
-        return "Send point B. Example: Dallas, TX"
+        draft = dict(profile.pending_payload or {})
+        origin = clean_text(draft.get("origin"))
+        origin_line = f"Point A saved: {origin}\n" if origin else ""
+        return f"{origin_line}Send point B. Example: Dallas, TX"
     if step == "mpg":
-        return f"Send truck MPG. Current saved: {profile.mpg:.2f}. Use /skip to keep it."
+        return f"Route profile: {route_profile_status(profile)}\nSend truck MPG. Current saved: {profile.mpg:.2f}. Use /skip to keep it."
     if step == "fuel_percentage":
+        draft = dict(profile.pending_payload or {})
         current = percentage_from_gallons(profile.default_current_fuel_gallons)
-        return f"Send fuel % for a {BOT_TANK_CAPACITY_GALLONS:.0f} gal tank. Current saved: {current:.1f}%. Use /skip to keep it."
+        mpg = draft.get("mpg") or profile.mpg
+        return f"MPG ready: {float(mpg):.2f}\nSend fuel % for a {BOT_TANK_CAPACITY_GALLONS:.0f} gal tank. Current saved: {current:.1f}%. Use /skip to keep it."
     if step == "price_target":
-        current = f"${profile.price_target:.3f}/gal" if profile.price_target is not None else "off"
-        return f"{route_profile_status(profile)}\nTarget price: send value, /skip for {current}, or off."
+        draft = dict(profile.pending_payload or {})
+        current = format_price_target_value(profile.price_target)
+        fuel_percentage = draft.get("fuel_percentage")
+        fuel_line = f"Fuel ready: {float(fuel_percentage):.1f}%\n" if fuel_percentage is not None else ""
+        return f"{fuel_line}{route_profile_status(profile)}\nTarget price: send value, /skip for {current}, or off."
     return "Send the next value."
 
 
@@ -556,9 +733,9 @@ def build_route_request(profile: TelegramDriverProfile) -> RouteAssistantRequest
     return RouteAssistantRequest(
         origin=origin,
         destination=destination,
-        vehicle_id=None,
-        vehicle_number="",
-        driver_name="",
+        vehicle_id=profile.vehicle_id,
+        vehicle_number=profile.truck_number or "",
+        driver_name=profile.driver_name or "",
         vehicle_type=profile.vehicle_type or "Truck",
         fuel_type=profile.fuel_type or "Auto Diesel",
         current_fuel_gallons=current_fuel_gallons,
@@ -803,6 +980,8 @@ def build_route_caption(plan: RouteAssistantResponse, approval_code: str | None,
         "Smart Fuel Route",
         f"{plan.origin.label} -> {plan.destination.label}",
     ]
+    if clean_text(truck_number):
+        lines.append(f"Truck: {truck_number}")
     if primary_route:
         lines.append(f"{format_miles(primary_route.distance_meters)} | {format_duration(primary_route.travel_time_seconds)}")
     if plan.fuel_strategy:
@@ -817,10 +996,12 @@ def build_route_caption(plan: RouteAssistantResponse, approval_code: str | None,
     return "\n".join(lines)
 
 
-def build_route_details(plan: RouteAssistantResponse, approval_record) -> str:
+def build_route_details(plan: RouteAssistantResponse, approval_record, truck_number: str = "") -> str:
     lines: list[str] = []
     primary_route = plan.routes[0] if plan.routes else None
     route_link = google_maps_route_link(plan)
+    if clean_text(truck_number):
+        lines.append(f"Truck: {truck_number}")
     if primary_route:
         lines.append(f"Route: {format_miles(primary_route.distance_meters)} | {format_duration(primary_route.travel_time_seconds)}")
     if plan.fuel_strategy:
@@ -893,9 +1074,9 @@ def maybe_create_fuel_authorization(db: Session, bot_user: User, payload: RouteA
 
 
 def persist_profile_after_route(db: Session, profile: TelegramDriverProfile, payload: RouteAssistantRequest, plan: RouteAssistantResponse) -> None:
-    profile.truck_number = ""
-    profile.driver_name = ""
-    profile.vehicle_id = None
+    profile.truck_number = payload.vehicle_number or profile.truck_number
+    profile.driver_name = payload.driver_name or profile.driver_name
+    profile.vehicle_id = payload.vehicle_id or profile.vehicle_id
     profile.vehicle_type = payload.vehicle_type
     profile.fuel_type = payload.fuel_type
     profile.default_current_fuel_gallons = payload.current_fuel_gallons or profile.default_current_fuel_gallons
@@ -935,7 +1116,7 @@ def build_route_bundle(profile_id: int) -> RouteBuildBundle:
                 chat_id=profile.chat_id,
                 image_bytes=image_bytes,
                 caption=build_route_caption(plan, getattr(approval_record, "approval_code", None), payload.vehicle_number),
-                details=build_route_details(plan, approval_record),
+                details=build_route_details(plan, approval_record, payload.vehicle_number),
             )
         except HTTPException as exc:
             reset_wizard(db, profile)
@@ -959,25 +1140,47 @@ def execute_route_build(chat_id: str, profile_id: int) -> None:
 
 def handle_command(db: Session, profile: TelegramDriverProfile, chat_id: str, text: str) -> None:
     command = normalize_step_value(text.split()[0])
-    if command in {"/start", "/help"}:
+    if command in {"/start", "/help", "/menu"}:
         reset_wizard(db, profile)
         send_message(chat_id, help_message(profile))
         return
     if command == "/profile":
         send_message(chat_id, profile_summary(profile))
         return
+    if command == "/status":
+        send_message(chat_id, status_message(profile))
+        return
+    if command == "/truck":
+        truck_number = extract_command_argument(text)
+        if not truck_number:
+            send_message(chat_id, f"Use /truck 5188 to bind a truck.\nCurrent binding: {truck_binding_label(profile)}")
+            return
+        merged = apply_truck_defaults(db, profile, truck_number)
+        send_message(chat_id, truck_binding_message(profile, merged))
+        return
     if command == "/reset":
         reset_wizard(db, profile)
         send_message(chat_id, "Current wizard cleared. Send /route to start again.")
         return
+    if command == "/reroute":
+        if not start_repeat_route(db, profile):
+            send_message(chat_id, "No saved last route yet. Build one with /route first.")
+            return
+        send_message(chat_id, "Last route loaded.\n" + prompt_for_step(profile, "mpg"))
+        return
     if command == "/route":
         start_route_wizard(db, profile)
-        send_message(chat_id, "Route wizard started.\nSend `A -> B` or go step by step.\n\n" + prompt_for_step(profile, "origin"))
+        send_message(chat_id, route_wizard_intro(profile))
         return
     send_message(chat_id, "Unknown command. Send /help for instructions.")
 
 
 def handle_text(db: Session, profile: TelegramDriverProfile, chat_id: str, text: str) -> None:
+    alias_command = button_command_alias(text)
+    if alias_command:
+        handle_command(db, profile, chat_id, alias_command)
+        return
+
     if profile.active_step == "building":
         send_message(chat_id, "A route is already building. Wait for the result or send /reset.")
         return
@@ -989,7 +1192,7 @@ def handle_text(db: Session, profile: TelegramDriverProfile, chat_id: str, text:
         profile.active_step = "mpg"
         db.commit()
         db.refresh(profile)
-        send_message(chat_id, "Saved route points.\n" + prompt_for_step(profile, "mpg"))
+        send_message(chat_id, f"Saved route points: {origin} -> {destination}\n" + prompt_for_step(profile, "mpg"))
         return
 
     if profile.active_step and profile.active_step in WIZARD_STEPS:
@@ -1004,7 +1207,7 @@ def handle_text(db: Session, profile: TelegramDriverProfile, chat_id: str, text:
         send_message(chat_id, prompt_for_step(profile, profile.active_step))
         return
 
-    send_message(chat_id, "Send /route to start the wizard, or send `Point A -> Point B`.")
+    send_message(chat_id, "Use the quick buttons below, send /route, or send Point A -> Point B.")
 
 
 def handle_telegram_update(update: dict) -> None:
