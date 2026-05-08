@@ -13940,6 +13940,14 @@ button.statistics-leader-row:hover,
   gap: 12px;
 }
 
+.statistics-safety-global-panel {
+  background: linear-gradient(180deg, rgba(255, 249, 245, 0.98), rgba(255, 255, 255, 0.96));
+}
+
+.statistics-safety-global-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .statistics-safety-incident {
   display: grid;
   gap: 12px;

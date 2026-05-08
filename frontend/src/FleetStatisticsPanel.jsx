@@ -567,6 +567,8 @@ export default function FleetStatisticsPanel({
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [selectedIncidentId, setSelectedIncidentId] = useState("");
   const [selectedIncidentVideoKey, setSelectedIncidentVideoKey] = useState("");
+  const [overlayIncident, setOverlayIncident] = useState(null);
+  const [overlayIncidentVideoKey, setOverlayIncidentVideoKey] = useState("");
   const [filters, setFilters] = useState(createDefaultFilters);
 
   useEffect(() => {
@@ -741,6 +743,13 @@ export default function FleetStatisticsPanel({
   }, [selectedVehicleId]);
 
   useEffect(() => {
+    if (!token) {
+      setOverlayIncident(null);
+      setOverlayIncidentVideoKey("");
+    }
+  }, [token]);
+
+  useEffect(() => {
     if (!token || !selectedVehicleId || !active) {
       return undefined;
     }
@@ -902,11 +911,21 @@ export default function FleetStatisticsPanel({
   const statisticsTotals = snapshotStatistics.totals || {};
   const statisticsArchive = snapshotStatistics.archive || {};
   const leaderboards = snapshotStatistics.leaders || {};
+  const recentSafetyEvents = (snapshot?.recent_activity?.performance_events || []).slice(0, 8);
   const hasActiveFilters = useMemo(() => {
     const defaults = createDefaultFilters();
     return quickFocus !== "all"
       || Object.entries(filters).some(([key, value]) => value !== defaults[key]);
   }, [filters, quickFocus]);
+
+  const modalIncident = overlayIncident || selectedIncident;
+  const modalIncidentVideoKey = overlayIncident
+    ? (
+      performanceEventVideoSources(overlayIncident).some((source) => source.key === overlayIncidentVideoKey)
+        ? overlayIncidentVideoKey
+        : defaultPerformanceVideoKey(overlayIncident)
+    )
+    : selectedIncidentResolvedVideoKey;
 
   function refreshSelectedDetail(forceRefresh = false) {
     if (!token || !selectedVehicleId) {
@@ -917,6 +936,49 @@ export default function FleetStatisticsPanel({
       .then((data) => {
         setDetail(data);
         setError("");
+      })
+      .catch((refreshError) => setError(refreshError.message))
+      .finally(() => setDetailLoading(false));
+  }
+
+  function openIncident(event, { selectTruck = true } = {}) {
+    if (!event) {
+      return;
+    }
+    if (selectTruck && event.vehicle_id) {
+      setSelectedVehicleId(event.vehicle_id);
+    }
+    setSelectedIncidentId("");
+    setSelectedIncidentVideoKey("");
+    setOverlayIncident(event);
+    setOverlayIncidentVideoKey(defaultPerformanceVideoKey(event));
+  }
+
+  function closeIncident() {
+    setOverlayIncident(null);
+    setOverlayIncidentVideoKey("");
+    setSelectedIncidentId("");
+    setSelectedIncidentVideoKey("");
+  }
+
+  function refreshIncidentMedia() {
+    const incident = modalIncident;
+    const vehicleId = incident?.vehicle_id || selectedVehicleId;
+    if (!token || !vehicleId) {
+      return;
+    }
+    setDetailLoading(true);
+    apiRequest(`/motive/vehicles/${vehicleId}?refresh=true`, {}, token)
+      .then((data) => {
+        setDetail(data);
+        setError("");
+        if (overlayIncident) {
+          const refreshedEvent = (data?.performance_events?.items || []).find((item) => performanceEventKey(item) === performanceEventKey(overlayIncident));
+          if (refreshedEvent) {
+            setOverlayIncident(refreshedEvent);
+            setOverlayIncidentVideoKey(defaultPerformanceVideoKey(refreshedEvent));
+          }
+        }
       })
       .catch((refreshError) => setError(refreshError.message))
       .finally(() => setDetailLoading(false));
@@ -1033,6 +1095,49 @@ export default function FleetStatisticsPanel({
             <LeaderboardColumn title="Fastest Right Now" hint="Live speed leaderboard" items={leaderboards.speed_now || []} formatter={(value) => formatSpeed(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
             <LeaderboardColumn title="Most Faults" hint="Units that need review" items={leaderboards.faults || []} formatter={(value) => `${metricValue(value)} fault${Number(value) === 1 ? "" : "s"}`} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
             <LeaderboardColumn title="Lowest Fuel" hint="Fuel risk first" items={leaderboards.fuel_low || []} formatter={(value) => formatPercent(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
+          </section>
+
+          <section className="statistics-safety-panel statistics-safety-global-panel">
+            <div className="panel-head">
+              <div>
+                <h2>Fleet Violation Center</h2>
+                <span>Open Motive safety clips directly from recent fleet incidents, even if the truck matrix is empty.</span>
+              </div>
+            </div>
+
+            {recentSafetyEvents.length ? (
+              <div className="statistics-safety-list statistics-safety-global-list">
+                {recentSafetyEvents.map((event) => {
+                  const videoCount = performanceEventVideoSources(event).length;
+                  const imageCount = performanceEventImageSources(event).length;
+                  return (
+                    <button
+                      key={`global-incident-${performanceEventKey(event)}`}
+                      type="button"
+                      className="statistics-safety-incident statistics-safety-incident-global"
+                      onClick={() => openIncident(event)}
+                    >
+                      <div className="statistics-safety-incident-head">
+                        <div>
+                          <strong>{event.vehicle_number || "Truck"} | {formatKeyLabel(event.type || "event")}</strong>
+                          <small>{event.driver_name || "Unassigned"} | {event.location || compactDate(event.end_time)}</small>
+                        </div>
+                        <span className={`statistics-safety-pill ${videoCount ? "live" : event.camera_available ? "pending" : "plain"}`.trim()}>
+                          {videoCount ? `Watch ${videoCount} clip${videoCount === 1 ? "" : "s"}` : imageCount ? `${imageCount} frame${imageCount === 1 ? "" : "s"}` : event.camera_available ? "Media pending" : "No clip"}
+                        </span>
+                      </div>
+                      <div className="statistics-safety-incident-meta">
+                        <span>{event.coaching_status ? formatKeyLabel(event.coaching_status) : "No coaching status"}</span>
+                        <span>{event.max_speed ? `${decimalValue(event.max_speed)} mph max` : "No max speed"}</span>
+                        <span>{event.severity ? formatKeyLabel(event.severity) : "Severity n/a"}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-route-card compact">No recent fleet safety incidents with media came back from Motive yet.</div>
+            )}
           </section>
 
           <section className="panel-filter-card">
@@ -1276,7 +1381,7 @@ export default function FleetStatisticsPanel({
                         <td colSpan="11">
                           <div className="empty-route-card compact">
                             <strong>No trucks match the current filters.</strong>
-                            <span>{hasActiveFilters ? "Clear or relax the filters to bring the fleet back into the matrix." : "Live fleet data is available, but no rows are ready yet."}</span>
+                            <span>{hasActiveFilters ? "Clear or relax the filters to bring the fleet back into the matrix." : "Live fleet data is available, but no rows are ready yet. Use Fleet Violation Center above to open videos directly."}</span>
                             {hasActiveFilters ? <button className="secondary-button" type="button" onClick={clearFilters}>Reset filters</button> : null}
                           </div>
                         </td>
@@ -1363,10 +1468,7 @@ export default function FleetStatisticsPanel({
                               key={`statistics-incident-${performanceEventKey(event)}`}
                               type="button"
                               className="statistics-safety-incident"
-                              onClick={() => {
-                                setSelectedIncidentId(performanceEventKey(event));
-                                setSelectedIncidentVideoKey(defaultPerformanceVideoKey(event));
-                              }}
+                              onClick={() => openIncident(event, { selectTruck: false })}
                             >
                               <div className="statistics-safety-incident-head">
                                 <div>
@@ -1436,14 +1538,11 @@ export default function FleetStatisticsPanel({
       )}
 
       <IncidentViewerDialog
-        event={selectedIncident}
-        videoKey={selectedIncidentResolvedVideoKey}
-        onVideoKeyChange={setSelectedIncidentVideoKey}
-        onClose={() => {
-          setSelectedIncidentId("");
-          setSelectedIncidentVideoKey("");
-        }}
-        onRefresh={() => refreshSelectedDetail(true)}
+        event={modalIncident}
+        videoKey={modalIncidentVideoKey}
+        onVideoKeyChange={overlayIncident ? setOverlayIncidentVideoKey : setSelectedIncidentVideoKey}
+        onClose={closeIncident}
+        onRefresh={refreshIncidentMedia}
         refreshing={detailLoading}
       />
     </section>
