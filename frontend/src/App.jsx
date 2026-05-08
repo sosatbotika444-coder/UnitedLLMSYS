@@ -572,7 +572,10 @@ async function apiRequest(path, options = {}, token = "") {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || "Request failed");
+    const error = new Error(data.detail || "Request failed");
+    error.status = response.status;
+    error.payload = data;
+    throw error;
   }
 
   return data;
@@ -590,6 +593,14 @@ function MetricCard({ label, value, detail, tone = "neutral" }) {
       <small>{detail}</small>
     </article>
   );
+}
+
+function isInvalidSessionError(error) {
+  const detail = String(error?.message || "").trim().toLowerCase();
+  return Number(error?.status) === 401
+    || detail.includes("session is no longer valid")
+    || detail.includes("session no longer valid")
+    || detail.includes("not authenticated");
 }
 
 function DepartmentCard({ option, active, onSelect }) {
@@ -1228,16 +1239,25 @@ export default function App() {
         }
       } catch (fetchError) {
         if (!ignore) {
-          if (user) {
-            setError("Session check failed, but your workspace stayed on screen.");
-          } else {
+          if (isInvalidSessionError(fetchError)) {
             localStorage.removeItem(TOKEN_KEY);
             localStorage.removeItem(USER_KEY);
             setToken("");
             setUser(null);
             setRows([]);
             setFleetVehicles([]);
-            setError("Session check failed. Please sign in again.");
+            setError("Session ended. Please sign in again.");
+          } else if (user) {
+            setError("Connection check failed, but your workspace stayed on screen.");
+          } else {
+            const cachedUser = readStoredUser();
+            if (cachedUser) {
+              setUser(cachedUser);
+              setSelectedDepartment(cachedUser.department);
+              setError("Connection check failed, but your last session stayed on screen.");
+            } else {
+              setError("Connection check failed. Retrying without logging you out.");
+            }
           }
         }
       }
