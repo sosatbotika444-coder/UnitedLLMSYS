@@ -927,12 +927,16 @@ export default function FleetStatisticsPanel({
     )
     : selectedIncidentResolvedVideoKey;
 
+  function requestVehicleDetail(vehicleId, forceRefresh = false) {
+    return apiRequest(`/motive/vehicles/${vehicleId}${forceRefresh ? "?refresh=true" : ""}`, {}, token);
+  }
+
   function refreshSelectedDetail(forceRefresh = false) {
     if (!token || !selectedVehicleId) {
       return;
     }
     setDetailLoading(true);
-    apiRequest(`/motive/vehicles/${selectedVehicleId}${forceRefresh ? "?refresh=true" : ""}`, {}, token)
+    requestVehicleDetail(selectedVehicleId, forceRefresh)
       .then((data) => {
         setDetail(data);
         setError("");
@@ -952,6 +956,22 @@ export default function FleetStatisticsPanel({
     setSelectedIncidentVideoKey("");
     setOverlayIncident(event);
     setOverlayIncidentVideoKey(defaultPerformanceVideoKey(event));
+
+    if (event.vehicle_id && !performanceEventVideoSources(event).length && !performanceEventImageSources(event).length) {
+      setDetailLoading(true);
+      requestVehicleDetail(event.vehicle_id, true)
+        .then((data) => {
+          setDetail(data);
+          setError("");
+          const refreshedEvent = (data?.performance_events?.items || []).find((item) => performanceEventKey(item) === performanceEventKey(event));
+          if (refreshedEvent) {
+            setOverlayIncident(refreshedEvent);
+            setOverlayIncidentVideoKey(defaultPerformanceVideoKey(refreshedEvent));
+          }
+        })
+        .catch((refreshError) => setError(refreshError.message))
+        .finally(() => setDetailLoading(false));
+    }
   }
 
   function closeIncident() {
@@ -968,7 +988,7 @@ export default function FleetStatisticsPanel({
       return;
     }
     setDetailLoading(true);
-    apiRequest(`/motive/vehicles/${vehicleId}?refresh=true`, {}, token)
+    requestVehicleDetail(vehicleId, true)
       .then((data) => {
         setDetail(data);
         setError("");
