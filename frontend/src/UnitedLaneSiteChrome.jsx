@@ -19,7 +19,7 @@ export const sitePanels = {
     title: "United Lane Operations Platform",
     effectiveDate: "Product Documentation - 2026 Edition",
     paragraphs: [
-      "United Lane Operations Platform is a private logistics workspace for dispatch, fuel service, safety operations, driver support, live fleet visibility, and administrative control.",
+      "United Lane Operations Platform is a private logistics workspace for dispatch, fuel service, statistics operations, safety operations, driver support, live fleet visibility, and administrative control.",
       "This documentation explains how the web application is organized, which roles can access each workspace, and how the core operational workflows are intended to be used."
     ],
     sections: [
@@ -31,6 +31,7 @@ export const sitePanels = {
         bullets: [
           "Admin Panel: manage users, roles, bans, passwords, and operational statistics.",
           "Fuel Service: manage loads, route planning, fleet tracking, and fuel approvals.",
+          "Statistics Workspace: deep truck analytics, live speed, mileage growth, archive trends, and per-truck fleet reporting.",
           "Safety: manage fleet safety workflows, emergency support, service tools, documents, notes, and AI assistance.",
           "Driver Workspace: give drivers a mobile-first view of their truck, route, service tools, emergency support, and team chat.",
           "Team Chat: shared communication across operational departments."
@@ -44,6 +45,7 @@ export const sitePanels = {
         bullets: [
           "Admin accounts can access the Admin Panel and are allowed through department-protected backend routes.",
           "Fuel Service accounts access dispatch loads, routing, Motive tracking, fuel authorizations, TomTom tools, and team chat.",
+          "Statistics accounts access live fleet analytics, truck archive growth, per-truck reporting, and shared team chat.",
           "Safety accounts access safety notes, documents, investigations, shift briefs, emergency tools, service maps, AI chat, and team chat.",
           "Driver accounts are created through the driver flow and must be matched to a Motive truck.",
           "Banned accounts cannot sign in, even if the password is correct."
@@ -78,7 +80,7 @@ export const sitePanels = {
         ],
         bullets: [
           "View total accounts, active users, banned users, routes, fuel authorizations, team messages, and safety document counts.",
-          "Create accounts for Admin, Fuel Service, Safety, and Driver roles.",
+          "Create accounts for Admin, Fuel Service, Statistics, Safety, and Driver roles.",
           "Edit user full name, email, username, role, and ban reason.",
           "Ban or unban accounts immediately.",
           "Reset account passwords.",

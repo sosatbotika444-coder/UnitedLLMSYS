@@ -40,6 +40,7 @@ const statusOptions = ["Done", "In Transit", "At Pickup", "Needs Review", "Delay
 const departmentOptions = [
   { id: "admin", label: "Admin", detail: "Users, bans, statistics", icon: "admin" },
   { id: "fuel", label: "Fuel Service", detail: "Routes, loads, tracking", icon: "fuel" },
+  { id: "statistics", label: "Statistics", detail: "Real-time truck analytics", icon: "chart" },
   { id: "safety", label: "Safety", detail: "Fleet, services, AI", icon: "safety" },
   { id: "driver", label: "Driver", detail: "My truck, fuel, service", icon: "driver" }
 ];
@@ -1250,7 +1251,7 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || user?.department !== "fuel") {
+    if (!token || !["fuel", "statistics"].includes(user?.department || "")) {
       setRows([]);
       setGridLoading(false);
       return;
@@ -1261,7 +1262,8 @@ export default function App() {
     async function loadFuelWorkspace() {
       setGridLoading(true);
       try {
-        const loads = await apiRequest("/loads", {}, token);
+        const endpoint = user?.department === "statistics" ? "/loads/fleet" : "/loads";
+        const loads = await apiRequest(endpoint, {}, token);
         if (!ignore) {
           setRows(loads.map(normalizeRow));
           setError("");
@@ -1286,7 +1288,7 @@ export default function App() {
   }, [token, user?.department]);
 
   useEffect(() => {
-    if (!token || user?.department !== "fuel") {
+    if (!token || !["fuel", "statistics"].includes(user?.department || "")) {
       setFleetVehicles([]);
       setFleetLoading(false);
       return;
@@ -1418,6 +1420,7 @@ export default function App() {
   const selectedDepartmentMeta = getDepartmentMeta(activeDepartment);
   const isAdminWorkspace = activeDepartment === "admin";
   const isFuelService = activeDepartment === "fuel";
+  const isStatisticsWorkspace = activeDepartment === "statistics";
   const isDriverWorkspace = activeDepartment === "driver";
   const sidebarExpanded = sidebarExpandedByDepartment[activeDepartment] !== false;
   const activeWorkspaceMeta = workspaceTabs.find((tab) => tab.id === activeWorkspace) || workspaceTabs[0];
@@ -1455,6 +1458,14 @@ export default function App() {
       };
     }
 
+    if (isStatisticsWorkspace) {
+      return {
+        page: "statistics",
+        workspace: "workspace",
+        label: "Statistics Workspace",
+      };
+    }
+
     if (isDriverWorkspace) {
       return {
         page: "driver",
@@ -1475,6 +1486,7 @@ export default function App() {
     isAdminWorkspace,
     isDriverWorkspace,
     isFuelService,
+    isStatisticsWorkspace,
     mode,
     selectedDepartment,
     selectedDepartmentMeta.label,
@@ -2172,6 +2184,90 @@ export default function App() {
             {error ? <div className="notice error inline-notice">{error}</div> : null}
 
             <DriverWorkspace token={token} user={user} />
+          </section>
+        </main>
+
+        <InstallAppButton />
+        {sitePanel ? <SiteDialog panel={sitePanels[sitePanel]} onClose={() => setSitePanel("")} /> : null}
+      </div>
+    );
+  }
+  if (isStatisticsWorkspace && isMobileViewport) {
+    return (
+      <MobileWorkspaceShell
+        kicker="Statistics"
+        title="Statistics Workspace"
+        subtitle="Real-time fleet analytics, truck profiles, distance history, and live speed."
+        user={user}
+        currentDate={currentDate}
+        message={message}
+        error={error}
+        onLogout={logout}
+      >
+        <Suspense fallback={<ModuleLoader label="Loading truck analytics..." />}>
+          <FleetStatisticsPanel token={token} active loadRows={rows} workspaceMode="standalone" />
+        </Suspense>
+      </MobileWorkspaceShell>
+    );
+  }
+  if (isStatisticsWorkspace) {
+    return (
+      <div className="site-page-shell">
+        <SiteHeader
+          onHome={handleHomeNavigation}
+          onAbout={() => openSitePanel("about")}
+          onDocs={() => openSitePanel("docs")}
+          onPrivacy={() => openSitePanel("privacy")}
+          activeItem={activeSiteNav}
+        />
+
+        <main className={`workspace-app-shell site-workspace-shell workspace-app-shell-statistics${sidebarExpanded ? "" : " workspace-app-shell-collapsed"}`} style={workspaceShellStyle}>
+          <WorkspaceSidebarShell
+            expanded={sidebarExpanded}
+            onToggle={toggleWorkspaceSidebar}
+            modeLabel="Statistics"
+            brandMeta="Realtime truck analytics"
+            accountLabel="Account"
+            accountTitle={user.full_name}
+            accountSubtitle={user.email}
+            accountBadge="Statistics access"
+            noteLabel="Analytics Core"
+            noteTitle="Fleet intelligence"
+            noteSubtitle="Watch every truck, compare daily and monthly miles, and open a full profile for any unit in one premium analytics surface."
+            footerDate={currentDate}
+            footerTitle="Statistics ready"
+            footerSubtitle="Realtime fleet intelligence"
+            onLogout={logout}
+          />
+
+          <section className="workspace-main-shell">
+            <header className="workspace-main-header">
+              <div className="workspace-main-heading">
+                <span className="workspace-main-kicker">Statistics</span>
+                <h1>Statistics Workspace</h1>
+                <p>Live truck analytics, growth profiles, daily mileage, speed, idle, faults, and long-running fleet visibility.</p>
+              </div>
+
+              <div className="workspace-main-meta">
+                <div className="workspace-main-usercard">
+                  <span>Account</span>
+                  <strong>{user.full_name}</strong>
+                  <small>{user.email}</small>
+                </div>
+                <div className="workspace-main-usercard subdued">
+                  <span>Focus</span>
+                  <strong>All Trucks</strong>
+                  <small>Realtime plus archive analytics</small>
+                </div>
+              </div>
+            </header>
+
+            {message ? <div className="notice success inline-notice">{message}</div> : null}
+            {error ? <div className="notice error inline-notice">{error}</div> : null}
+
+            <Suspense fallback={<ModuleLoader label="Loading truck analytics..." />}>
+              <FleetStatisticsPanel token={token} active loadRows={rows} workspaceMode="standalone" />
+            </Suspense>
           </section>
         </main>
 

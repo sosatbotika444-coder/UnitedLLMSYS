@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
-DepartmentName = Literal["admin", "fuel", "safety", "driver"]
+DepartmentName = Literal["admin", "fuel", "statistics", "safety", "driver"]
 PlannerItemKind = Literal["task", "break"]
 
 

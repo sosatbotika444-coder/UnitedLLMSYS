@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -38,6 +38,41 @@ class UserActivityEvent(Base):
     label: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
+class MotiveVehicleDailyStat(Base):
+    __tablename__ = "motive_vehicle_daily_stats"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "snapshot_date", name="uq_motive_vehicle_daily_stats_vehicle_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    vehicle_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    snapshot_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    vehicle_number: Mapped[str] = mapped_column(String(128), default="", nullable=False, index=True)
+    driver_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    first_recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    opening_odometer_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    closing_odometer_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opening_engine_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    closing_engine_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    opening_fuel_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_fuel_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_fuel_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_speed_mph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_speed_mph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_mpg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_active_faults: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_active_faults: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    latest_utilization_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_drive_miles_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_idle_hours_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_ifta_miles_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    telemetry_age_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_is_moving: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    latest_is_stale: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class CommercialLead(Base):

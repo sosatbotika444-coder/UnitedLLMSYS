@@ -17,7 +17,9 @@ import certifi
 from fastapi import HTTPException, status
 
 from app.config import Settings
+from app.database import SessionLocal
 from app.geo import format_coordinate_label, looks_approximate_location_label, looks_coarse_location_label, reverse_geocode_point
+from app.motive_statistics import sync_motive_daily_statistics
 
 
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
@@ -442,6 +444,11 @@ class MotiveClient:
     def _build_and_store_snapshot(self, ttl_seconds: int) -> dict:
         try:
             snapshot = self._build_snapshot()
+            try:
+                with SessionLocal() as db:
+                    sync_motive_daily_statistics(db, snapshot)
+            except Exception:
+                pass
         except Exception as exc:
             with SNAPSHOT_LOCK:
                 SNAPSHOT_CACHE["building"] = False

@@ -20,6 +20,7 @@ settings = get_settings()
 DEPARTMENT_LABELS = {
     "admin": "Admin",
     "fuel": "Fuel Service",
+    "statistics": "Statistics",
     "safety": "Safety",
     "driver": "Driver",
 }

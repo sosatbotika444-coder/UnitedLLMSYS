@@ -6,10 +6,11 @@ import { UnitedIcon } from "./UnitedLaneIcons";
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const SafetyServiceTools = lazy(() => import("./SafetyServiceTools"));
-const departmentOptions = ["admin", "fuel", "safety", "driver"];
+const departmentOptions = ["admin", "fuel", "statistics", "safety", "driver"];
 const departmentLabels = {
   admin: "Admin",
   fuel: "Fuel Service",
+  statistics: "Statistics",
   safety: "Safety",
   driver: "Driver"
 };

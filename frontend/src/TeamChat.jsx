@@ -6,12 +6,14 @@ const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production
 const MESSAGE_LIMIT = 120;
 const departmentLabels = {
   fuel: "Fuel Service",
+  statistics: "Statistics",
   safety: "Safety",
   driver: "Driver"
 };
 const departmentFilters = [
   { id: "all", label: "All" },
   { id: "fuel", label: "Fuel" },
+  { id: "statistics", label: "Statistics" },
   { id: "safety", label: "Safety" },
   { id: "driver", label: "Driver" }
 ];

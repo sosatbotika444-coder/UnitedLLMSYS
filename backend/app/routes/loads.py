@@ -16,6 +16,11 @@ def list_loads(current_user: User = Depends(require_user_department("fuel")), db
     return db.scalars(select(Load).where(Load.user_id == current_user.id).order_by(Load.id.desc())).all()
 
 
+@router.get("/fleet", response_model=list[LoadResponse])
+def list_fleet_loads(current_user: User = Depends(require_user_department("fuel", "statistics")), db: Session = Depends(get_db)):
+    return db.scalars(select(Load).order_by(Load.id.desc())).all()
+
+
 @router.post("", response_model=LoadResponse, status_code=status.HTTP_201_CREATED)
 def create_load(payload: LoadCreate, current_user: User = Depends(require_user_department("fuel")), db: Session = Depends(get_db)):
     load = Load(user_id=current_user.id, **payload.model_dump())
