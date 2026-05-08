@@ -46,12 +46,16 @@ def _vehicle_driver_name(vehicle: dict) -> str:
 
 def _vehicle_fuel_percent(vehicle: dict) -> float | None:
     location = vehicle.get("location") or {}
-    return _safe_float(
-        location.get("fuel_level_percent")
-        or location.get("fuel_primary_remaining_percentage")
-        or location.get("fuel_remaining_percentage")
-        or location.get("fuel_percentage")
-    )
+    for key in (
+        "fuel_level_percent",
+        "fuel_primary_remaining_percentage",
+        "fuel_remaining_percentage",
+        "fuel_percentage",
+    ):
+        parsed = _safe_float(location.get(key))
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def _vehicle_odometer(vehicle: dict) -> float | None:

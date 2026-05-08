@@ -341,21 +341,8 @@ function TrendBars({ points }) {
   );
 }
 
-export default function FleetStatisticsPanel({
-  token,
-  active = true,
-  loadRows = [],
-  workspaceMode = "embedded",
-}) {
-  const [snapshot, setSnapshot] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [quickFocus, setQuickFocus] = useState("all");
-  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
-  const [filters, setFilters] = useState({
+function createDefaultFilters() {
+  return {
     search: "",
     movement: "all",
     fuelType: "all",
@@ -374,7 +361,24 @@ export default function FleetStatisticsPanel({
     minMonthMiles: "",
     maxAgeMinutes: "",
     sortBy: "today_miles",
-  });
+  };
+}
+
+export default function FleetStatisticsPanel({
+  token,
+  active = true,
+  loadRows = [],
+  workspaceMode = "embedded",
+}) {
+  const [snapshot, setSnapshot] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [quickFocus, setQuickFocus] = useState("all");
+  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+  const [filters, setFilters] = useState(createDefaultFilters);
 
   useEffect(() => {
     if (!token || !active) {
@@ -594,8 +598,6 @@ export default function FleetStatisticsPanel({
       if (quickFocus === "moving" && !row.isMoving) return false;
       if (quickFocus === "stale" && !row.isStale) return false;
       if (quickFocus === "withLoad" && !row.matchedLoad) return false;
-      if (quickFocus === "milesToday" && row.todayMiles <= 0) return false;
-
       if (searchTerm && !row.searchBlob.includes(searchTerm)) return false;
 
       if (filters.movement === "moving" && !row.isMoving) return false;
@@ -625,10 +627,20 @@ export default function FleetStatisticsPanel({
     return sortRows(nextRows, filters.sortBy);
   }, [filters, fleetRows, quickFocus]);
 
+  useEffect(() => {
+    if (!filteredRows.length) {
+      return;
+    }
+    if (filteredRows.some((row) => String(row.id) === String(selectedVehicleId))) {
+      return;
+    }
+    setSelectedVehicleId(filteredRows[0].id);
+  }, [filteredRows, selectedVehicleId]);
+
   const selectedRow = useMemo(() => {
     return filteredRows.find((row) => String(row.id) === String(selectedVehicleId))
-      || fleetRows.find((row) => String(row.id) === String(selectedVehicleId))
       || filteredRows[0]
+      || fleetRows.find((row) => String(row.id) === String(selectedVehicleId))
       || fleetRows[0]
       || null;
   }, [filteredRows, fleetRows, selectedVehicleId]);
@@ -682,33 +694,31 @@ export default function FleetStatisticsPanel({
   const statisticsTotals = snapshotStatistics.totals || {};
   const statisticsArchive = snapshotStatistics.archive || {};
   const leaderboards = snapshotStatistics.leaders || {};
+  const hasActiveFilters = useMemo(() => {
+    const defaults = createDefaultFilters();
+    return quickFocus !== "all"
+      || Object.entries(filters).some(([key, value]) => value !== defaults[key]);
+  }, [filters, quickFocus]);
 
   function updateFilter(key, value) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
+  function applyQuickFocus(nextQuickFocus) {
+    const preset = createDefaultFilters();
+    if (nextQuickFocus === "moving") preset.sortBy = "speed_now";
+    if (nextQuickFocus === "lowFuel") preset.sortBy = "fuel_low";
+    if (nextQuickFocus === "faults") preset.sortBy = "faults";
+    if (nextQuickFocus === "stale") preset.sortBy = "age";
+    if (nextQuickFocus === "withLoad") preset.sortBy = "today_miles";
+    if (nextQuickFocus === "milesToday") preset.sortBy = "today_miles";
+    setQuickFocus(nextQuickFocus);
+    setFilters(preset);
+  }
+
   function clearFilters() {
     setQuickFocus("all");
-    setFilters({
-      search: "",
-      movement: "all",
-      fuelType: "all",
-      assignment: "all",
-      loadStatus: "all",
-      minFuel: "",
-      maxFuel: "",
-      minMpg: "",
-      maxMpg: "",
-      minFaults: "",
-      minUtilization: "",
-      minDriveMiles: "",
-      minIdleHours: "",
-      minTodayMiles: "",
-      minWeekMiles: "",
-      minMonthMiles: "",
-      maxAgeMinutes: "",
-      sortBy: "today_miles",
-    });
+    setFilters(createDefaultFilters());
   }
 
   if (!token) {
@@ -804,6 +814,7 @@ export default function FleetStatisticsPanel({
               <label>
                 Search everything
                 <input
+                  autoComplete="off"
                   type="text"
                   value={filters.search}
                   onChange={(event) => updateFilter("search", event.target.value)}
@@ -873,7 +884,7 @@ export default function FleetStatisticsPanel({
                   key={option.id}
                   type="button"
                   className={`workspace-inline-tab ${quickFocus === option.id ? "active" : ""}`}
-                  onClick={() => setQuickFocus(option.id)}
+                  onClick={() => applyQuickFocus(option.id)}
                 >
                   {option.label}
                 </button>
@@ -883,43 +894,43 @@ export default function FleetStatisticsPanel({
             <div className="inline-filter-grid statistics-subfilters-grid">
               <label>
                 Min fuel %
-                <input type="number" min="0" max="100" value={filters.minFuel} onChange={(event) => updateFilter("minFuel", event.target.value)} placeholder="0" />
+                <input autoComplete="off" type="number" min="0" max="100" value={filters.minFuel} onChange={(event) => updateFilter("minFuel", event.target.value)} placeholder="0" />
               </label>
               <label>
                 Max fuel %
-                <input type="number" min="0" max="100" value={filters.maxFuel} onChange={(event) => updateFilter("maxFuel", event.target.value)} placeholder="100" />
+                <input autoComplete="off" type="number" min="0" max="100" value={filters.maxFuel} onChange={(event) => updateFilter("maxFuel", event.target.value)} placeholder="100" />
               </label>
               <label>
                 Min active faults
-                <input type="number" min="0" value={filters.minFaults} onChange={(event) => updateFilter("minFaults", event.target.value)} placeholder="1" />
+                <input autoComplete="off" type="number" min="0" value={filters.minFaults} onChange={(event) => updateFilter("minFaults", event.target.value)} placeholder="1" />
               </label>
               <label>
                 Min today miles
-                <input type="number" min="0" value={filters.minTodayMiles} onChange={(event) => updateFilter("minTodayMiles", event.target.value)} placeholder="250" />
+                <input autoComplete="off" type="number" min="0" value={filters.minTodayMiles} onChange={(event) => updateFilter("minTodayMiles", event.target.value)} placeholder="250" />
               </label>
               <label>
                 Min week miles
-                <input type="number" min="0" value={filters.minWeekMiles} onChange={(event) => updateFilter("minWeekMiles", event.target.value)} placeholder="1200" />
+                <input autoComplete="off" type="number" min="0" value={filters.minWeekMiles} onChange={(event) => updateFilter("minWeekMiles", event.target.value)} placeholder="1200" />
               </label>
               <label>
                 Min month miles
-                <input type="number" min="0" value={filters.minMonthMiles} onChange={(event) => updateFilter("minMonthMiles", event.target.value)} placeholder="5000" />
+                <input autoComplete="off" type="number" min="0" value={filters.minMonthMiles} onChange={(event) => updateFilter("minMonthMiles", event.target.value)} placeholder="5000" />
               </label>
               <label>
                 Min MPG
-                <input type="number" min="0" step="0.1" value={filters.minMpg} onChange={(event) => updateFilter("minMpg", event.target.value)} placeholder="5.5" />
+                <input autoComplete="off" type="number" min="0" step="0.1" value={filters.minMpg} onChange={(event) => updateFilter("minMpg", event.target.value)} placeholder="5.5" />
               </label>
               <label>
                 Max MPG
-                <input type="number" min="0" step="0.1" value={filters.maxMpg} onChange={(event) => updateFilter("maxMpg", event.target.value)} placeholder="9.0" />
+                <input autoComplete="off" type="number" min="0" step="0.1" value={filters.maxMpg} onChange={(event) => updateFilter("maxMpg", event.target.value)} placeholder="9.0" />
               </label>
               <label>
                 Min utilization %
-                <input type="number" min="0" step="0.1" value={filters.minUtilization} onChange={(event) => updateFilter("minUtilization", event.target.value)} placeholder="50" />
+                <input autoComplete="off" type="number" min="0" step="0.1" value={filters.minUtilization} onChange={(event) => updateFilter("minUtilization", event.target.value)} placeholder="50" />
               </label>
               <label>
                 Max age minutes
-                <input type="number" min="0" step="0.1" value={filters.maxAgeMinutes} onChange={(event) => updateFilter("maxAgeMinutes", event.target.value)} placeholder="30" />
+                <input autoComplete="off" type="number" min="0" step="0.1" value={filters.maxAgeMinutes} onChange={(event) => updateFilter("maxAgeMinutes", event.target.value)} placeholder="30" />
               </label>
             </div>
 
@@ -1035,12 +1046,16 @@ export default function FleetStatisticsPanel({
                             </td>
                           </tr>
                         )) : (
-                          <tr>
-                            <td colSpan="11">
-                              <div className="empty-route-card compact">No trucks match the current statistics filters.</div>
-                            </td>
-                          </tr>
-                        )}
+                      <tr>
+                        <td colSpan="11">
+                          <div className="empty-route-card compact">
+                            <strong>No trucks match the current filters.</strong>
+                            <span>{hasActiveFilters ? "Clear or relax the filters to bring the fleet back into the matrix." : "Live fleet data is available, but no rows are ready yet."}</span>
+                            {hasActiveFilters ? <button className="secondary-button" type="button" onClick={clearFilters}>Reset filters</button> : null}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                       </tbody>
                     </table>
                   </div>
