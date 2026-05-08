@@ -116,6 +116,20 @@ function formatTimestamp(value) {
   }).format(parsed);
 }
 
+function formatKeyLabel(value) {
+  if (!value) return "Unknown";
+  return String(value)
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatSpeedLabel(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "Unknown";
+  return `${decimalValue(value)} mph`;
+}
+
 function formatCoordinates(location) {
   if (!location || location.lat === null || location.lon === null || location.lat === undefined || location.lon === undefined) {
     return "No coordinates";
@@ -209,6 +223,33 @@ function vehicleDriverLabel(vehicle) {
   return vehicle?.resolved_driver?.full_name || vehicle?.driver?.full_name || vehicle?.permanent_driver?.full_name || "Unassigned";
 }
 
+function performanceEventKey(event) {
+  if (!event) return "";
+  return String(event.id ?? `${event.vehicle_id || "vehicle"}-${event.start_time || event.end_time || "time"}-${event.type || "event"}`);
+}
+
+function performanceEventBehaviors(event) {
+  return [
+    ...(event?.primary_behaviors || []),
+    ...(event?.secondary_behaviors || []),
+    ...(event?.coachable_behaviors || []),
+    ...(event?.coached_behaviors || []),
+    ...(event?.annotation_tags || []),
+  ].filter((value, index, list) => value && list.indexOf(value) === index);
+}
+
+function performanceEventVideoSources(event) {
+  return event?.camera_media?.video_sources || [];
+}
+
+function performanceEventImageSources(event) {
+  return event?.camera_media?.image_sources || [];
+}
+
+function defaultPerformanceVideoKey(event) {
+  return performanceEventVideoSources(event)[0]?.key || "";
+}
+
 function vehicleAttentionScore(vehicle) {
   let score = 0;
   const fuelPercent = vehicleFuelPercent(vehicle);
@@ -276,6 +317,141 @@ function PreviewBlock({ title, items, emptyText, renderItem }) {
       </div>
       {items.length ? <div className="motive-preview-list">{items.map(renderItem)}</div> : <div className="empty-route-card compact">{emptyText}</div>}
     </section>
+  );
+}
+
+function IncidentStat({ label, value, detail }) {
+  return (
+    <article className="motive-incident-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRefresh, refreshing }) {
+  if (!event) {
+    return null;
+  }
+
+  const videoSources = performanceEventVideoSources(event);
+  const imageSources = performanceEventImageSources(event);
+  const activeVideo = videoSources.find((source) => source.key === videoKey) || videoSources[0] || null;
+  const behaviors = performanceEventBehaviors(event);
+  const contextEntries = Object.entries(event.additional_context || {});
+  const cameraPositions = event.camera_media?.camera_positions || [];
+
+  return (
+    <div className="motive-incident-backdrop" onClick={onClose}>
+      <div className="motive-incident-dialog" onClick={(clickEvent) => clickEvent.stopPropagation()}>
+        <button type="button" className="motive-incident-close" onClick={onClose}>
+          Close
+        </button>
+
+        <div className="motive-incident-head">
+          <span className="motive-incident-eyebrow">{videoSources.length ? "Motive Clip Ready" : "Motive Safety Incident"}</span>
+          <h3>{formatKeyLabel(event.type || "event")}</h3>
+          <p>
+            {[event.location || "Location unavailable", event.coaching_status ? `Coaching: ${formatKeyLabel(event.coaching_status)}` : null, event.severity ? `Severity: ${formatKeyLabel(event.severity)}` : null]
+              .filter(Boolean)
+              .join(" | ")}
+          </p>
+        </div>
+
+        <div className="motive-incident-media-shell">
+          {activeVideo ? (
+            <video
+              key={activeVideo.url}
+              className="motive-incident-video"
+              controls
+              playsInline
+              preload="metadata"
+              src={activeVideo.url}
+            />
+          ) : imageSources.length ? (
+            <div className="motive-incident-image-grid">
+              {imageSources.map((source) => (
+                <a key={source.key} href={source.url} target="_blank" rel="noreferrer" className="motive-incident-image-link">
+                  <img src={source.url} alt={source.label} className="motive-incident-image" />
+                  <span>{source.label}</span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-route-card compact">
+              Motive returned the incident, but there is no downloadable clip on this event yet.
+            </div>
+          )}
+
+          {videoSources.length > 1 ? (
+            <div className="motive-incident-video-tabs">
+              {videoSources.map((source) => (
+                <button
+                  key={source.key}
+                  type="button"
+                  className={`workspace-inline-tab ${activeVideo?.key === source.key ? "active" : ""}`.trim()}
+                  onClick={() => onVideoKeyChange(source.key)}
+                >
+                  {source.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="motive-incident-actions">
+            <button type="button" className="secondary-button" onClick={onRefresh} disabled={refreshing}>
+              {refreshing ? "Refreshing clip..." : "Refresh clip link"}
+            </button>
+            {activeVideo ? (
+              <a className="secondary-button" href={activeVideo.url} target="_blank" rel="noreferrer">
+                Open clip
+              </a>
+            ) : null}
+          </div>
+
+          <small className="motive-incident-note">
+            Motive video URLs are temporary signed links. If a clip stops loading, refresh the truck detail to request a new link.
+          </small>
+        </div>
+
+        <div className="motive-incident-stat-grid">
+          <IncidentStat label="Start" value={formatTimestamp(event.start_time)} detail={formatSpeedLabel(event.start_speed)} />
+          <IncidentStat label="End" value={formatTimestamp(event.end_time)} detail={formatSpeedLabel(event.end_speed)} />
+          <IncidentStat label="Max speed" value={formatSpeedLabel(event.max_speed)} detail={event.duration_seconds ? formatDurationSeconds(event.duration_seconds) : "Duration unknown"} />
+          <IncidentStat label="Trigger" value={event.trigger ? formatKeyLabel(event.trigger) : "Unknown"} detail={event.intensity ? `Intensity: ${event.intensity}` : "Trigger context"} />
+          <IncidentStat label="Camera" value={cameraPositions.length ? cameraPositions.map(formatKeyLabel).join(", ") : "No camera angle"} detail={event.camera_media?.camera_type || event.camera_media?.auto_transcode_status || "Camera meta unavailable"} />
+          <IncidentStat label="Uploaded" value={formatTimestamp(event.camera_media?.uploaded_at)} detail={event.driver_name || "Driver unavailable"} />
+        </div>
+
+        {behaviors.length ? (
+          <section className="motive-incident-section">
+            <h4>Behaviors and tags</h4>
+            <div className="motive-incident-chip-rail">
+              {behaviors.map((behavior) => (
+                <span key={behavior} className="motive-incident-chip">
+                  {formatKeyLabel(behavior)}
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {contextEntries.length ? (
+          <section className="motive-incident-section">
+            <h4>Violation details</h4>
+            <div className="motive-incident-context-grid">
+              {contextEntries.map(([key, values]) => (
+                <article key={key} className="motive-incident-context-card">
+                  <strong>{formatKeyLabel(key)}</strong>
+                  <small>{values.map(formatKeyLabel).join(", ")}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -370,6 +546,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [mapView, setMapView] = useState("fleet");
+  const [selectedIncidentId, setSelectedIncidentId] = useState("");
+  const [selectedIncidentVideoKey, setSelectedIncidentVideoKey] = useState("");
 
   useEffect(() => {
     setIntegration(null);
@@ -382,7 +560,35 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     setDetailError("");
     setSelectedVehicleId(null);
     setMapView("fleet");
+    setSelectedIncidentId("");
+    setSelectedIncidentVideoKey("");
   }, [token]);
+
+  const fetchVehicleDetail = useCallback(
+    async (vehicleId, forceRefresh = false) => (
+      apiRequest(`/motive/vehicles/${vehicleId}${forceRefresh ? "?refresh=true" : ""}`, {}, token)
+    ),
+    [token]
+  );
+
+  const loadVehicleDetail = useCallback(
+    async (vehicleId, forceRefresh = false) => {
+      if (!token || !vehicleId) return null;
+      setDetailLoading(true);
+      setDetailError("");
+      try {
+        const data = await fetchVehicleDetail(vehicleId, forceRefresh);
+        setDetail(data);
+        return data;
+      } catch (fetchError) {
+        setDetailError(fetchError.message);
+        return null;
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [fetchVehicleDetail, token]
+  );
 
   const loadSnapshot = useCallback(
     async (forceRefresh = false, quiet = false) => {
@@ -408,6 +614,9 @@ export default function MotiveTrackingPanel({ token, active = true }) {
           }
           return defaultVehicleId(data.vehicles || []);
         });
+        if (forceRefresh && selectedVehicleId) {
+          await loadVehicleDetail(selectedVehicleId, true);
+        }
       } catch (fetchError) {
         setError(fetchError.message);
       } finally {
@@ -415,7 +624,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         setRefreshing(false);
       }
     },
-    [token]
+    [loadVehicleDetail, selectedVehicleId, token]
   );
 
 
@@ -554,6 +763,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     const nextVehicle = snapshot?.vehicles?.find((vehicle) => vehicle.id === vehicleId) || null;
     setSelectedVehicleId(vehicleId);
     setMapView(hasCoordinates(nextVehicle) ? "street" : "fleet");
+    setSelectedIncidentId("");
+    setSelectedIncidentVideoKey("");
   }, [snapshot]);
 
   useEffect(() => {
@@ -570,7 +781,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       setDetailLoading(true);
       setDetailError("");
       try {
-        const data = await apiRequest(`/motive/vehicles/${selectedVehicleId}`, {}, token);
+        const data = await fetchVehicleDetail(selectedVehicleId);
         if (!ignore) {
           setDetail(data);
         }
@@ -589,14 +800,32 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => {
       ignore = true;
     };
-  }, [detail?.vehicle?.id, integration?.configured, selectedVehicleId, token]);
+  }, [detail?.vehicle?.id, fetchVehicleDetail, integration?.configured, selectedVehicleId]);
 
   if (!token) {
     return <section className="panel motive-panel"><div className="empty-route-card">Sign in to view Motive fleet tracking.</div></section>;
   }
 
   const historyPoints = detail?.history?.points || [];
-  const currentVehicle = selectedVehicle || detail?.vehicle || null;
+  const currentVehicle = selectedVehicle && detail?.vehicle?.id && String(detail.vehicle.id) === String(selectedVehicle.id)
+    ? {
+      ...selectedVehicle,
+      ...detail.vehicle,
+      previews: {
+        ...(selectedVehicle.previews || {}),
+        ...(detail.vehicle.previews || {}),
+      },
+    }
+    : detail?.vehicle || selectedVehicle || null;
+  const currentSafetyEvents = detail?.performance_events?.items?.length
+    ? detail.performance_events.items
+    : currentVehicle?.previews?.performance_events || [];
+  const cameraIncidentCount = detail?.performance_events?.video_count
+    ?? currentSafetyEvents.filter((item) => performanceEventVideoSources(item).length > 0).length;
+  const selectedIncident = currentSafetyEvents.find((item) => performanceEventKey(item) === selectedIncidentId) || null;
+  const selectedIncidentResolvedVideoKey = selectedIncident && performanceEventVideoSources(selectedIncident).some((source) => source.key === selectedIncidentVideoKey)
+    ? selectedIncidentVideoKey
+    : defaultPerformanceVideoKey(selectedIncident);
   const currentFuelPercent = vehicleFuelPercent(currentVehicle);
   const currentVehicleMpg = vehicleMpgInfo(currentVehicle);
   const currentEldHours = currentVehicle?.eld_hours || {};
@@ -704,6 +933,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       {error ? <div className="notice error inline-notice">{error}</div> : null}
       {detailError ? <div className="notice error inline-notice">{detailError}</div> : null}
       {snapshotWarning ? <div className="notice info inline-notice">{snapshotWarning}</div> : null}
+      {detail?.performance_events?.warning ? <div className="notice info inline-notice">{detail.performance_events.warning}</div> : null}
 
       {!integration?.configured && !loading ? (
         <div className="motive-setup-card">
@@ -850,7 +1080,10 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <article className="motive-focus-stat">
                       <span>Faults</span>
                       <strong>{metricValue(selectedFaultCount)}</strong>
-                      <small>{metricValue(currentVehicle.fault_summary?.count)} recent fault records</small>
+                      <small>
+                        {metricValue(currentVehicle.fault_summary?.count)} recent fault records
+                        {cameraIncidentCount ? ` | ${metricValue(cameraIncidentCount)} camera incident${cameraIncidentCount === 1 ? "" : "s"}` : ""}
+                      </small>
                     </article>
                     <article className="motive-focus-stat">
                       <span>Drive left</span>
@@ -922,7 +1155,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                       <DetailCard label="MPG" value={currentVehicleMpg.value !== null ? `${decimalValue(currentVehicleMpg.value)} MPG` : "Unknown"} detail={currentVehicleMpg.source || "Motive fuel efficiency unavailable"} />
                       <DetailCard label="Odometer" value={currentVehicle.location?.true_odometer ? `${metricValue(currentVehicle.location.true_odometer)} mi` : currentVehicle.location?.odometer ? `${metricValue(currentVehicle.location.odometer)} mi` : "Unknown"} detail="Latest telematics reading" />
                       <DetailCard label="Engine Hours" value={currentVehicle.location?.true_engine_hours ? decimalValue(currentVehicle.location.true_engine_hours) : currentVehicle.location?.engine_hours ? decimalValue(currentVehicle.location.engine_hours) : "Unknown"} detail="Engine runtime" />
-                      <DetailCard label="Faults" value={metricValue(currentVehicle.fault_summary?.active_count)} detail={`${metricValue(currentVehicle.fault_summary?.count)} total recent`} />
+                      <DetailCard
+                        label="Faults"
+                        value={metricValue(currentVehicle.fault_summary?.active_count)}
+                        detail={`${metricValue(currentVehicle.fault_summary?.count)} total recent${cameraIncidentCount ? ` | ${metricValue(cameraIncidentCount)} video incident${cameraIncidentCount === 1 ? "" : "s"}` : ""}`}
+                      />
                       <DetailCard label="Utilization" value={currentVehicle.utilization_summary?.utilization_percentage !== null && currentVehicle.utilization_summary?.utilization_percentage !== undefined ? `${decimalValue(currentVehicle.utilization_summary.utilization_percentage)}%` : "Unknown"} detail="7-day utilization" />
                       <DetailCard label="Idle Time" value={`${decimalValue((currentVehicle.idle_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.idle_summary?.count)} idle events`} />
                       <DetailCard label="Drive Time" value={`${decimalValue((currentVehicle.driving_summary?.duration_seconds || 0) / 3600)} h`} detail={`${metricValue(currentVehicle.driving_summary?.distance_miles)} miles`} />
@@ -947,8 +1184,49 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               </aside>
 
               <div className="motive-preview-grid">
-                <PreviewBlock title="Fault Codes" items={currentVehicle?.previews?.fault_codes || []} emptyText="No recent fault records." renderItem={(item) => <div key={`fault-${item.id}`}><strong>{item.code || item.label || "Fault"}</strong><small>{item.description || item.status || "No description"}</small></div>} />
-                <PreviewBlock title="Safety Events" items={currentVehicle?.previews?.performance_events || []} emptyText="No recent coaching events." renderItem={(item) => <div key={`event-${item.id}`}><strong>{item.type || "Event"}</strong><small>{item.location || item.coaching_status || formatTimestamp(item.end_time)}</small></div>} />
+                <PreviewBlock
+                  title="Fault Codes"
+                  items={currentVehicle?.previews?.fault_codes || []}
+                  emptyText="No recent fault records."
+                  renderItem={(item) => (
+                    <div key={`fault-${item.id}`}>
+                      <strong>{item.code || item.label || "Fault"}</strong>
+                      <small>{[item.description || item.status || "No description", item.severity ? `Severity ${formatKeyLabel(item.severity)}` : null].filter(Boolean).join(" | ")}</small>
+                    </div>
+                  )}
+                />
+                <PreviewBlock
+                  title="Safety Events & Video"
+                  items={currentSafetyEvents}
+                  emptyText="No recent coaching events."
+                  renderItem={(item) => {
+                    const videoCount = performanceEventVideoSources(item).length;
+                    const imageCount = performanceEventImageSources(item).length;
+                    return (
+                      <button
+                        key={`event-${performanceEventKey(item)}`}
+                        type="button"
+                        className="motive-preview-action"
+                        onClick={() => {
+                          setSelectedIncidentId(performanceEventKey(item));
+                          setSelectedIncidentVideoKey(defaultPerformanceVideoKey(item));
+                        }}
+                      >
+                        <div className="motive-preview-action-head">
+                          <strong>{formatKeyLabel(item.type || "event")}</strong>
+                          <span className={`motive-preview-action-pill ${videoCount ? "live" : item.camera_available ? "pending" : ""}`.trim()}>
+                            {videoCount ? `${videoCount} clip${videoCount === 1 ? "" : "s"}` : imageCount ? `${imageCount} frame${imageCount === 1 ? "" : "s"}` : item.camera_available ? "Media pending" : "No clip"}
+                          </span>
+                        </div>
+                        <small>
+                          {[item.location || formatTimestamp(item.end_time), item.coaching_status ? `Coaching ${formatKeyLabel(item.coaching_status)}` : null, item.max_speed ? `${decimalValue(item.max_speed)} mph max` : null]
+                            .filter(Boolean)
+                            .join(" | ")}
+                        </small>
+                      </button>
+                    );
+                  }}
+                />
                 <PreviewBlock title="Driving Periods" items={currentVehicle?.previews?.driving_periods || []} emptyText="No recent drive periods." renderItem={(item) => <div key={`drive-${item.id}`}><strong>{item.origin || "Trip"}</strong><small>{item.destination || `${metricValue(item.distance_miles)} miles`}</small></div>} />
                 <PreviewBlock title="IFTA Trips" items={currentVehicle?.previews?.ifta_trips || []} emptyText="No recent IFTA trips." renderItem={(item) => <div key={`ifta-${item.id}`}><strong>{item.jurisdiction || "Trip"}</strong><small>{metricValue(item.distance_miles)} miles on {item.date || "unknown date"}</small></div>} />
                 <PreviewBlock title="HOS Logs" items={currentVehicle?.previews?.hos_logs || []} emptyText="No recent HOS logs." renderItem={(item) => <div key={`hos-${item.id || item.date}`}><strong>{item.date || "HOS log"}</strong><small>{item.is_signed ? "Signed" : "Unsigned"} | {metricValue(item.violation_count)} violation(s)</small></div>} />
@@ -979,6 +1257,18 @@ export default function MotiveTrackingPanel({ token, active = true }) {
           </div>
         </>
       ) : null}
+
+      <IncidentViewerDialog
+        event={selectedIncident}
+        videoKey={selectedIncidentResolvedVideoKey}
+        onVideoKeyChange={setSelectedIncidentVideoKey}
+        onClose={() => {
+          setSelectedIncidentId("");
+          setSelectedIncidentVideoKey("");
+        }}
+        onRefresh={() => loadVehicleDetail(selectedVehicleId, true)}
+        refreshing={detailLoading}
+      />
     </section>
   );
 }

@@ -120,6 +120,47 @@ def first_text(*values: object) -> str | None:
     return None
 
 
+def text_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [text for item in value if (text := clean_text(item))]
+    text = clean_text(value)
+    return [text] if text else []
+
+
+def float_list(value: object) -> list[float]:
+    if not isinstance(value, list):
+        return []
+    values: list[float] = []
+    for item in value:
+        parsed = as_float(item)
+        if parsed is not None:
+            values.append(parsed)
+    return values
+
+
+def compact_dict(payload: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", [], {})
+    }
+
+
+PERFORMANCE_EVENT_VIDEO_FIELDS: list[tuple[str, str]] = [
+    ("dual_facing_enhanced_url", "Dual camera enhanced"),
+    ("front_facing_enhanced_url", "Front camera enhanced"),
+    ("front_facing_plain_url", "Front camera"),
+    ("driver_facing_plain_url", "Driver camera"),
+    ("dual_facing_enhanced_ai_viz_url", "Dual AI view"),
+    ("front_facing_enhanced_ai_viz_url", "Front AI view"),
+]
+
+PERFORMANCE_EVENT_IMAGE_FIELDS: list[tuple[str, str]] = [
+    ("front_facing_jpg_url", "Front frame"),
+    ("driver_facing_jpg_url", "Driver frame"),
+]
+
+
 def unwrap_record(value: object) -> dict:
     if isinstance(value, dict) and len(value) == 1:
         first_value = next(iter(value.values()))
@@ -957,6 +998,8 @@ class MotiveClient:
         ]
         history_points = [point for point in history_points if point]
         history_points = sort_by_recent(history_points, "located_at")
+        performance_window_days = 14
+        performance_events, performance_error = self._fetch_vehicle_performance_events(vehicle_id, days=performance_window_days)
 
         response = {
             "fetched_at": iso_now(),
@@ -966,6 +1009,14 @@ class MotiveClient:
                 "count": len(history_points),
                 "points": history_points[:300],
             },
+            "performance_events": {
+                "window_days": performance_window_days,
+                "count": len(performance_events),
+                "pending_review_count": sum(1 for item in performance_events if (item.get("coaching_status") or "").lower() == "pending_review"),
+                "video_count": sum(1 for item in performance_events if (item.get("camera_media") or {}).get("video_sources")),
+                "image_count": sum(1 for item in performance_events if (item.get("camera_media") or {}).get("image_sources")),
+                "items": performance_events[:24],
+            },
         }
         if history_error and not history_points:
             response["warning"] = format_http_error(
@@ -973,7 +1024,87 @@ class MotiveClient:
                 history_error.detail if isinstance(history_error.detail, str) else None,
                 history_error.status_code,
             )
+        if performance_error and not performance_events:
+            response["performance_events"]["warning"] = format_http_error(
+                "Could not load camera safety events",
+                performance_error.detail if isinstance(performance_error.detail, str) else None,
+                performance_error.status_code,
+            )
         return response
+
+    def _performance_event_params(self, *, days: int, vehicle_id: int | None = None, media_required: bool | None = None) -> dict[str, object]:
+        params: dict[str, object] = dict(self._date_params(days))
+        if vehicle_id is not None:
+            params["vehicle_ids[]"] = [vehicle_id]
+        if media_required is not None:
+            params["media_required"] = "true" if media_required else "false"
+        return params
+
+    def _merge_performance_event_record(self, base: dict, incoming: dict) -> dict:
+        merged = dict(base)
+        for key, value in incoming.items():
+            if value in (None, "", [], {}):
+                continue
+            if key in {"primary_behaviors", "secondary_behaviors", "positive_behaviors", "coachable_behaviors", "coached_behaviors", "annotation_tags"}:
+                merged[key] = value
+                continue
+            if key == "camera_media":
+                current_media = merged.get("camera_media") if isinstance(merged.get("camera_media"), dict) else {}
+                merged[key] = {**current_media, **value}
+                continue
+            if key in {"metadata", "event_intensity", "telemetry", "additional_context"}:
+                current_value = merged.get(key) if isinstance(merged.get(key), dict) else {}
+                merged[key] = {**current_value, **value}
+                continue
+            merged[key] = value
+        return merged
+
+    def _fetch_vehicle_performance_events(self, vehicle_id: int, *, days: int) -> tuple[list[dict], HTTPException | None]:
+        all_events: list[dict] = []
+        media_events: list[dict] = []
+        first_error: HTTPException | None = None
+
+        for media_required in (False, True):
+            try:
+                payload = self._paginate(
+                    "/v2/driver_performance_events",
+                    ("driver_performance_events",),
+                    page_size=50,
+                    max_pages=3,
+                    extra_params=self._performance_event_params(days=days, vehicle_id=vehicle_id, media_required=media_required),
+                )
+                normalized = [self._normalize_performance_event(item) for item in unwrap_records(payload)]
+                if media_required:
+                    media_events = normalized
+                else:
+                    all_events = normalized
+            except HTTPException as exc:
+                if first_error is None:
+                    first_error = exc
+
+        if not all_events and not media_events:
+            return [], first_error
+
+        merged_by_key: dict[str, dict] = {}
+        ordered_keys: list[str] = []
+        for event in sort_by_recent(all_events, "end_time", "start_time"):
+            key = str(event.get("id") or f"{event.get('start_time')}-{event.get('type')}-{event.get('vehicle_id')}")
+            if key not in merged_by_key:
+                ordered_keys.append(key)
+                merged_by_key[key] = event
+            else:
+                merged_by_key[key] = self._merge_performance_event_record(merged_by_key[key], event)
+
+        for event in sort_by_recent(media_events, "end_time", "start_time"):
+            key = str(event.get("id") or f"{event.get('start_time')}-{event.get('type')}-{event.get('vehicle_id')}")
+            if key not in merged_by_key:
+                ordered_keys.append(key)
+                merged_by_key[key] = event
+            else:
+                merged_by_key[key] = self._merge_performance_event_record(merged_by_key[key], event)
+
+        merged_events = [merged_by_key[key] for key in ordered_keys]
+        return sort_by_recent(merged_events, "end_time", "start_time"), first_error
 
     def _date_params(self, days: int) -> dict[str, str]:
         end_date = utc_today()
@@ -1746,15 +1877,37 @@ class MotiveClient:
         driver = unwrap_record(item.get("driver"))
         metadata = unwrap_record(item.get("metadata"))
         camera_media = unwrap_record(item.get("camera_media"))
+        additional_context = unwrap_record(metadata.get("additional_context"))
+        event_intensity = unwrap_record(item.get("event_intensity"))
+        downloadable_videos = unwrap_record(camera_media.get("downloadable_videos"))
+        downloadable_images = unwrap_record(camera_media.get("downloadable_images"))
+        video_sources = [
+            {"key": key, "label": label, "url": url}
+            for key, label in PERFORMANCE_EVENT_VIDEO_FIELDS
+            if (url := first_text(downloadable_videos.get(key)))
+        ]
+        image_sources = [
+            {"key": key, "label": label, "url": url}
+            for key, label in PERFORMANCE_EVENT_IMAGE_FIELDS
+            if (url := first_text(downloadable_images.get(key)))
+        ]
+        sub_events = [
+            self._normalize_performance_event(child)
+            for child in (item.get("sub_events") or [])
+            if isinstance(child, dict)
+        ]
         return {
             "id": as_int(item.get("id")),
             "vehicle_id": as_int(vehicle.get("id")),
             "vehicle_number": first_text(vehicle.get("number")),
             "driver_name": " ".join(part for part in [first_text(driver.get("first_name")), first_text(driver.get("last_name"))] if part).strip() or first_text(driver.get("email")),
             "type": first_text(item.get("type")),
-            "primary_behaviors": item.get("primary_behavior") or [],
-            "secondary_behaviors": item.get("secondary_behaviors") or [],
-            "positive_behaviors": item.get("positive_behaviors") or [],
+            "primary_behaviors": text_list(item.get("primary_behavior")),
+            "secondary_behaviors": text_list(item.get("secondary_behaviors")),
+            "positive_behaviors": text_list(item.get("positive_behaviors")),
+            "coachable_behaviors": text_list(item.get("coachable_behaviors")),
+            "coached_behaviors": text_list(item.get("coached_behaviors")),
+            "annotation_tags": text_list(item.get("annotation_tags")),
             "coaching_status": first_text(item.get("coaching_status")),
             "coached_at": first_text(item.get("coached_at")),
             "start_time": first_text(item.get("start_time")),
@@ -1767,8 +1920,51 @@ class MotiveClient:
             "end_speed": as_float(item.get("end_speed")),
             "max_speed": as_float(item.get("max_speed")),
             "min_speed": as_float(item.get("min_speed")),
-            "severity": first_text(metadata.get("severity")),
-            "camera_available": as_bool(camera_media.get("available")),
+            "severity": first_text(item.get("severity"), metadata.get("severity"), additional_context.get("severity")),
+            "trigger": first_text(item.get("trigger"), metadata.get("trigger")),
+            "intensity": first_text(item.get("intensity")),
+            "event_intensity": compact_dict({
+                "name": first_text(event_intensity.get("name")),
+                "value": first_text(event_intensity.get("value")),
+                "unit_type": first_text(event_intensity.get("unit_type")),
+            }),
+            "metadata": compact_dict({
+                "severity": first_text(metadata.get("severity")),
+                "trigger": first_text(metadata.get("trigger")),
+            }),
+            "additional_context": {
+                str(key): values
+                for key, value in additional_context.items()
+                if (values := text_list(value))
+            },
+            "telemetry": compact_dict({
+                "gps_speed_mph": float_list(item.get("m_gps_spd")),
+                "vehicle_speed_mph": float_list(item.get("m_veh_spd")),
+                "gps_heading": float_list(item.get("m_gps_heading")),
+                "gps_lat": float_list(item.get("m_gps_lat")),
+                "gps_lon": float_list(item.get("m_gps_lon")),
+                "vehicle_odometer": first_text(item.get("m_veh_odo")),
+            }),
+            "camera_available": as_bool(camera_media.get("available")) or bool(video_sources or image_sources),
+            "camera_media": compact_dict({
+                "id": as_int(camera_media.get("id")),
+                "available": as_bool(camera_media.get("available")) or bool(video_sources or image_sources),
+                "camera_positions": text_list(camera_media.get("cam_positions")),
+                "camera_type": first_text(camera_media.get("cam_type")),
+                "uploaded_at": first_text(camera_media.get("uploaded_at")),
+                "start_time": first_text(camera_media.get("start_time")),
+                "duration_seconds": duration_to_seconds(camera_media.get("duration")),
+                "auto_transcode_status": first_text(camera_media.get("auto_transcode_status")),
+                "downloadable_videos": {
+                    source["key"]: source["url"] for source in video_sources
+                },
+                "downloadable_images": {
+                    source["key"]: source["url"] for source in image_sources
+                },
+                "video_sources": video_sources,
+                "image_sources": image_sources,
+            }),
+            "sub_events": sub_events,
         }
 
     def _normalize_ifta_trip(self, raw: dict) -> dict:
