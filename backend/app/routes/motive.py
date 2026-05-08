@@ -8,6 +8,7 @@ from app.auth import require_user_department
 from app.config import get_settings
 from app.database import get_db
 from app.models import User
+from app.motive_archive import build_vehicle_archive
 from app.motive import MotiveClient
 from app.motive_export import build_motive_snapshot_workbook
 from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics, sync_motive_daily_statistics
@@ -46,6 +47,16 @@ def motive_vehicle_detail(
     detail = client.fetch_vehicle_detail(vehicle_id=vehicle_id, force_refresh=refresh)
     detail["statistics"] = build_vehicle_statistics_detail(db, detail.get("vehicle") or {})
     return detail
+
+
+@router.get("/vehicles/{vehicle_id}/history")
+def motive_vehicle_history(
+    vehicle_id: int = Path(..., ge=1),
+    limit: int = Query(default=25, ge=1, le=200, description="How many archived snapshots and change events to return."),
+    current_user: User = Depends(require_user_department("fuel", "statistics")),
+    db: Session = Depends(get_db),
+):
+    return build_vehicle_archive(db, vehicle_id=vehicle_id, limit=limit)
 
 
 @router.get("/export")

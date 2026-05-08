@@ -18,6 +18,7 @@ from fastapi import HTTPException, status
 
 from app.config import Settings
 from app.database import SessionLocal
+from app.motive_archive import sync_motive_vehicle_archive
 from app.geo import format_coordinate_label, looks_approximate_location_label, looks_coarse_location_label, reverse_geocode_point
 from app.motive_statistics import sync_motive_daily_statistics
 
@@ -487,7 +488,17 @@ class MotiveClient:
             snapshot = self._build_snapshot()
             try:
                 with SessionLocal() as db:
-                    sync_motive_daily_statistics(db, snapshot)
+                    try:
+                        sync_motive_vehicle_archive(db, snapshot)
+                    except Exception as exc:
+                        db.rollback()
+                        warnings = list(snapshot.get("warnings") or [])
+                        warnings.insert(0, f"Truck archive sync failed: {exc}")
+                        snapshot["warnings"] = list(dict.fromkeys(warnings))
+                    try:
+                        sync_motive_daily_statistics(db, snapshot)
+                    except Exception:
+                        db.rollback()
             except Exception:
                 pass
         except Exception as exc:

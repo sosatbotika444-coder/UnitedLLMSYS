@@ -75,6 +75,89 @@ class MotiveVehicleDailyStat(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class MotiveSnapshotRun(Base):
+    __tablename__ = "motive_snapshot_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    auth_mode: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    total_vehicles: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    moving_vehicles: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    stale_vehicles: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    metrics_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    datasets_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    recent_activity_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    warnings_payload: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
+class MotiveVehicleSnapshot(Base):
+    __tablename__ = "motive_vehicle_snapshots"
+    __table_args__ = (
+        UniqueConstraint("snapshot_run_id", "vehicle_id", name="uq_motive_vehicle_snapshots_run_vehicle"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    snapshot_run_id: Mapped[int] = mapped_column(ForeignKey("motive_snapshot_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    vehicle_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    snapshot_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    vehicle_number: Mapped[str] = mapped_column(String(128), default="", nullable=False, index=True)
+    vin: Mapped[str] = mapped_column(String(128), default="", nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
+    availability_status: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
+    driver_name: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    driver_source: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    make: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    model: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    year: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    fuel_type: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    license_plate_number: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
+    license_plate_state: Mapped[str] = mapped_column(String(16), default="", nullable=False, index=True)
+    location_label: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    location_city: Mapped[str] = mapped_column(String(128), default="", nullable=False, index=True)
+    location_state: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
+    location_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_located_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    telemetry_age_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    speed_mph: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odometer_miles: Mapped[float | None] = mapped_column(Float, nullable=True)
+    engine_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_level_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    range_remaining: Mapped[float | None] = mapped_column(Float, nullable=True)
+    battery_voltage: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mpg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    active_fault_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    severe_fault_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    utilization_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    drive_miles_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    idle_hours_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ifta_miles_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_moving: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
+class MotiveVehicleChangeEvent(Base):
+    __tablename__ = "motive_vehicle_change_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    snapshot_run_id: Mapped[int] = mapped_column(ForeignKey("motive_snapshot_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    vehicle_snapshot_id: Mapped[int] = mapped_column(ForeignKey("motive_vehicle_snapshots.id", ondelete="CASCADE"), nullable=False, index=True)
+    previous_snapshot_id: Mapped[int | None] = mapped_column(ForeignKey("motive_vehicle_snapshots.id", ondelete="SET NULL"), nullable=True, index=True)
+    vehicle_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    vehicle_number: Mapped[str] = mapped_column(String(128), default="", nullable=False, index=True)
+    snapshot_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    change_kind: Mapped[str] = mapped_column(String(32), default="updated", nullable=False, index=True)
+    change_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    changed_fields: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    diff_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
 class CommercialLead(Base):
     __tablename__ = "commercial_leads"
 
