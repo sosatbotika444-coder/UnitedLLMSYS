@@ -197,6 +197,9 @@ export default function MotiveDashboardCards({ token, active = true }) {
     () => watchSections.reduce((sum, section) => sum + section.items.length, 0),
     [watchSections]
   );
+  const cacheStatus = snapshot?.cache?.status || "";
+  const isWarming = cacheStatus === "warming" || (!snapshot?.fetched_at && !error && !loading);
+  const warnings = Array.isArray(snapshot?.warnings) ? snapshot.warnings : [];
 
   if (!token) {
     return null;
@@ -215,9 +218,12 @@ export default function MotiveDashboardCards({ token, active = true }) {
       </div>
 
       {error ? <div className="notice error inline-notice">{error}</div> : null}
+      {!error && warnings.length ? <div className="notice info inline-notice">{warnings[0]}</div> : null}
 
       {loading ? (
         <div className="empty-route-card">Loading Motive dashboard cards...</div>
+      ) : isWarming ? (
+        <div className="empty-route-card">Motive fleet is syncing right now. The dashboard will fill in as soon as the first live snapshot finishes.</div>
       ) : snapshot ? (
         <>
           <div className="motive-command-metrics">

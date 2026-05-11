@@ -465,11 +465,9 @@ class MotiveClient:
         }
 
     def _hydrate_snapshot_cache(self, ttl_seconds: int) -> None:
-        should_load_disk = False
         with SNAPSHOT_LOCK:
-            if not SNAPSHOT_CACHE.get("loaded_disk"):
-                SNAPSHOT_CACHE["loaded_disk"] = True
-                should_load_disk = SNAPSHOT_CACHE.get("snapshot") is None
+            should_load_disk = SNAPSHOT_CACHE.get("snapshot") is None
+            SNAPSHOT_CACHE["loaded_disk"] = True
 
         if not should_load_disk:
             return
