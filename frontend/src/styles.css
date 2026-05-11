@@ -31,6 +31,13 @@ a {
   font: inherit;
 }
 
+button,
+a,
+[role="button"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 button {
   cursor: pointer;
 }
@@ -13660,15 +13667,17 @@ body.theme-blue .route-history-stops div.selected {
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.06);
   background: rgba(248, 250, 252, 0.9);
-}
-
-button.statistics-leader-row {
   width: 100%;
   text-align: left;
+}
+
+.statistics-leader-row.is-clickable {
+  cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
-button.statistics-leader-row:hover,
+.statistics-leader-row.is-clickable:hover,
+.statistics-leader-row.is-clickable:focus-visible,
 .statistics-leader-row.active {
   transform: translateY(-1px);
   border-color: rgba(37, 99, 235, 0.22);

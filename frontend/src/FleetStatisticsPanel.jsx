@@ -336,7 +336,7 @@ function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVe
           const active = String(item.vehicle_id || "") === String(selectedVehicleId || "");
           const sharedProps = {
             key: `${title}-${item.vehicle_id}-${index}`,
-            className: `statistics-leader-row ${active ? "active" : ""}`.trim(),
+            className: `statistics-leader-row ${onSelect ? "is-clickable" : ""} ${active ? "active" : ""}`.trim(),
           };
           const content = (
             <>
@@ -349,9 +349,21 @@ function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVe
             </>
           );
           return onSelect ? (
-            <button {...sharedProps} type="button" onClick={() => onSelect(item.vehicle_id)}>
+            <div
+              {...sharedProps}
+              role="button"
+              tabIndex={0}
+              aria-pressed={active}
+              onClick={() => onSelect(item.vehicle_id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(item.vehicle_id);
+                }
+              }}
+            >
               {content}
-            </button>
+            </div>
           ) : (
             <div {...sharedProps}>
               {content}

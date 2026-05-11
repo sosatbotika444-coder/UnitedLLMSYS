@@ -2251,12 +2251,6 @@ export default function App() {
             accountTitle={user.full_name}
             accountSubtitle={user.email}
             accountBadge="Statistics access"
-            noteLabel="Analytics Core"
-            noteTitle="Fleet intelligence"
-            noteSubtitle="Watch every truck, compare daily and monthly miles, and open a full profile for any unit in one premium analytics surface."
-            footerDate={currentDate}
-            footerTitle="Statistics ready"
-            footerSubtitle="Realtime fleet intelligence"
             onLogout={logout}
           />
 
