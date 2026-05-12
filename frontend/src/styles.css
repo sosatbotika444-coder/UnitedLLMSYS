@@ -21063,3 +21063,196 @@ html {
     transition: none !important;
   }
 }
+
+/* Reference-style flat buttons: no gradients, no text borders, compact SaaS shape */
+.site-page-shell .startup-button,
+.site-page-shell .primary-button,
+.site-page-shell .secondary-button,
+.site-page-shell .tabs button,
+.site-page-shell .site-nav-button,
+.site-page-shell .map-link,
+.site-page-shell button[type="submit"],
+.site-page-shell a[role="button"] {
+  border: 0 !important;
+  border-image: none !important;
+  border-radius: 4px !important;
+  background-image: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  outline-offset: 3px;
+}
+
+.site-page-shell .startup-button,
+.site-page-shell .site-header-cta,
+.site-page-shell .primary-button,
+.site-page-shell .map-link,
+.site-page-shell .tabs button.active,
+.site-page-shell .auth-submit,
+.site-page-shell button[type="submit"] {
+  min-height: 34px;
+  padding: 0 15px;
+  background: #1087ff !important;
+  color: #ffffff !important;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.site-page-shell .startup-button-secondary,
+.site-page-shell .secondary-button,
+.site-page-shell .tabs button {
+  min-height: 34px;
+  padding: 0 15px;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.site-page-shell .site-nav-button {
+  min-height: 34px;
+  padding: 0 10px;
+  background: transparent !important;
+  color: #111827 !important;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.site-page-shell .site-nav-button:hover,
+.site-page-shell .site-nav-button-active {
+  background: #f4f4f5 !important;
+  color: #000000 !important;
+  transform: none;
+}
+
+.site-page-shell .startup-button-primary:hover,
+.site-page-shell .site-header-cta:hover,
+.site-page-shell .primary-button:hover,
+.site-page-shell .auth-submit:hover,
+.site-page-shell .map-link:hover,
+.site-page-shell button[type="submit"]:hover {
+  background: #0075e8 !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+
+.site-page-shell .startup-button-secondary:hover,
+.site-page-shell .secondary-button:hover,
+.site-page-shell .tabs button:hover {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+  transform: translateY(-1px);
+}
+
+.site-page-shell .startup-plan-card .startup-button-secondary,
+.site-page-shell .startup-hero .startup-button-secondary {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.site-page-shell .commercial-auth-card .tabs {
+  gap: 8px !important;
+}
+
+.site-page-shell .commercial-auth-card .tabs button.active {
+  background: #1087ff !important;
+  color: #ffffff !important;
+}
+
+.site-page-shell .commercial-auth-card .tabs button:not(.active) {
+  background: #f4f4f5 !important;
+  color: #111827 !important;
+}
+
+.site-page-shell .startup-button svg,
+.site-page-shell .primary-button svg,
+.site-page-shell .secondary-button svg,
+.site-page-shell .tabs button svg,
+.site-page-shell .site-nav-button svg {
+  filter: none !important;
+}
+
+.primary-button,
+.primary-button-brand,
+.secondary-button,
+.delete-button,
+.ghost-button,
+.map-link,
+.tabs button,
+.workspace-inline-tab,
+.mobile-internal-tabs button,
+.mobile-bottom-nav button,
+.workspace-sidebar-link,
+.workspace-sidebar-create,
+.workspace-sidebar-logout,
+.team-chat-filter-row button,
+.team-chat-message-actions button,
+.team-chat-composer-context button,
+.mobile-more-sheet button {
+  background-image: none !important;
+  border-image: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.primary-button,
+.primary-button-brand,
+.map-link,
+.tabs button.active,
+.workspace-inline-tab.active,
+.mobile-internal-tabs button.active {
+  background: #1087ff !important;
+  border: 0 !important;
+  color: #ffffff !important;
+}
+
+.secondary-button,
+.ghost-button,
+.tabs button,
+.workspace-inline-tab,
+.mobile-internal-tabs button,
+.mobile-bottom-nav button,
+.workspace-sidebar-link,
+.workspace-sidebar-create,
+.workspace-sidebar-logout,
+.team-chat-filter-row button,
+.team-chat-message-actions button,
+.team-chat-composer-context button,
+.mobile-more-sheet button {
+  background: #ffffff !important;
+  border: 0 !important;
+  color: #111827 !important;
+}
+
+.delete-button {
+  background: #ef4444 !important;
+  border: 0 !important;
+  color: #ffffff !important;
+}
+
+.primary-button:hover,
+.primary-button-brand:hover,
+.map-link:hover,
+.tabs button.active:hover,
+.workspace-inline-tab.active:hover,
+.mobile-internal-tabs button.active:hover {
+  background: #0075e8 !important;
+  color: #ffffff !important;
+}
+
+.secondary-button:hover,
+.ghost-button:hover,
+.tabs button:hover,
+.workspace-inline-tab:hover,
+.mobile-internal-tabs button:hover,
+.mobile-bottom-nav button:hover,
+.workspace-sidebar-link:hover,
+.workspace-sidebar-create:hover,
+.workspace-sidebar-logout:hover,
+.team-chat-filter-row button:hover,
+.team-chat-message-actions button:hover,
+.team-chat-composer-context button:hover,
+.mobile-more-sheet button:hover {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+}
