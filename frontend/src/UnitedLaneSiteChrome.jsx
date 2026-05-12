@@ -392,7 +392,14 @@ export function UnitedLaneMark({ className = "" }) {
   );
 }
 
-export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = "", action = null }) {
+export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = "", action = null, navItems = null }) {
+  const items = navItems || [
+    { id: "home", label: "HOME", icon: "home", onClick: onHome },
+    { id: "about", label: "ABOUT US", icon: "about", onClick: onAbout },
+    { id: "docs", label: "DOCS", icon: "docs", onClick: onDocs },
+    { id: "privacy", label: "PRIVACY & TERMS", icon: "privacy", onClick: onPrivacy },
+  ];
+
   return (
     <header className="site-header">
       <div className="site-header-frame">
@@ -406,22 +413,12 @@ export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = ""
           </button>
 
           <nav className="site-nav" aria-label="Site navigation">
-            <button className={getNavButtonClass(activeItem, "home")} type="button" onClick={onHome}>
-              <UnitedIcon name="home" size={16} />
-              HOME
-            </button>
-            <button className={getNavButtonClass(activeItem, "about")} type="button" onClick={onAbout}>
-              <UnitedIcon name="about" size={16} />
-              ABOUT US
-            </button>
-            <button className={getNavButtonClass(activeItem, "docs")} type="button" onClick={onDocs}>
-              <UnitedIcon name="docs" size={16} />
-              DOCS
-            </button>
-            <button className={getNavButtonClass(activeItem, "privacy")} type="button" onClick={onPrivacy}>
-              <UnitedIcon name="privacy" size={16} />
-              PRIVACY & TERMS
-            </button>
+            {items.map((item) => (
+              <button className={getNavButtonClass(activeItem, item.id)} type="button" onClick={item.onClick} key={item.id}>
+                <UnitedIcon name={item.icon || "spark"} size={16} />
+                {item.label}
+              </button>
+            ))}
           </nav>
 
           {action ? (

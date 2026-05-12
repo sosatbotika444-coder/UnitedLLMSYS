@@ -2047,11 +2047,19 @@ export default function App() {
       <div className="site-page-shell">
         <SiteHeader
           onHome={handleHomeNavigation}
-          onAbout={() => openSitePanel("about")}
-          onDocs={() => openSitePanel("docs")}
-          onPrivacy={() => openSitePanel("privacy")}
+          onAbout={() => scrollToMarketingSection("about")}
+          onDocs={() => scrollToMarketingSection("analytics")}
+          onPrivacy={() => scrollToMarketingSection("pricing")}
           activeItem={activeSiteNav}
           action={{ label: "Client Sign In", icon: "user", onClick: focusClientAccess }}
+          navItems={[
+            { id: "home", label: "Home", icon: "home", onClick: handleHomeNavigation },
+            { id: "features", label: "Features", icon: "spark", onClick: () => scrollToMarketingSection("features") },
+            { id: "about", label: "About", icon: "about", onClick: () => scrollToMarketingSection("about") },
+            { id: "analytics", label: "Analytics", icon: "chart", onClick: () => scrollToMarketingSection("analytics") },
+            { id: "pricing", label: "Plans", icon: "approvals", onClick: () => scrollToMarketingSection("pricing") },
+            { id: "faq", label: "FAQ", icon: "info", onClick: () => scrollToMarketingSection("faq") },
+          ]}
         />
 
         <CommercialLanding authPanel={authPanel} mobile={isMobileViewport} />
