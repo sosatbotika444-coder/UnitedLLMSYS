@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     motive_snapshot_disk_cache_enabled: bool = True
     motive_snapshot_cache_file: str = ""
     motive_background_refresh_enabled: bool = True
+    motive_startup_refresh_enabled: bool = False
     motive_background_refresh_interval_seconds: int = 60
     motive_vehicle_history_days: int = 2
     live_price_background_refresh_enabled: bool = True
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
     live_price_queue_max_size: int = 2048
     station_catalog_max_age_days: int = 30
     station_catalog_background_refresh_enabled: bool = True
+    station_catalog_startup_refresh_enabled: bool = False
     station_catalog_blocking_rebuild_on_miss_enabled: bool = False
     route_live_price_blocking_limit: int = 18
     route_live_price_timeout_seconds: float = 12.0

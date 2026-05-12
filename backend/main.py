@@ -13,7 +13,6 @@ from app.database import Base, SessionLocal, engine, ensure_runtime_schema
 from app.motive import motive_snapshot_runtime_status, start_motive_snapshot_refresh_worker, stop_motive_snapshot_refresh_worker
 from app.official_stations import (
     live_price_runtime_status,
-    start_live_price_refresh_workers,
     start_station_catalog_refresh_if_needed,
     station_catalog_runtime_status,
     stop_live_price_refresh_workers,
@@ -37,9 +36,10 @@ def _bootstrap_database() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _bootstrap_database()
-    start_station_catalog_refresh_if_needed()
-    start_live_price_refresh_workers()
-    start_motive_snapshot_refresh_worker(settings)
+    if settings.station_catalog_startup_refresh_enabled:
+        start_station_catalog_refresh_if_needed()
+    if settings.motive_startup_refresh_enabled:
+        start_motive_snapshot_refresh_worker(settings)
     try:
         yield
     finally:
