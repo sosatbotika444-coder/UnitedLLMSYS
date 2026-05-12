@@ -18,7 +18,7 @@ from fastapi import HTTPException, status
 
 from app.config import Settings
 from app.database import SessionLocal
-from app.motive_archive import sync_motive_vehicle_archive
+from app.motive_archive import build_latest_motive_snapshot, sync_motive_vehicle_archive
 from app.geo import format_coordinate_label, looks_approximate_location_label, looks_coarse_location_label, reverse_geocode_point
 from app.motive_statistics import sync_motive_daily_statistics
 
@@ -43,6 +43,7 @@ SNAPSHOT_CACHE: dict[str, object] = {
     "snapshot": None,
     "expires_at": 0.0,
     "building": False,
+    "loaded_db": False,
     "loaded_disk": False,
     "last_error": "",
     "last_refresh_started_at": 0.0,
@@ -344,6 +345,17 @@ def _load_snapshot_from_disk(settings: Settings) -> dict | None:
     return snapshot
 
 
+def _load_snapshot_from_postgres() -> dict | None:
+    try:
+        with SessionLocal() as db:
+            snapshot = build_latest_motive_snapshot(db)
+    except Exception:
+        return None
+    if not _snapshot_is_usable(snapshot):
+        return None
+    return snapshot
+
+
 def _write_snapshot_to_disk(settings: Settings, snapshot: dict) -> None:
     if not getattr(settings, "motive_snapshot_disk_cache_enabled", True):
         return
@@ -367,6 +379,7 @@ def motive_snapshot_runtime_status() -> dict:
         return {
             "cached": bool(snapshot),
             "building": bool(SNAPSHOT_CACHE.get("building")),
+            "loaded_db": bool(SNAPSHOT_CACHE.get("loaded_db")),
             "loaded_disk": bool(SNAPSHOT_CACHE.get("loaded_disk")),
             "worker_running": bool(SNAPSHOT_WORKER_THREAD and SNAPSHOT_WORKER_THREAD.is_alive()),
             "fetched_at": snapshot.get("fetched_at") if snapshot else "",
@@ -466,13 +479,17 @@ class MotiveClient:
 
     def _hydrate_snapshot_cache(self, ttl_seconds: int) -> None:
         with SNAPSHOT_LOCK:
-            should_load_disk = SNAPSHOT_CACHE.get("snapshot") is None
-            SNAPSHOT_CACHE["loaded_disk"] = True
+            should_load_cache = SNAPSHOT_CACHE.get("snapshot") is None
+            SNAPSHOT_CACHE["loaded_db"] = True
 
-        if not should_load_disk:
+        if not should_load_cache:
             return
 
-        snapshot = _load_snapshot_from_disk(self.settings)
+        snapshot = _load_snapshot_from_postgres()
+        if not snapshot:
+            with SNAPSHOT_LOCK:
+                SNAPSHOT_CACHE["loaded_disk"] = True
+            snapshot = _load_snapshot_from_disk(self.settings)
         if not snapshot:
             return
 
@@ -550,7 +567,7 @@ class MotiveClient:
                 detail="Motive integration is not configured. Set MOTIVE_API_KEY or MOTIVE_ACCESS_TOKEN on the backend.",
             )
 
-        ttl_seconds = max(10, int(self.settings.motive_snapshot_ttl_seconds or 45))
+        ttl_seconds = max(30, int(self.settings.motive_snapshot_ttl_seconds or 300))
         self._hydrate_snapshot_cache(ttl_seconds)
 
         if allow_stale:
@@ -604,7 +621,7 @@ class MotiveClient:
                 detail="Motive integration is not configured. Set MOTIVE_API_KEY or MOTIVE_ACCESS_TOKEN on the backend.",
             )
 
-        ttl_seconds = max(10, int(self.settings.motive_snapshot_ttl_seconds or 45))
+        ttl_seconds = max(30, int(self.settings.motive_snapshot_ttl_seconds or 300))
         with DETAIL_LOCK:
             now = time.time()
             cached = DETAIL_CACHE.get(vehicle_id)
@@ -742,7 +759,8 @@ class MotiveClient:
 
         raw_results: dict[str, object] = {}
         errors: dict[str, HTTPException] = {}
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        fetch_workers = max(2, min(6, int(getattr(self.settings, "motive_api_fetch_workers", 4) or 4)))
+        with ThreadPoolExecutor(max_workers=fetch_workers) as executor:
             future_map = {executor.submit(task): name for name, task in tasks.items()}
             for future in as_completed(future_map):
                 name = future_map[future]
@@ -2438,10 +2456,28 @@ def _motive_snapshot_refresh_loop(settings: Settings) -> None:
     if not client.is_configured:
         return
 
-    client.fetch_snapshot(force_refresh=False, allow_stale=True)
-    interval_seconds = max(15, int(getattr(settings, "motive_background_refresh_interval_seconds", 60) or 60))
-    while not SNAPSHOT_WORKER_STOP.wait(interval_seconds):
-        client.fetch_snapshot(force_refresh=True, allow_stale=True)
+    ttl_seconds = max(30, int(getattr(settings, "motive_snapshot_ttl_seconds", 300) or 300))
+    interval_seconds = max(60, int(getattr(settings, "motive_background_refresh_interval_seconds", 300) or 300))
+    client._hydrate_snapshot_cache(ttl_seconds)
+    with SNAPSHOT_LOCK:
+        cached = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
+        expires_at = float(SNAPSHOT_CACHE.get("expires_at") or 0.0)
+    if cached and time.time() < expires_at:
+        initial_wait_seconds = min(interval_seconds, max(1.0, expires_at - time.time()))
+        if SNAPSHOT_WORKER_STOP.wait(initial_wait_seconds):
+            return
+
+    while not SNAPSHOT_WORKER_STOP.is_set():
+        try:
+            client.fetch_snapshot(force_refresh=True, allow_stale=False)
+        except Exception as exc:
+            with SNAPSHOT_LOCK:
+                SNAPSHOT_CACHE["last_error"] = _exception_summary(exc)
+                SNAPSHOT_CACHE["last_refresh_finished_at"] = iso_now()
+                SNAPSHOT_CACHE["building"] = False
+                SNAPSHOT_LOCK.notify_all()
+        if SNAPSHOT_WORKER_STOP.wait(interval_seconds):
+            break
 
 
 def start_motive_snapshot_refresh_worker(settings: Settings) -> None:

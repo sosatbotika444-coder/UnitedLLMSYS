@@ -11,7 +11,7 @@ from app.models import User
 from app.motive_archive import build_vehicle_archive
 from app.motive import MotiveClient
 from app.motive_export import build_motive_snapshot_workbook
-from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics, sync_motive_daily_statistics
+from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics
 from app.schemas import MotiveIntegrationStatus
 from sqlalchemy.orm import Session
 
@@ -33,7 +33,6 @@ def motive_fleet(
     db: Session = Depends(get_db),
 ):
     snapshot = client.fetch_snapshot(force_refresh=refresh)
-    sync_motive_daily_statistics(db, snapshot)
     return enrich_snapshot_with_statistics(db, snapshot)
 
 

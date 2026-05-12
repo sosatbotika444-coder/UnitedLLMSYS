@@ -14,7 +14,7 @@ const RouteMap = lazy(() => import("./RouteMap"));
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const TOMTOM_ROUTING_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const ROUTE_REQUEST_TIMEOUT_MS = 120000;
-const FLEET_REFRESH_INTERVAL_MS = 45000;
+const FLEET_REFRESH_INTERVAL_MS = 300000;
 const TRIPS_REFRESH_INTERVAL_MS = 60000;
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_TRUCK_MPG = 6.0;
@@ -1184,7 +1184,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
     }
 
     loadFleet(false);
-    const timer = window.setInterval(() => loadFleet(true), FLEET_REFRESH_INTERVAL_MS);
+    const timer = window.setInterval(() => loadFleet(false), FLEET_REFRESH_INTERVAL_MS);
     return () => {
       ignore = true;
       window.clearInterval(timer);

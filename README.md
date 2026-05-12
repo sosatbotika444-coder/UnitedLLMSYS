@@ -25,14 +25,19 @@ DATABASE_URL=postgresql://postgres:password@host:5432/railway
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 CORS_ORIGINS=http://localhost:5173,https://your-netlify-site.netlify.app
-DATABASE_POOL_SIZE=20
-DATABASE_MAX_OVERFLOW=40
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=5
 DATABASE_POOL_TIMEOUT_SECONDS=30
 DATABASE_POOL_RECYCLE_SECONDS=1800
 SQLITE_BUSY_TIMEOUT_MS=15000
 GZIP_MINIMUM_SIZE=1024
 TOMTOM_API_KEY=your-tomtom-api-key
 MOTIVE_API_KEY=your-motive-api-key
+MOTIVE_SNAPSHOT_TTL_SECONDS=300
+MOTIVE_BACKGROUND_REFRESH_ENABLED=true
+MOTIVE_STARTUP_REFRESH_ENABLED=true
+MOTIVE_BACKGROUND_REFRESH_INTERVAL_SECONDS=300
+MOTIVE_API_FETCH_WORKERS=4
 MOTIVE_ACCESS_TOKEN=your-motive-oauth-access-token
 MOTIVE_REFRESH_TOKEN=optional-refresh-token
 MOTIVE_CLIENT_ID=optional-oauth-client-id
@@ -131,13 +136,18 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 CORS_ORIGINS=https://your-netlify-site.netlify.app
-WEB_CONCURRENCY=4
-DATABASE_POOL_SIZE=20
-DATABASE_MAX_OVERFLOW=40
+WEB_CONCURRENCY=1
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=5
 DATABASE_POOL_TIMEOUT_SECONDS=30
 DATABASE_POOL_RECYCLE_SECONDS=1800
 GZIP_MINIMUM_SIZE=1024
 TOMTOM_API_KEY=your-tomtom-api-key
+MOTIVE_SNAPSHOT_TTL_SECONDS=300
+MOTIVE_BACKGROUND_REFRESH_ENABLED=true
+MOTIVE_STARTUP_REFRESH_ENABLED=true
+MOTIVE_BACKGROUND_REFRESH_INTERVAL_SECONDS=300
+MOTIVE_API_FETCH_WORKERS=4
 TELEGRAM_BOT_ENABLED=true
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_POLLING_DROP_PENDING_UPDATES=false
@@ -153,7 +163,7 @@ Notes:
 - If you use a custom Netlify domain, add it to `CORS_ORIGINS` too.
 - Railway service-to-service startup ordering works best when the backend references Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
 - For around 100 simultaneous users, use `PostgreSQL` in Railway, not local SQLite.
-- The backend now supports worker-based startup through `WEB_CONCURRENCY`; a practical starting point is `4`.
+- Keep `WEB_CONCURRENCY=1` on small Railway instances so background Motive refreshes do not multiply memory usage.
 - Large JSON responses are gzip-compressed automatically and DB pooling is configurable through the env vars above.
 
 ## Netlify frontend deploy

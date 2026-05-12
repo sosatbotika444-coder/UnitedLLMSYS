@@ -6,8 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
-    database_pool_size: int = 20
-    database_max_overflow: int = 40
+    database_pool_size: int = 5
+    database_max_overflow: int = 5
     database_pool_timeout_seconds: int = 30
     database_pool_recycle_seconds: int = 1800
     sqlite_busy_timeout_ms: int = 15000
@@ -43,13 +43,14 @@ class Settings(BaseSettings):
     motive_time_zone: str = "America/New_York"
     motive_metric_units: bool = False
     motive_user_id: int | None = None
-    motive_snapshot_ttl_seconds: int = 45
+    motive_snapshot_ttl_seconds: int = 300
     motive_snapshot_stale_ttl_seconds: int = 86400
     motive_snapshot_disk_cache_enabled: bool = True
     motive_snapshot_cache_file: str = ""
     motive_background_refresh_enabled: bool = True
-    motive_startup_refresh_enabled: bool = False
-    motive_background_refresh_interval_seconds: int = 60
+    motive_startup_refresh_enabled: bool = True
+    motive_background_refresh_interval_seconds: int = 300
+    motive_api_fetch_workers: int = 4
     motive_vehicle_history_days: int = 2
     live_price_background_refresh_enabled: bool = True
     live_price_cache_ttl_seconds: int = 900

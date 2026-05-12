@@ -4,6 +4,7 @@ import MotiveFleetMap from "./MotiveFleetMap";
 import MapStage from "./MapStage";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
 const filterOptions = ["All", "Moving", "Stopped", "Stale", "Low Fuel", "Faults"];
 
 async function apiRequest(path, options = {}, token = "") {
@@ -681,8 +682,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       return undefined;
     }
     const timer = window.setInterval(() => {
-      loadSnapshot(true);
-    }, 60000);
+      loadSnapshot(false, true);
+    }, MOTIVE_BACKGROUND_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [active, autoRefresh, integration?.configured, loadSnapshot, token]);
 

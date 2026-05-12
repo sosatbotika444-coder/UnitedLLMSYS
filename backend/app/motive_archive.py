@@ -78,6 +78,14 @@ def _json_safe(value: object):
     return value
 
 
+def _iso_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _payload_diff(before: object, after: object, prefix: str = "") -> dict[str, dict[str, object]]:
     if before == after:
         return {}
@@ -145,6 +153,7 @@ def sync_motive_vehicle_archive(db: Session, snapshot: dict) -> None:
         datasets_payload=_json_safe(snapshot.get("datasets") or {}) or {},
         recent_activity_payload=_json_safe(snapshot.get("recent_activity") or {}) or {},
         warnings_payload=_json_safe(snapshot.get("warnings") or []) or [],
+        snapshot_payload=_json_safe(snapshot) or {},
     )
     db.add(run)
     db.flush()
@@ -231,6 +240,82 @@ def sync_motive_vehicle_archive(db: Session, snapshot: dict) -> None:
             db.add(change_event)
 
     db.commit()
+
+
+def build_latest_motive_snapshot(db: Session) -> dict | None:
+    """Rebuild the latest fleet snapshot from PostgreSQL without calling Motive."""
+    run = db.scalars(
+        select(MotiveSnapshotRun)
+        .order_by(MotiveSnapshotRun.fetched_at.desc(), MotiveSnapshotRun.id.desc())
+        .limit(1)
+    ).first()
+    if not run:
+        return None
+
+    snapshot_payload = dict(getattr(run, "snapshot_payload", None) or {})
+    if isinstance(snapshot_payload.get("vehicles"), list):
+        snapshot_payload["configured"] = True
+        snapshot_payload["auth_mode"] = snapshot_payload.get("auth_mode") or run.auth_mode or "postgres"
+        snapshot_payload["fetched_at"] = snapshot_payload.get("fetched_at") or _iso_datetime(run.fetched_at)
+        if not snapshot_payload.get("company") and run.company_name:
+            snapshot_payload["company"] = {"name": run.company_name}
+        cache = dict(snapshot_payload.get("cache") or {})
+        cache.update({
+            "source": "postgres",
+            "snapshot_run_id": run.id,
+            "loaded_at": _iso_datetime(_now_utc()),
+        })
+        snapshot_payload["cache"] = cache
+        return snapshot_payload
+
+    vehicle_rows = db.scalars(
+        select(MotiveVehicleSnapshot)
+        .where(MotiveVehicleSnapshot.snapshot_run_id == run.id)
+        .order_by(MotiveVehicleSnapshot.vehicle_number.asc(), MotiveVehicleSnapshot.vehicle_id.asc())
+    ).all()
+    vehicles: list[dict] = []
+    for row in vehicle_rows:
+        payload = dict(row.payload or {})
+        payload.setdefault("id", row.vehicle_id)
+        payload.setdefault("number", row.vehicle_number)
+        payload.setdefault("vin", row.vin)
+        payload.setdefault("status", row.status)
+        payload.setdefault("availability_status", row.availability_status)
+        payload.setdefault("driver_source", row.driver_source)
+        payload.setdefault("make", row.make)
+        payload.setdefault("model", row.model)
+        payload.setdefault("year", row.year)
+        payload.setdefault("fuel_type", row.fuel_type)
+        payload.setdefault("license_plate_number", row.license_plate_number)
+        payload.setdefault("license_plate_state", row.license_plate_state)
+        vehicles.append(payload)
+
+    metrics = dict(run.metrics_payload or {})
+    if not metrics:
+        metrics = {
+            "total_vehicles": run.total_vehicles,
+            "moving_vehicles": run.moving_vehicles,
+            "stale_vehicles": run.stale_vehicles,
+        }
+
+    return {
+        "configured": True,
+        "auth_mode": run.auth_mode or "postgres",
+        "fetched_at": _iso_datetime(run.fetched_at),
+        "company": {"name": run.company_name} if run.company_name else None,
+        "windows": {},
+        "metrics": metrics,
+        "datasets": dict(run.datasets_payload or {}),
+        "drivers": [],
+        "vehicles": vehicles,
+        "recent_activity": dict(run.recent_activity_payload or {}),
+        "warnings": list(run.warnings_payload or []),
+        "cache": {
+            "source": "postgres",
+            "snapshot_run_id": run.id,
+            "loaded_at": _iso_datetime(_now_utc()),
+        },
+    }
 
 
 def _serialize_snapshot(row: MotiveVehicleSnapshot) -> dict:

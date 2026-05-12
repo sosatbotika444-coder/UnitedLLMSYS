@@ -38,8 +38,7 @@ async def lifespan(_app: FastAPI):
     _bootstrap_database()
     if settings.station_catalog_startup_refresh_enabled:
         start_station_catalog_refresh_if_needed()
-    if settings.motive_startup_refresh_enabled:
-        start_motive_snapshot_refresh_worker(settings)
+    start_motive_snapshot_refresh_worker(settings)
     try:
         yield
     finally:

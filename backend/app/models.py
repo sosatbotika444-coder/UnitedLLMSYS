@@ -90,6 +90,7 @@ class MotiveSnapshotRun(Base):
     datasets_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     recent_activity_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     warnings_payload: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    snapshot_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
 

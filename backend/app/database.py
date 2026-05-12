@@ -18,7 +18,7 @@ if settings.database_backend == "sqlite":
     }
 else:
     engine_kwargs.update({
-        "pool_size": max(5, settings.database_pool_size),
+        "pool_size": max(1, settings.database_pool_size),
         "max_overflow": max(0, settings.database_max_overflow),
         "pool_timeout": max(5, settings.database_pool_timeout_seconds),
         "pool_recycle": max(300, settings.database_pool_recycle_seconds),
@@ -111,6 +111,16 @@ def ensure_runtime_schema() -> None:
         add_load_column("manual_loaded_miles", "VARCHAR(32) NOT NULL DEFAULT '0'")
 
         _execute_schema_statements(load_statements)
+
+    if "motive_snapshot_runs" in table_names:
+        motive_run_columns = {column["name"] for column in inspector.get_columns("motive_snapshot_runs")}
+        motive_run_statements: list[str] = []
+        if "snapshot_payload" not in motive_run_columns:
+            if settings.database_backend == "postgresql":
+                motive_run_statements.append("ALTER TABLE motive_snapshot_runs ADD COLUMN snapshot_payload JSONB NOT NULL DEFAULT '{}'::jsonb")
+            else:
+                motive_run_statements.append("ALTER TABLE motive_snapshot_runs ADD COLUMN snapshot_payload JSON NOT NULL DEFAULT '{}'")
+        _execute_schema_statements(motive_run_statements)
 
 
 def get_db():

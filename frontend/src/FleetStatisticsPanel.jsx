@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
 const quickFocusOptions = [
   { id: "all", label: "All Trucks" },
   { id: "moving", label: "Moving Now" },
@@ -616,7 +617,7 @@ export default function FleetStatisticsPanel({
     }
 
     loadSnapshot(false);
-    const intervalId = window.setInterval(() => loadSnapshot(true), 60000);
+    const intervalId = window.setInterval(() => loadSnapshot(false), MOTIVE_BACKGROUND_POLL_INTERVAL_MS);
     return () => {
       ignore = true;
       window.clearInterval(intervalId);
