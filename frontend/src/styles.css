@@ -21256,3 +21256,396 @@ html {
   background: #f3f4f6 !important;
   color: #111827 !important;
 }
+
+/* Full product restyle to match the flat reference direction */
+:root {
+  background: #f6f7f9 !important;
+}
+
+body,
+.dashboard-shell,
+.auth-shell,
+.site-page-shell,
+.site-workspace-shell,
+.workspace-app-shell,
+.workspace-main-shell,
+.mobile-workspace-shell,
+.driver-mobile-shell,
+.safety-workspace-mobile,
+.driver-workspace-mobile {
+  background: #f6f7f9 !important;
+  background-image: none !important;
+  color: #111827 !important;
+}
+
+.startup-hero,
+.startup-access,
+.workspace-header-commercial,
+.route-brand-hero,
+.route-stop-hover-card,
+.unitedlane-ai-sidebar-card,
+.mobile-workspace-hero,
+.team-chat-mobile-header {
+  background: #050505 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+.startup-hero h1,
+.startup-hero p,
+.startup-access h2,
+.startup-access p,
+.workspace-header-commercial h1,
+.workspace-header-commercial h2,
+.workspace-header-commercial p,
+.workspace-header-commercial span,
+.route-brand-hero h2,
+.route-brand-hero p,
+.route-stop-hover-card strong,
+.route-stop-hover-card span,
+.unitedlane-ai-sidebar-card h3,
+.unitedlane-ai-sidebar-card p,
+.mobile-workspace-hero h1,
+.mobile-workspace-hero p,
+.team-chat-mobile-header h2,
+.team-chat-mobile-header p {
+  text-shadow: none !important;
+}
+
+.panel,
+.auth-panel,
+.sheet-panel,
+.route-panel,
+.route-side-panel,
+.route-option-card,
+.route-option-card-brand,
+.fuel-stop-card,
+.fuel-stop-card-brand,
+.fuel-filters-card,
+.fuel-filters-modern,
+.fuel-filters-brand-mode,
+.service-card,
+.service-summary-card,
+.stat-card,
+.stat-card-commercial,
+.summary-panel-commercial,
+.filter-panel-commercial,
+.workspace-nav-panel,
+.workspace-commercial-callout,
+.workspace-tool-surface,
+.workspace-table-panel,
+.workspace-main-usercard,
+.workspace-main-guidance,
+.workspace-banner-card,
+.workspace-summary-card,
+.workspace-balance-card,
+.workspace-balance-main,
+.workspace-balance-side,
+.workspace-sidebar-shell,
+.workspace-sidebar-footer-card,
+.workspace-sidebar-account-card,
+.workspace-sidebar-note,
+.workspace-start-card,
+.workspace-shortcut-button,
+.settings-panel-card,
+.theme-option-card,
+.unitedlane-briefing-card,
+.unitedlane-chat-card,
+.unitedlane-ai-chatcard,
+.unitedlane-ai-sidebar-card.subdued,
+.auth-shift-surface-card,
+.panel-filter-card,
+.driver-match-panel,
+.driver-match-card,
+.driver-auth-selected,
+.motive-command-card,
+.motive-command-panel,
+.motive-panel,
+.motive-list-panel-commercial,
+.motive-focus-card,
+.motive-map-panel,
+.motive-detail-panel,
+.motive-history-panel,
+.motive-preview-block,
+.motive-preview-action,
+.motive-detail-card,
+.motive-vehicle-card,
+.motive-attention-card,
+.motive-watch-card,
+.motive-map-location-card,
+.motive-incident-dialog,
+.motive-incident-media-shell,
+.motive-incident-section,
+.motive-incident-context-card,
+.motive-incident-stat,
+.statistics-fleet-column,
+.fleet-statistics-panel,
+.safety-document-card,
+.safety-investigation-card,
+.safety-shift-brief-card,
+.safety-service-card,
+.safety-service-tools-card,
+.safety-service-map-shell,
+.safety-service-map-canvas,
+.team-chat-panel,
+.team-chat-shell,
+.team-chat-sidebar,
+.team-chat-main,
+.team-chat-toolbar,
+.team-chat-log,
+.team-chat-composer,
+.team-chat-live-card,
+.team-chat-message,
+.team-chat-mobile-tools,
+.team-chat-mobile-composer,
+.mobile-more-sheet,
+.driver-profile-card,
+.driver-action-card,
+.fuel-auth-panel,
+.fuel-auth-card,
+.fuel-auth-summary-card,
+.startup-feature-card,
+.startup-about-panel article,
+.startup-stat-card,
+.startup-plan-card,
+.startup-testimonial-card,
+.startup-auth-shell,
+.startup-faq-list details,
+.startup-dashboard-preview,
+.startup-preview-chart,
+.startup-preview-card,
+.startup-preview-table {
+  background: #ffffff !important;
+  background-image: none !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+}
+
+.workspace-sidebar-shell {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+}
+
+.workspace-sidebar-logo,
+.workspace-banner-accent,
+.startup-icon-wrap,
+.home-focus-value-icon,
+.home-focus-support-icon,
+.home-focus-workflow-step > span,
+.motive-summary-card,
+.safety-stat-card,
+.motive-incident-chip,
+.motive-preview-action-pill,
+.status-pill,
+.statistics-status-pill,
+.workspace-sidebar-link-icon {
+  background: #f3f4f6 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+}
+
+.workspace-sidebar-link.active,
+.workspace-nav-button.active,
+.workspace-start-card.active,
+.motive-attention-card.active,
+.motive-vehicle-card.selected,
+.theme-option-card.active,
+.commercial-auth-card .area-selector-card.active,
+.commercial-auth-card .driver-match-card.active {
+  background: #eef6ff !important;
+  background-image: none !important;
+  border-color: #1087ff !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+}
+
+.workspace-sidebar-link.active .workspace-sidebar-link-icon,
+.workspace-nav-button.active .workspace-sidebar-link-icon {
+  background: #1087ff !important;
+  color: #ffffff !important;
+}
+
+.dispatch-sheet,
+.statistics-table,
+.fuel-auth-table,
+.team-chat-log,
+.sheet-frame,
+.sheet-scroll {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: #e5e7eb !important;
+  box-shadow: none !important;
+}
+
+.dispatch-sheet thead th,
+.statistics-table th,
+.startup-table-head,
+.fuel-auth-table th,
+.team-chat-toolbar {
+  background: #f4f4f5 !important;
+  background-image: none !important;
+  color: #111827 !important;
+}
+
+.dispatch-sheet tbody tr:hover td,
+.statistics-table tbody tr:hover td,
+.startup-table-row:hover,
+.fuel-auth-table tbody tr:hover td,
+.team-chat-message:hover {
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+input,
+select,
+textarea,
+.workspace-table-search,
+.auth-form input,
+.toolbar input,
+.toolbar select,
+.route-builder input,
+.route-builder select,
+.fuel-filter-grid input,
+.fuel-filter-grid select,
+.unitedlane-ai-form textarea,
+.team-chat-toolbar-actions input,
+.team-chat-composer textarea,
+.dispatch-sheet input,
+.dispatch-sheet textarea,
+.dispatch-sheet select {
+  background: #ffffff !important;
+  background-image: none !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.dispatch-sheet input:focus,
+.dispatch-sheet textarea:focus,
+.dispatch-sheet select:focus {
+  border-color: #1087ff !important;
+  box-shadow: 0 0 0 3px rgba(16, 135, 255, 0.14) !important;
+  outline: none !important;
+}
+
+.startup-bars i,
+.workspace-banner-accent,
+.status-dot.status-done,
+.progress-bar,
+.fuel-bar-fill,
+.motive-route-progress,
+.statistics-progress-fill {
+  background: #1087ff !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.startup-route-line::before,
+.route-progress-line,
+.full-road-progress-line,
+.team-chat-room-progress {
+  background: #1087ff !important;
+  background-image: none !important;
+}
+
+.driver-cell,
+.fuel-strong,
+.fuel-good,
+.fuel-watch,
+.fuel-low,
+.status-live,
+.status-review,
+.status-delayed,
+.status-done,
+.notice,
+.notice.success,
+.notice.info,
+.notice.error {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.driver-cell {
+  background: #f3f4f6 !important;
+}
+
+.fuel-strong,
+.fuel-good,
+.status-done,
+.notice.success {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+
+.fuel-watch,
+.status-review,
+.notice.info {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.fuel-low,
+.status-delayed,
+.notice.error {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.live-route-map,
+.motive-fleet-map,
+.map-stage,
+.safety-service-map-canvas {
+  background: #eef2f7 !important;
+  background-image: none !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: none !important;
+}
+
+[class*="gradient"],
+[class*="Gradient"] {
+  background-image: none !important;
+}
+
+body.theme-dark .workspace-app-shell,
+body.theme-dark .site-workspace-shell,
+body.theme-dark .workspace-main-shell,
+body.theme-dark .workspace-sidebar-shell,
+body.theme-dark .panel,
+body.theme-dark .auth-panel,
+body.theme-dark .workspace-tool-surface,
+body.theme-dark .workspace-table-panel,
+body.theme-dark .motive-panel,
+body.theme-dark .team-chat-panel,
+body.theme-dark .team-chat-shell,
+body.theme-dark .team-chat-sidebar,
+body.theme-dark .team-chat-main {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #111827 !important;
+}
+
+body.theme-dark .workspace-main-heading h1,
+body.theme-dark .workspace-main-usercard strong,
+body.theme-dark .panel-head h2,
+body.theme-dark .sheet-panel-head h2,
+body.theme-dark .fuel-board-head h3,
+body.theme-dark .workspace-sidebar-brand-copy strong,
+body.theme-dark .workspace-sidebar-footer-card strong {
+  color: #111827 !important;
+}
+
+body.theme-dark .workspace-main-heading p,
+body.theme-dark .workspace-sidebar-brand-copy span,
+body.theme-dark .workspace-sidebar-brand-copy small,
+body.theme-dark .workspace-sidebar-link-copy small,
+body.theme-dark .workspace-summary-card span,
+body.theme-dark .workspace-main-kicker {
+  color: #6b7280 !important;
+}
