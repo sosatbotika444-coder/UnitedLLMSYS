@@ -525,8 +525,17 @@ class MotiveClient:
                 SNAPSHOT_CACHE["expires_at"] = _snapshot_expires_at(snapshot, ttl_seconds)
 
     def _build_and_store_snapshot(self, ttl_seconds: int) -> dict:
+        return self._build_and_store_snapshot_with_mode(ttl_seconds, light_mode=False)
+
+    def _build_and_store_snapshot_with_mode(self, ttl_seconds: int, *, light_mode: bool) -> dict:
+        previous_snapshot = None
+        if light_mode:
+            with SNAPSHOT_LOCK:
+                cached = SNAPSHOT_CACHE.get("snapshot")
+                if isinstance(cached, dict):
+                    previous_snapshot = cached
         try:
-            snapshot = self._build_snapshot()
+            snapshot = self._build_snapshot(light_mode=light_mode, previous_snapshot=previous_snapshot)
             try:
                 with SessionLocal() as db:
                     try:
@@ -567,13 +576,13 @@ class MotiveClient:
             DETAIL_LOCK.notify_all()
         return snapshot
 
-    def _refresh_snapshot_in_background(self, ttl_seconds: int) -> None:
+    def _refresh_snapshot_in_background(self, ttl_seconds: int, light_mode: bool = True) -> None:
         try:
-            self._build_and_store_snapshot(ttl_seconds)
+            self._build_and_store_snapshot_with_mode(ttl_seconds, light_mode=light_mode)
         except Exception:
             return
 
-    def _start_background_snapshot_refresh(self, ttl_seconds: int, force_refresh: bool = False) -> None:
+    def _start_background_snapshot_refresh(self, ttl_seconds: int, force_refresh: bool = False, light_mode: bool = True) -> None:
         with SNAPSHOT_LOCK:
             now = time.time()
             if SNAPSHOT_CACHE.get("building"):
@@ -587,13 +596,13 @@ class MotiveClient:
 
         thread = threading.Thread(
             target=self._refresh_snapshot_in_background,
-            args=(ttl_seconds,),
+            args=(ttl_seconds, light_mode),
             name="motive-snapshot-refresh",
             daemon=True,
         )
         thread.start()
 
-    def fetch_snapshot(self, force_refresh: bool = False, allow_stale: bool = True) -> dict:
+    def fetch_snapshot(self, force_refresh: bool = False, allow_stale: bool = True, light_mode: bool = False) -> dict:
         if not self.is_configured:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -614,13 +623,13 @@ class MotiveClient:
                     return _decorate_snapshot(cached, "fresh", refreshing, last_error)
 
             if cached:
-                self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh)
+                self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh, light_mode=True)
                 with SNAPSHOT_LOCK:
                     refreshing = bool(SNAPSHOT_CACHE.get("building"))
                     last_error = str(SNAPSHOT_CACHE.get("last_error") or "")
                 return _decorate_snapshot(cached, "refreshing" if force_refresh else "stale", refreshing, last_error)
 
-            self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh)
+            self._start_background_snapshot_refresh(ttl_seconds, force_refresh=force_refresh, light_mode=True)
             with SNAPSHOT_LOCK:
                 last_error = str(SNAPSHOT_CACHE.get("last_error") or "")
                 refreshing = bool(SNAPSHOT_CACHE.get("building"))
@@ -644,7 +653,7 @@ class MotiveClient:
             SNAPSHOT_CACHE["last_refresh_started_at"] = time.time()
             SNAPSHOT_CACHE["last_refresh_finished_at"] = ""
 
-        snapshot = self._build_and_store_snapshot(ttl_seconds)
+        snapshot = self._build_and_store_snapshot_with_mode(ttl_seconds, light_mode=light_mode)
         return _decorate_snapshot(snapshot, "fresh", False, "")
 
     def fetch_vehicle_detail(self, vehicle_id: int, force_refresh: bool = False) -> dict:
@@ -684,7 +693,7 @@ class MotiveClient:
             DETAIL_BUILDING.discard(vehicle_id)
             DETAIL_LOCK.notify_all()
         return detail
-    def _build_snapshot(self) -> dict:
+    def _build_snapshot(self, *, light_mode: bool = False, previous_snapshot: dict | None = None) -> dict:
         warnings: list[str] = []
         windows = {
             "history_days": int(self.settings.motive_vehicle_history_days or 2),
@@ -705,20 +714,6 @@ class MotiveClient:
                 page_size=100,
                 max_pages=8,
             ),
-            "hos_summaries": lambda: self._paginate(
-                "/v1/hours_of_service",
-                ("hours_of_services", "hours_of_service", "users", "drivers"),
-                page_size=100,
-                extra_params=self._date_params(8),
-                max_pages=8,
-            ),
-            "hos_logs": lambda: self._paginate(
-                "/v1/logs",
-                ("logs",),
-                page_size=100,
-                extra_params={**self._date_params(8), "status": "all"},
-                max_pages=8,
-            ),
             "fault_codes": lambda: self._paginate("/v1/fault_codes", ("fault_codes",), page_size=100, max_pages=5),
             "vehicle_utilizations": lambda: self._paginate(
                 "/v2/vehicle_utilization",
@@ -726,55 +721,6 @@ class MotiveClient:
                 page_size=100,
                 extra_params=self._date_params(7),
                 max_pages=5,
-            ),
-            "idle_events": lambda: self._paginate(
-                "/v1/idle_events",
-                ("idle_events",),
-                page_size=100,
-                extra_params=self._date_params(7),
-                max_pages=5,
-            ),
-            "driving_periods": lambda: self._paginate(
-                "/v1/driving_periods",
-                ("driving_periods",),
-                page_size=100,
-                extra_params=self._date_params(7),
-                max_pages=8,
-            ),
-            "driver_performance_events": lambda: self._paginate(
-                "/v2/driver_performance_events",
-                ("driver_performance_events",),
-                page_size=100,
-                extra_params=self._date_params(7),
-                max_pages=5,
-            ),
-            "ifta_trips": lambda: self._paginate(
-                "/v1/ifta/trips",
-                ("ifta_trips",),
-                page_size=100,
-                extra_params=self._date_params(30),
-                max_pages=5,
-            ),
-            "fuel_purchases": lambda: self._paginate(
-                "/v1/fuel_purchases",
-                ("fuel_purchases",),
-                page_size=100,
-                extra_params=self._date_params(30),
-                max_pages=3,
-            ),
-            "inspection_reports": lambda: self._paginate(
-                "/v2/inspection_reports",
-                ("inspection_reports",),
-                page_size=100,
-                extra_params=self._date_params(30),
-                max_pages=3,
-            ),
-            "form_entries": lambda: self._paginate(
-                "/v2/form_entries",
-                ("form_entries",),
-                page_size=100,
-                extra_params=self._date_params(30),
-                max_pages=3,
             ),
             "scorecard_summary": lambda: self._paginate(
                 "/v1/scorecard_summary",
@@ -784,6 +730,72 @@ class MotiveClient:
                 max_pages=3,
             ),
         }
+        if not light_mode:
+            tasks.update({
+                "hos_summaries": lambda: self._paginate(
+                    "/v1/hours_of_service",
+                    ("hours_of_services", "hours_of_service", "users", "drivers"),
+                    page_size=100,
+                    extra_params=self._date_params(8),
+                    max_pages=8,
+                ),
+                "hos_logs": lambda: self._paginate(
+                    "/v1/logs",
+                    ("logs",),
+                    page_size=100,
+                    extra_params={**self._date_params(8), "status": "all"},
+                    max_pages=8,
+                ),
+                "idle_events": lambda: self._paginate(
+                    "/v1/idle_events",
+                    ("idle_events",),
+                    page_size=100,
+                    extra_params=self._date_params(7),
+                    max_pages=5,
+                ),
+                "driving_periods": lambda: self._paginate(
+                    "/v1/driving_periods",
+                    ("driving_periods",),
+                    page_size=100,
+                    extra_params=self._date_params(7),
+                    max_pages=8,
+                ),
+                "driver_performance_events": lambda: self._paginate(
+                    "/v2/driver_performance_events",
+                    ("driver_performance_events",),
+                    page_size=100,
+                    extra_params=self._date_params(7),
+                    max_pages=5,
+                ),
+                "ifta_trips": lambda: self._paginate(
+                    "/v1/ifta/trips",
+                    ("ifta_trips",),
+                    page_size=100,
+                    extra_params=self._date_params(30),
+                    max_pages=5,
+                ),
+                "fuel_purchases": lambda: self._paginate(
+                    "/v1/fuel_purchases",
+                    ("fuel_purchases",),
+                    page_size=100,
+                    extra_params=self._date_params(30),
+                    max_pages=3,
+                ),
+                "inspection_reports": lambda: self._paginate(
+                    "/v2/inspection_reports",
+                    ("inspection_reports",),
+                    page_size=100,
+                    extra_params=self._date_params(30),
+                    max_pages=3,
+                ),
+                "form_entries": lambda: self._paginate(
+                    "/v2/form_entries",
+                    ("form_entries",),
+                    page_size=100,
+                    extra_params=self._date_params(30),
+                    max_pages=3,
+                ),
+            })
 
         raw_results: dict[str, object] = {}
         errors: dict[str, HTTPException] = {}
@@ -824,20 +836,24 @@ class MotiveClient:
         eld_records = pop_records("eld_devices")
         fault_records = [self._normalize_fault_code(item) for item in pop_records("fault_codes")]
         utilization_records = [self._normalize_vehicle_utilization(item) for item in pop_records("vehicle_utilizations")]
-        idle_records = [self._normalize_idle_event(item) for item in pop_records("idle_events")]
-        driving_records = [self._normalize_driving_period(item) for item in pop_records("driving_periods")]
-        performance_records = [
-            self._strip_performance_event_media(self._normalize_performance_event(item))
-            for item in pop_records("driver_performance_events")
-        ]
-        ifta_records = [self._normalize_ifta_trip(item) for item in pop_records("ifta_trips")]
-        fuel_records = [self._normalize_fuel_purchase(item) for item in pop_records("fuel_purchases")]
-        inspection_records = [self._normalize_inspection_report(item) for item in pop_records("inspection_reports")]
-        form_records = [self._normalize_form_entry(item) for item in pop_records("form_entries")]
+        idle_records = [self._normalize_idle_event(item) for item in pop_records("idle_events")] if not light_mode else []
+        driving_records = [self._normalize_driving_period(item) for item in pop_records("driving_periods")] if not light_mode else []
+        performance_records = (
+            [
+                self._strip_performance_event_media(self._normalize_performance_event(item))
+                for item in pop_records("driver_performance_events")
+            ]
+            if not light_mode
+            else []
+        )
+        ifta_records = [self._normalize_ifta_trip(item) for item in pop_records("ifta_trips")] if not light_mode else []
+        fuel_records = [self._normalize_fuel_purchase(item) for item in pop_records("fuel_purchases")] if not light_mode else []
+        inspection_records = [self._normalize_inspection_report(item) for item in pop_records("inspection_reports")] if not light_mode else []
+        form_records = [self._normalize_form_entry(item) for item in pop_records("form_entries")] if not light_mode else []
         scorecard_records = [self._normalize_scorecard(item, users_by_id) for item in pop_records("scorecard_summary")]
         hos_available_records = [self._normalize_hos_available_time(item, users_by_id) for item in pop_records("hos_available_time")]
-        hos_summary_records = [self._normalize_hos_summary(item, users_by_id) for item in pop_records("hos_summaries")]
-        hos_log_records = [self._normalize_hos_log(item, users_by_id) for item in pop_records("hos_logs")]
+        hos_summary_records = [self._normalize_hos_summary(item, users_by_id) for item in pop_records("hos_summaries")] if not light_mode else []
+        hos_log_records = [self._normalize_hos_log(item, users_by_id) for item in pop_records("hos_logs")] if not light_mode else []
         raw_results.clear()
 
         company = self._normalize_company(company_items[0] if company_items else None)
@@ -907,6 +923,14 @@ class MotiveClient:
         all_vehicle_ids |= set(driving_by_vehicle.keys()) | set(performance_by_vehicle.keys()) | set(ifta_by_vehicle.keys())
         all_vehicle_ids |= set(fuel_by_vehicle.keys()) | set(inspection_by_vehicle.keys()) | set(forms_by_vehicle.keys()) | set(eld_by_vehicle_id.keys())
 
+        previous_vehicle_by_id = {}
+        if light_mode and previous_snapshot:
+            previous_vehicle_by_id = {
+                as_int(item.get("id")): item
+                for item in (previous_snapshot.get("vehicles") or [])
+                if as_int(item.get("id")) is not None and isinstance(item, dict)
+            }
+
         vehicles: list[dict] = []
         for vehicle_id in sorted(all_vehicle_ids):
             base = base_by_id.get(vehicle_id, {})
@@ -948,6 +972,8 @@ class MotiveClient:
                 hos_logs_by_driver_name=hos_logs_by_driver_name,
                 hos_logs_by_vehicle_key=hos_logs_by_vehicle_key,
             )
+            if light_mode:
+                vehicle_summary = self._merge_light_vehicle_summary(vehicle_summary, previous_vehicle_by_id.get(vehicle_id))
             vehicles.append(vehicle_summary)
 
         metrics = self._compute_metrics(
@@ -1031,6 +1057,13 @@ class MotiveClient:
             "hos_summaries": {"count": len(hos_summary_records), "available": not bool(errors.get("hos_summaries"))},
             "hos_logs": {"count": len(hos_log_records), "available": not bool(errors.get("hos_logs"))},
         }
+        if light_mode:
+            metrics, datasets, recent_activity = self._merge_light_snapshot_artifacts(
+                previous_snapshot=previous_snapshot,
+                metrics=metrics,
+                datasets=datasets,
+                recent_activity=recent_activity,
+            )
 
         return {
             "configured": True,
@@ -1165,6 +1198,115 @@ class MotiveClient:
             camera_media.pop("image_sources", None)
             stripped["camera_media"] = camera_media
         return stripped
+
+    def _merge_light_vehicle_summary(self, live_vehicle: dict, previous_vehicle: dict | None) -> dict:
+        if not previous_vehicle:
+            return live_vehicle
+
+        merged = dict(previous_vehicle)
+        for key in (
+            "id",
+            "number",
+            "status",
+            "availability_status",
+            "availability_updated_at",
+            "make",
+            "model",
+            "year",
+            "vin",
+            "fuel_type",
+            "mpg",
+            "mpg_source",
+            "license_plate_number",
+            "license_plate_state",
+            "registration_expiry_date",
+            "created_at",
+            "updated_at",
+            "metric_units",
+            "notes",
+            "ifta_enabled",
+            "driver",
+            "permanent_driver",
+            "resolved_driver",
+            "driver_source",
+            "driver_scorecard",
+            "eld_device",
+            "eld_hours",
+            "location",
+            "is_moving",
+            "is_stale",
+            "fault_summary",
+            "utilization_summary",
+        ):
+            merged[key] = live_vehicle.get(key)
+        return merged
+
+    def _merge_light_snapshot_artifacts(
+        self,
+        *,
+        previous_snapshot: dict | None,
+        metrics: dict,
+        datasets: dict,
+        recent_activity: dict,
+    ) -> tuple[dict, dict, dict]:
+        if not previous_snapshot:
+            return metrics, datasets, recent_activity
+
+        previous_metrics = dict(previous_snapshot.get("metrics") or {})
+        previous_datasets = dict(previous_snapshot.get("datasets") or {})
+        previous_recent_activity = dict(previous_snapshot.get("recent_activity") or {})
+
+        for key in (
+            "performance_events_7d",
+            "pending_review_events",
+            "idle_events_7d",
+            "idle_hours_7d",
+            "driving_periods_7d",
+            "driving_hours_7d",
+            "driving_miles_7d",
+            "ifta_trips_30d",
+            "ifta_miles_30d",
+            "fuel_purchases_30d",
+            "fuel_purchase_amount_30d",
+            "fuel_purchase_volume_30d",
+            "inspection_reports_30d",
+            "unsafe_inspections_30d",
+            "form_entries_30d",
+            "average_driver_score",
+        ):
+            if key in previous_metrics:
+                metrics[key] = previous_metrics[key]
+
+        for key in (
+            "idle_events",
+            "driving_periods",
+            "driver_performance_events",
+            "ifta_trips",
+            "fuel_purchases",
+            "inspection_reports",
+            "form_entries",
+            "hos_summaries",
+            "hos_logs",
+        ):
+            if key in previous_datasets:
+                datasets[key] = previous_datasets[key]
+
+        for key in (
+            "performance_events",
+            "driving_periods",
+            "idle_events",
+            "ifta_trips",
+            "fuel_purchases",
+            "inspection_reports",
+            "form_entries",
+            "driver_scores",
+            "hos_logs",
+            "hos_summaries",
+        ):
+            if key in previous_recent_activity:
+                recent_activity[key] = previous_recent_activity[key]
+
+        return metrics, datasets, recent_activity
 
     def _fetch_vehicle_performance_events(self, vehicle_id: int, *, days: int) -> tuple[list[dict], HTTPException | None]:
         all_events: list[dict] = []
@@ -2529,7 +2671,7 @@ def _motive_snapshot_refresh_loop(settings: Settings) -> None:
 
     while not SNAPSHOT_WORKER_STOP.is_set():
         try:
-            client.fetch_snapshot(force_refresh=True, allow_stale=False)
+            client.fetch_snapshot(force_refresh=True, allow_stale=False, light_mode=True)
         except Exception as exc:
             with SNAPSHOT_LOCK:
                 SNAPSHOT_CACHE["last_error"] = _exception_summary(exc)
