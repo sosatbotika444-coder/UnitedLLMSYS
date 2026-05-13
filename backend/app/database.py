@@ -81,6 +81,7 @@ def ensure_runtime_schema() -> None:
         if "ix_users_is_banned" not in indexes:
             index_statements.append("CREATE INDEX IF NOT EXISTS ix_users_is_banned ON users (is_banned)")
         _execute_schema_statements(index_statements)
+        
 
     if "loads" in table_names:
         load_columns = {column["name"] for column in inspector.get_columns("loads")}

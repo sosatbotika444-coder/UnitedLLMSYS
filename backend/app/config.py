@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     motive_snapshot_disk_cache_enabled: bool = True
     motive_snapshot_cache_file: str = ""
     motive_background_refresh_enabled: bool = True
-    motive_startup_refresh_enabled: bool = True
+    motive_startup_refresh_enabled: bool = False
     motive_background_refresh_interval_seconds: int = 300
-    motive_api_fetch_workers: int = 4
+    motive_api_fetch_workers: int = 2
     motive_vehicle_history_days: int = 2
     live_price_background_refresh_enabled: bool = True
     live_price_cache_ttl_seconds: int = 900

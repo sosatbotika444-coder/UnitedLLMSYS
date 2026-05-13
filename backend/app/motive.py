@@ -57,6 +57,7 @@ SNAPSHOT_WORKER_THREAD: threading.Thread | None = None
 DETAIL_LOCK = threading.Condition()
 DETAIL_CACHE: dict[int, dict[str, object]] = {}
 DETAIL_BUILDING: set[int] = set()
+DETAIL_CACHE_MAX_ENTRIES = 48
 
 
 def iso_now() -> str:
@@ -258,6 +259,31 @@ def _exception_summary(exc: Exception) -> str:
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
         return format_http_error("Motive refresh failed", detail, exc.status_code)
     return f"Motive refresh failed: {exc}"
+
+
+def _prune_detail_cache_locked(now_ts: float | None = None) -> None:
+    now_ts = now_ts or time.time()
+    expired_vehicle_ids = [
+        vehicle_id
+        for vehicle_id, entry in DETAIL_CACHE.items()
+        if now_ts >= float(entry.get("expires_at") or 0.0)
+    ]
+    for vehicle_id in expired_vehicle_ids:
+        DETAIL_CACHE.pop(vehicle_id, None)
+
+    overflow = len(DETAIL_CACHE) - DETAIL_CACHE_MAX_ENTRIES
+    if overflow <= 0:
+        return
+
+    oldest_vehicle_ids = [
+        vehicle_id
+        for vehicle_id, _entry in sorted(
+            DETAIL_CACHE.items(),
+            key=lambda item: float(item[1].get("expires_at") or 0.0),
+        )[:overflow]
+    ]
+    for vehicle_id in oldest_vehicle_ids:
+        DETAIL_CACHE.pop(vehicle_id, None)
 
 
 def _decorate_snapshot(snapshot: dict, status_label: str, refreshing: bool, last_error: str = "") -> dict:
@@ -532,6 +558,9 @@ class MotiveClient:
             SNAPSHOT_CACHE["last_error"] = ""
             SNAPSHOT_CACHE["last_refresh_finished_at"] = iso_now()
             SNAPSHOT_LOCK.notify_all()
+        with DETAIL_LOCK:
+            DETAIL_CACHE.clear()
+            DETAIL_LOCK.notify_all()
         return snapshot
 
     def _refresh_snapshot_in_background(self, ttl_seconds: int) -> None:
@@ -624,6 +653,7 @@ class MotiveClient:
         ttl_seconds = max(30, int(self.settings.motive_snapshot_ttl_seconds or 300))
         with DETAIL_LOCK:
             now = time.time()
+            _prune_detail_cache_locked(now)
             cached = DETAIL_CACHE.get(vehicle_id)
             if cached and not force_refresh and now < float(cached.get("expires_at") or 0.0):
                 return cached.get("detail")
@@ -646,6 +676,7 @@ class MotiveClient:
 
         with DETAIL_LOCK:
             DETAIL_CACHE[vehicle_id] = {"detail": detail, "expires_at": time.time() + ttl_seconds}
+            _prune_detail_cache_locked()
             DETAIL_BUILDING.discard(vehicle_id)
             DETAIL_LOCK.notify_all()
         return detail
@@ -759,7 +790,7 @@ class MotiveClient:
 
         raw_results: dict[str, object] = {}
         errors: dict[str, HTTPException] = {}
-        fetch_workers = max(2, min(6, int(getattr(self.settings, "motive_api_fetch_workers", 4) or 4)))
+        fetch_workers = max(1, min(4, int(getattr(self.settings, "motive_api_fetch_workers", 2) or 2)))
         with ThreadPoolExecutor(max_workers=fetch_workers) as executor:
             future_map = {executor.submit(task): name for name, task in tasks.items()}
             for future in as_completed(future_map):
@@ -780,30 +811,37 @@ class MotiveClient:
         for name, exc in errors.items():
             warnings.append(format_http_error(f"Could not load {name.replace('_', ' ')}", exc.detail if isinstance(exc.detail, str) else None, exc.status_code))
 
-        company_items = unwrap_records(extract_list(raw_results.get("companies"), "companies", "company"))
-        users = [self._normalize_user(item) for item in unwrap_records(raw_results.get("users") or [])]
+        def pop_records(name: str) -> list[dict]:
+            return unwrap_records(raw_results.pop(name, None) or [])
+
+        def pop_companies(name: str) -> list[dict]:
+            return unwrap_records(extract_list(raw_results.pop(name, None), "companies", "company"))
+
+        company_items = pop_companies("companies")
+        users = [self._normalize_user(item) for item in pop_records("users")]
         users_by_id = {user["id"]: user for user in users if user.get("id") is not None}
 
-        base_vehicles = unwrap_records(raw_results.get("vehicles") or [])
-        current_v2_records = unwrap_records(raw_results.get("vehicle_locations_v2") or [])
-        current_v3_records = unwrap_records(raw_results.get("vehicle_locations_v3") or [])
-        eld_records = unwrap_records(raw_results.get("eld_devices") or [])
-        fault_records = [self._normalize_fault_code(item) for item in unwrap_records(raw_results.get("fault_codes") or [])]
-        utilization_records = [self._normalize_vehicle_utilization(item) for item in unwrap_records(raw_results.get("vehicle_utilizations") or [])]
-        idle_records = [self._normalize_idle_event(item) for item in unwrap_records(raw_results.get("idle_events") or [])]
-        driving_records = [self._normalize_driving_period(item) for item in unwrap_records(raw_results.get("driving_periods") or [])]
+        base_vehicles = pop_records("vehicles")
+        current_v2_records = pop_records("vehicle_locations_v2")
+        current_v3_records = pop_records("vehicle_locations_v3")
+        eld_records = pop_records("eld_devices")
+        fault_records = [self._normalize_fault_code(item) for item in pop_records("fault_codes")]
+        utilization_records = [self._normalize_vehicle_utilization(item) for item in pop_records("vehicle_utilizations")]
+        idle_records = [self._normalize_idle_event(item) for item in pop_records("idle_events")]
+        driving_records = [self._normalize_driving_period(item) for item in pop_records("driving_periods")]
         performance_records = self._merge_performance_events(
-            [self._normalize_performance_event(item) for item in unwrap_records(raw_results.get("driver_performance_events") or [])],
-            [self._normalize_performance_event(item) for item in unwrap_records(raw_results.get("driver_performance_events_media") or [])],
+            [self._normalize_performance_event(item) for item in pop_records("driver_performance_events")],
+            [self._normalize_performance_event(item) for item in pop_records("driver_performance_events_media")],
         )
-        ifta_records = [self._normalize_ifta_trip(item) for item in unwrap_records(raw_results.get("ifta_trips") or [])]
-        fuel_records = [self._normalize_fuel_purchase(item) for item in unwrap_records(raw_results.get("fuel_purchases") or [])]
-        inspection_records = [self._normalize_inspection_report(item) for item in unwrap_records(raw_results.get("inspection_reports") or [])]
-        form_records = [self._normalize_form_entry(item) for item in unwrap_records(raw_results.get("form_entries") or [])]
-        scorecard_records = [self._normalize_scorecard(item, users_by_id) for item in unwrap_records(raw_results.get("scorecard_summary") or [])]
-        hos_available_records = [self._normalize_hos_available_time(item, users_by_id) for item in unwrap_records(raw_results.get("hos_available_time") or [])]
-        hos_summary_records = [self._normalize_hos_summary(item, users_by_id) for item in unwrap_records(raw_results.get("hos_summaries") or [])]
-        hos_log_records = [self._normalize_hos_log(item, users_by_id) for item in unwrap_records(raw_results.get("hos_logs") or [])]
+        ifta_records = [self._normalize_ifta_trip(item) for item in pop_records("ifta_trips")]
+        fuel_records = [self._normalize_fuel_purchase(item) for item in pop_records("fuel_purchases")]
+        inspection_records = [self._normalize_inspection_report(item) for item in pop_records("inspection_reports")]
+        form_records = [self._normalize_form_entry(item) for item in pop_records("form_entries")]
+        scorecard_records = [self._normalize_scorecard(item, users_by_id) for item in pop_records("scorecard_summary")]
+        hos_available_records = [self._normalize_hos_available_time(item, users_by_id) for item in pop_records("hos_available_time")]
+        hos_summary_records = [self._normalize_hos_summary(item, users_by_id) for item in pop_records("hos_summaries")]
+        hos_log_records = [self._normalize_hos_log(item, users_by_id) for item in pop_records("hos_logs")]
+        raw_results.clear()
 
         company = self._normalize_company(company_items[0] if company_items else None)
         company_metric_units = bool(company.get("metric_units")) if company else bool(self.settings.motive_metric_units)
@@ -822,6 +860,12 @@ class MotiveClient:
         hos_logs_by_driver_name = self._group_by_driver_name(hos_log_records)
         hos_logs_by_vehicle_key = self._group_by_vehicle_key(hos_log_records)
 
+        base_vehicle_count = len(base_vehicles)
+        current_v2_count = len(current_v2_records)
+        current_v3_count = len(current_v3_records)
+        eld_count = len(eld_records)
+        utilization_count = len(utilization_records)
+
         location_v2_by_id: dict[int, dict] = {}
         location_v3_by_id: dict[int, dict] = {}
         for record in current_v2_records:
@@ -832,12 +876,15 @@ class MotiveClient:
             vehicle_id = as_int(record.get("id"))
             if vehicle_id is not None:
                 location_v3_by_id[vehicle_id] = record
+        del current_v2_records
+        del current_v3_records
 
         base_by_id: dict[int, dict] = {}
         for record in base_vehicles:
             vehicle_id = as_int(record.get("id"))
             if vehicle_id is not None:
                 base_by_id[vehicle_id] = record
+        del base_vehicles
 
         eld_by_vehicle_id: dict[int, dict] = {}
         for item in eld_records:
@@ -845,8 +892,10 @@ class MotiveClient:
             vehicle_id = eld.get("vehicle_id") if eld else None
             if vehicle_id is not None and vehicle_id not in eld_by_vehicle_id:
                 eld_by_vehicle_id[vehicle_id] = eld
+        del eld_records
         faults_by_vehicle = self._group_by_vehicle(fault_records)
         utilization_by_vehicle = {item["vehicle_id"]: item for item in utilization_records if item.get("vehicle_id") is not None}
+        del utilization_records
         idles_by_vehicle = self._group_by_vehicle(idle_records)
         driving_by_vehicle = self._group_by_vehicle(driving_records)
         performance_by_vehicle = self._group_by_vehicle(performance_records)
@@ -967,11 +1016,11 @@ class MotiveClient:
         }
 
         datasets = {
-            "vehicles": {"count": len(base_by_id), "available": not bool(errors.get("vehicles"))},
-            "vehicle_locations_v2": {"count": len(location_v2_by_id), "available": not bool(errors.get("vehicle_locations_v2"))},
-            "vehicle_locations_v3": {"count": len(location_v3_by_id), "available": not bool(errors.get("vehicle_locations_v3"))},
+            "vehicles": {"count": base_vehicle_count, "available": not bool(errors.get("vehicles"))},
+            "vehicle_locations_v2": {"count": current_v2_count, "available": not bool(errors.get("vehicle_locations_v2"))},
+            "vehicle_locations_v3": {"count": current_v3_count, "available": not bool(errors.get("vehicle_locations_v3"))},
             "fault_codes": {"count": len(fault_records), "available": not bool(errors.get("fault_codes"))},
-            "vehicle_utilizations": {"count": len(utilization_records), "available": not bool(errors.get("vehicle_utilizations"))},
+            "vehicle_utilizations": {"count": utilization_count, "available": not bool(errors.get("vehicle_utilizations"))},
             "idle_events": {"count": len(idle_records), "available": not bool(errors.get("idle_events"))},
             "driving_periods": {"count": len(driving_records), "available": not bool(errors.get("driving_periods"))},
             "driver_performance_events": {"count": len(performance_records), "available": not bool(errors.get("driver_performance_events"))},
@@ -979,7 +1028,7 @@ class MotiveClient:
             "fuel_purchases": {"count": len(fuel_records), "available": not bool(errors.get("fuel_purchases"))},
             "inspection_reports": {"count": len(inspection_records), "available": not bool(errors.get("inspection_reports"))},
             "form_entries": {"count": len(form_records), "available": not bool(errors.get("form_entries"))},
-            "eld_devices": {"count": len(eld_records), "available": not bool(errors.get("eld_devices"))},
+            "eld_devices": {"count": eld_count, "available": not bool(errors.get("eld_devices"))},
             "scorecard_summary": {"count": len(scorecard_records), "available": not bool(errors.get("scorecard_summary"))},
             "hos_available_time": {"count": len(hos_available_records), "available": not bool(errors.get("hos_available_time"))},
             "hos_summaries": {"count": len(hos_summary_records), "available": not bool(errors.get("hos_summaries"))},
