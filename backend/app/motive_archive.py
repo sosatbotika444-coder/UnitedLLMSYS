@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import MotiveSnapshotRun, MotiveVehicleChangeEvent, MotiveVehicleSnapshot
@@ -114,6 +114,23 @@ def _vehicle_driver_name(vehicle: dict) -> str:
     return ""
 
 
+def _compact_snapshot_payload(snapshot: dict) -> dict:
+    return {
+        "configured": bool(snapshot.get("configured", True)),
+        "auth_mode": _clean_text(snapshot.get("auth_mode")),
+        "fetched_at": _clean_text(snapshot.get("fetched_at")),
+        "company": _json_safe(snapshot.get("company") or {}) or {},
+        "windows": _json_safe(snapshot.get("windows") or {}) or {},
+        "cache": _json_safe(snapshot.get("cache") or {}) or {},
+    }
+
+
+def prune_motive_snapshot_archive(db: Session, *, keep_days: int) -> None:
+    retention_days = max(1, int(keep_days or 1))
+    cutoff = _now_utc() - timedelta(days=retention_days)
+    db.execute(delete(MotiveSnapshotRun).where(MotiveSnapshotRun.fetched_at < cutoff))
+
+
 def _load_latest_snapshots(db: Session, vehicle_ids: list[int]) -> dict[int, MotiveVehicleSnapshot]:
     if not vehicle_ids:
         return {}
@@ -134,7 +151,7 @@ def _load_latest_snapshots(db: Session, vehicle_ids: list[int]) -> dict[int, Mot
     return latest
 
 
-def sync_motive_vehicle_archive(db: Session, snapshot: dict) -> None:
+def sync_motive_vehicle_archive(db: Session, snapshot: dict, *, retention_days: int = 7) -> None:
     vehicles = [item for item in (snapshot.get("vehicles") or []) if _safe_int(item.get("id"), 0) > 0]
     if not vehicles:
         return
@@ -153,7 +170,7 @@ def sync_motive_vehicle_archive(db: Session, snapshot: dict) -> None:
         datasets_payload=_json_safe(snapshot.get("datasets") or {}) or {},
         recent_activity_payload=_json_safe(snapshot.get("recent_activity") or {}) or {},
         warnings_payload=_json_safe(snapshot.get("warnings") or []) or [],
-        snapshot_payload=_json_safe(snapshot) or {},
+        snapshot_payload=_compact_snapshot_payload(snapshot),
     )
     db.add(run)
     db.flush()
@@ -239,6 +256,7 @@ def sync_motive_vehicle_archive(db: Session, snapshot: dict) -> None:
             )
             db.add(change_event)
 
+    prune_motive_snapshot_archive(db, keep_days=retention_days)
     db.commit()
 
 
@@ -298,12 +316,18 @@ def build_latest_motive_snapshot(db: Session) -> dict | None:
             "stale_vehicles": run.stale_vehicles,
         }
 
+    company = dict(snapshot_payload.get("company") or {})
+    windows = dict(snapshot_payload.get("windows") or {})
+    cache = dict(snapshot_payload.get("cache") or {})
+    if not company and run.company_name:
+        company = {"name": run.company_name}
+
     return {
-        "configured": True,
+        "configured": bool(snapshot_payload.get("configured", True)),
         "auth_mode": run.auth_mode or "postgres",
         "fetched_at": _iso_datetime(run.fetched_at),
-        "company": {"name": run.company_name} if run.company_name else None,
-        "windows": {},
+        "company": company or None,
+        "windows": windows,
         "metrics": metrics,
         "datasets": dict(run.datasets_payload or {}),
         "drivers": [],
@@ -311,6 +335,7 @@ def build_latest_motive_snapshot(db: Session) -> dict | None:
         "recent_activity": dict(run.recent_activity_payload or {}),
         "warnings": list(run.warnings_payload or []),
         "cache": {
+            **cache,
             "source": "postgres",
             "snapshot_run_id": run.id,
             "loaded_at": _iso_datetime(_now_utc()),

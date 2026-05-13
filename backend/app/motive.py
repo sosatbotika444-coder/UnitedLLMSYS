@@ -530,7 +530,11 @@ class MotiveClient:
             try:
                 with SessionLocal() as db:
                     try:
-                        sync_motive_vehicle_archive(db, snapshot)
+                        sync_motive_vehicle_archive(
+                            db,
+                            snapshot,
+                            retention_days=max(1, int(getattr(self.settings, "motive_snapshot_archive_retention_days", 7) or 7)),
+                        )
                     except Exception as exc:
                         db.rollback()
                         warnings = list(snapshot.get("warnings") or [])
@@ -2507,6 +2511,7 @@ def _motive_snapshot_refresh_loop(settings: Settings) -> None:
 
     ttl_seconds = max(30, int(getattr(settings, "motive_snapshot_ttl_seconds", 300) or 300))
     interval_seconds = max(60, int(getattr(settings, "motive_background_refresh_interval_seconds", 300) or 300))
+    startup_refresh_enabled = bool(getattr(settings, "motive_startup_refresh_enabled", True))
     client._hydrate_snapshot_cache(ttl_seconds)
     with SNAPSHOT_LOCK:
         cached = SNAPSHOT_CACHE.get("snapshot") if isinstance(SNAPSHOT_CACHE.get("snapshot"), dict) else None
@@ -2515,6 +2520,8 @@ def _motive_snapshot_refresh_loop(settings: Settings) -> None:
         initial_wait_seconds = min(interval_seconds, max(1.0, expires_at - time.time()))
         if SNAPSHOT_WORKER_STOP.wait(initial_wait_seconds):
             return
+    elif not startup_refresh_enabled and SNAPSHOT_WORKER_STOP.wait(interval_seconds):
+        return
 
     while not SNAPSHOT_WORKER_STOP.is_set():
         try:
