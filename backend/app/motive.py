@@ -748,13 +748,6 @@ class MotiveClient:
                 extra_params=self._date_params(7),
                 max_pages=5,
             ),
-            "driver_performance_events_media": lambda: self._paginate(
-                "/v2/driver_performance_events",
-                ("driver_performance_events",),
-                page_size=100,
-                extra_params=self._performance_event_params(days=7, media_required=True),
-                max_pages=5,
-            ),
             "ifta_trips": lambda: self._paginate(
                 "/v1/ifta/trips",
                 ("ifta_trips",),
@@ -833,10 +826,10 @@ class MotiveClient:
         utilization_records = [self._normalize_vehicle_utilization(item) for item in pop_records("vehicle_utilizations")]
         idle_records = [self._normalize_idle_event(item) for item in pop_records("idle_events")]
         driving_records = [self._normalize_driving_period(item) for item in pop_records("driving_periods")]
-        performance_records = self._merge_performance_events(
-            [self._normalize_performance_event(item) for item in pop_records("driver_performance_events")],
-            [self._normalize_performance_event(item) for item in pop_records("driver_performance_events_media")],
-        )
+        performance_records = [
+            self._strip_performance_event_media(self._normalize_performance_event(item))
+            for item in pop_records("driver_performance_events")
+        ]
         ifta_records = [self._normalize_ifta_trip(item) for item in pop_records("ifta_trips")]
         fuel_records = [self._normalize_fuel_purchase(item) for item in pop_records("fuel_purchases")]
         inspection_records = [self._normalize_inspection_report(item) for item in pop_records("inspection_reports")]
@@ -1161,6 +1154,17 @@ class MotiveClient:
                 else:
                     merged_by_key[key] = self._merge_performance_event_record(merged_by_key[key], event)
         return sort_by_recent([merged_by_key[key] for key in ordered_keys], "end_time", "start_time")
+
+    def _strip_performance_event_media(self, event: dict) -> dict:
+        stripped = dict(event)
+        camera_media = dict(stripped.get("camera_media") or {})
+        if camera_media:
+            camera_media.pop("video_urls", None)
+            camera_media.pop("image_urls", None)
+            camera_media.pop("video_sources", None)
+            camera_media.pop("image_sources", None)
+            stripped["camera_media"] = camera_media
+        return stripped
 
     def _fetch_vehicle_performance_events(self, vehicle_id: int, *, days: int) -> tuple[list[dict], HTTPException | None]:
         all_events: list[dict] = []
