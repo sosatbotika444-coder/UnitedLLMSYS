@@ -794,7 +794,7 @@ class MotiveClient:
 
         raw_results: dict[str, object] = {}
         errors: dict[str, HTTPException] = {}
-        fetch_workers = max(1, min(4, int(getattr(self.settings, "motive_api_fetch_workers", 2) or 2)))
+        fetch_workers = max(1, min(4, int(getattr(self.settings, "motive_api_fetch_workers", 4) or 4)))
         with ThreadPoolExecutor(max_workers=fetch_workers) as executor:
             future_map = {executor.submit(task): name for name, task in tasks.items()}
             for future in as_completed(future_map):

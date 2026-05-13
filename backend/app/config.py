@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     motive_background_refresh_enabled: bool = True
     motive_startup_refresh_enabled: bool = True
     motive_background_refresh_interval_seconds: int = 600
-    motive_api_fetch_workers: int = 2
+    motive_api_fetch_workers: int = 4
     motive_snapshot_archive_retention_days: int = 7
     motive_vehicle_history_days: int = 2
     live_price_background_refresh_enabled: bool = True
