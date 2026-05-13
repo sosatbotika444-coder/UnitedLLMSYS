@@ -12,6 +12,7 @@ import { getAutoDieselPrice } from "./priceSignals";
 import { UnitedIcon } from "./UnitedLaneIcons";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
+import authTruckImage from "../truck.jpg";
 
 const AdminPanel = lazy(() => import("./AdminPanel"));
 const FullRoadWorkspace = lazy(() => import("./FullRoadWorkspace"));
@@ -2038,6 +2039,14 @@ export default function App() {
                 </button>
               </form>
             )}
+
+            <figure className="auth-panel-truck-visual">
+              <img src={authTruckImage} alt="United Lane truck" loading="eager" />
+              <figcaption>
+                <strong>Live fleet access</strong>
+                <span>Dispatch, driver, and analytics workspaces start from one secure lane.</span>
+              </figcaption>
+            </figure>
           </>
         )}
       </section>
