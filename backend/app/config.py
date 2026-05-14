@@ -7,9 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
-    database_pool_size: int = 5
-    database_max_overflow: int = 5
-    database_pool_timeout_seconds: int = 30
+    database_pool_size: int = 3
+    database_max_overflow: int = 2
+    database_pool_timeout_seconds: int = 5
     database_pool_recycle_seconds: int = 1800
     sqlite_busy_timeout_ms: int = 15000
     gzip_minimum_size: int = 1024

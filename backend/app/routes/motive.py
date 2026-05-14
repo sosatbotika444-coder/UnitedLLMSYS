@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from io import BytesIO
+from types import SimpleNamespace
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_user_department
 from app.config import get_settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models import MotiveApiConnection, User
 from app.motive_archive import build_vehicle_archive
 from app.motive import MotiveClient, format_http_error, iso_now, sort_by_recent
@@ -20,6 +22,8 @@ from app.schemas import MotiveApiConnectionCreate, MotiveApiConnectionResponse, 
 router = APIRouter(prefix="/motive", tags=["motive"])
 settings = get_settings()
 client = MotiveClient(settings)
+CONNECTION_REFRESH_LOCK = threading.Lock()
+CONNECTION_REFRESHING_IDS: set[int] = set()
 
 
 def _clean_text(value: object, fallback: str = "") -> str:
@@ -50,6 +54,40 @@ def _iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _connection_is_refreshing(connection_id: int | None) -> bool:
+    if connection_id is None:
+        return False
+    with CONNECTION_REFRESH_LOCK:
+        return int(connection_id) in CONNECTION_REFRESHING_IDS
+
+
+def _detach_connection(row: MotiveApiConnection | SimpleNamespace) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=row.id,
+        user_id=getattr(row, "user_id", None),
+        name=row.name,
+        api_key=row.api_key,
+        api_base_url=row.api_base_url,
+        metric_units=bool(row.metric_units),
+        motive_user_id=row.motive_user_id,
+        is_active=bool(row.is_active),
+        last_status=getattr(row, "last_status", "ready") or "ready",
+        last_error=getattr(row, "last_error", "") or "",
+        last_synced_at=getattr(row, "last_synced_at", None),
+        last_vehicle_count=int(getattr(row, "last_vehicle_count", 0) or 0),
+        last_snapshot_payload=getattr(row, "last_snapshot_payload", {}) or {},
+        created_at=getattr(row, "created_at", None),
+        updated_at=getattr(row, "updated_at", None),
+    )
+
+
+def _release_db_connection(db: Session) -> None:
+    try:
+        db.rollback()
+    except Exception:
+        pass
+
+
 def _connection_response(row: MotiveApiConnection) -> dict:
     return {
         "id": row.id,
@@ -65,6 +103,7 @@ def _connection_response(row: MotiveApiConnection) -> dict:
         "lastVehicleCount": row.last_vehicle_count,
         "createdAt": _iso(row.created_at),
         "updatedAt": _iso(row.updated_at),
+        "refreshing": _connection_is_refreshing(row.id),
     }
 
 
@@ -73,6 +112,12 @@ def _connections_for_user(db: Session, user: User, *, active_only: bool = False)
     if active_only:
         statement = statement.where(MotiveApiConnection.is_active.is_(True))
     return list(db.scalars(statement.order_by(MotiveApiConnection.created_at.asc(), MotiveApiConnection.id.asc())).all())
+
+
+def _detached_connections_for_user(db: Session, user: User, *, active_only: bool = False) -> list[SimpleNamespace]:
+    connections = [_detach_connection(row) for row in _connections_for_user(db, user, active_only=active_only)]
+    _release_db_connection(db)
+    return connections
 
 
 def _connection_for_user(db: Session, user: User, connection_id: int) -> MotiveApiConnection:
@@ -119,17 +164,18 @@ def _tag_source_record(row: MotiveApiConnection, record: dict) -> dict:
     return tagged
 
 
-def _tag_snapshot(row: MotiveApiConnection, snapshot: dict, *, cache_status: str) -> dict:
+def _tag_snapshot(row: MotiveApiConnection | SimpleNamespace, snapshot: dict, *, cache_status: str, refreshing: bool | None = None) -> dict:
     tagged = dict(snapshot)
     connection_info = _connection_response(row)
     tagged["connection"] = connection_info
     tagged["fleet_connections"] = [connection_info]
     tagged["source_mode"] = "single_connection"
 
+    is_refreshing = _connection_is_refreshing(row.id) if refreshing is None else bool(refreshing)
     cache = dict(tagged.get("cache") or {})
     cache.update({
         "status": cache_status,
-        "refreshing": False,
+        "refreshing": is_refreshing,
         "served_at": iso_now(),
         "source_connection_id": row.id,
     })
@@ -164,50 +210,159 @@ def _exception_message(prefix: str, exc: Exception) -> str:
     return f"{prefix}: {exc}"
 
 
+def _minimal_connection_snapshot(row: MotiveApiConnection | SimpleNamespace, warning: str) -> dict:
+    return {
+        "configured": True,
+        "auth_mode": "x-api-key",
+        "fetched_at": "",
+        "company": {"name": row.name, "account_count": 1},
+        "windows": {},
+        "metrics": {"company_name": row.name, "total_vehicles": 0},
+        "datasets": {},
+        "drivers": [],
+        "vehicles": [],
+        "recent_activity": {},
+        "warnings": [warning],
+    }
+
+
+def _store_connection_success(db: Session, connection_id: int, snapshot: dict) -> SimpleNamespace | None:
+    try:
+        row = db.get(MotiveApiConnection, connection_id)
+        if not row:
+            return None
+        row.last_snapshot_payload = snapshot
+        row.last_status = "synced"
+        row.last_error = ""
+        row.last_synced_at = datetime.now(timezone.utc)
+        row.last_vehicle_count = len(snapshot.get("vehicles") or [])
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return _detach_connection(row)
+    except Exception:
+        db.rollback()
+        return None
+
+
+def _store_connection_error(db: Session, connection_id: int, message: str) -> None:
+    try:
+        row = db.get(MotiveApiConnection, connection_id)
+        if not row:
+            return
+        row.last_status = "error"
+        row.last_error = message
+        db.add(row)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _run_connection_refresh(connection: MotiveApiConnection | SimpleNamespace) -> None:
+    connection = _detach_connection(connection)
+    if not connection.is_active:
+        return
+
+    previous_snapshot = connection.last_snapshot_payload if _snapshot_is_ready(connection.last_snapshot_payload) else None
+    try:
+        raw_snapshot = MotiveClient(_connection_settings(connection))._build_snapshot(
+            light_mode=True,
+            previous_snapshot=previous_snapshot,
+        )
+    except Exception as exc:
+        message = _exception_message("Motive refresh failed", exc)
+        with SessionLocal() as db:
+            _store_connection_error(db, connection.id, message)
+        return
+
+    with SessionLocal() as db:
+        _store_connection_success(db, connection.id, raw_snapshot)
+
+
+def _refresh_connection_in_background(connection: SimpleNamespace) -> None:
+    try:
+        _run_connection_refresh(connection)
+    finally:
+        with CONNECTION_REFRESH_LOCK:
+            CONNECTION_REFRESHING_IDS.discard(connection.id)
+
+
+def _start_connection_refresh(connection: MotiveApiConnection | SimpleNamespace) -> bool:
+    connection = _detach_connection(connection)
+    if not connection.is_active:
+        return False
+    with CONNECTION_REFRESH_LOCK:
+        if connection.id in CONNECTION_REFRESHING_IDS:
+            return False
+        CONNECTION_REFRESHING_IDS.add(connection.id)
+
+    thread = threading.Thread(
+        target=_refresh_connection_in_background,
+        args=(connection,),
+        name=f"motive-connection-refresh-{connection.id}",
+        daemon=True,
+    )
+    thread.start()
+    return True
+
+
 def _refresh_connection_snapshot(
     db: Session,
     row: MotiveApiConnection,
     *,
     refresh: bool = False,
     allow_stale: bool = True,
+    wait_for_refresh: bool = False,
 ) -> dict:
-    cached_snapshot = row.last_snapshot_payload if _snapshot_is_ready(row.last_snapshot_payload) else None
+    connection = _detach_connection(row)
+    cached_snapshot = connection.last_snapshot_payload if _snapshot_is_ready(connection.last_snapshot_payload) else None
     if cached_snapshot and not refresh:
-        return _tag_snapshot(row, cached_snapshot, cache_status="cached")
+        status_label = "refreshing" if _connection_is_refreshing(connection.id) else "cached"
+        return _tag_snapshot(connection, cached_snapshot, cache_status=status_label)
 
-    if not row.is_active:
+    if not connection.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This Motive API connection is inactive.")
 
+    if not wait_for_refresh:
+        _start_connection_refresh(connection)
+        if cached_snapshot and allow_stale:
+            stale = _tag_snapshot(connection, cached_snapshot, cache_status="refreshing", refreshing=True)
+            warnings = list(stale.get("warnings") or [])
+            warnings.insert(0, f"{connection.name}: fresh Motive data is syncing in the background.")
+            stale["warnings"] = list(dict.fromkeys(warnings))
+            return stale
+        return _tag_snapshot(
+            connection,
+            _minimal_connection_snapshot(connection, f"{connection.name}: Motive data is syncing in the background."),
+            cache_status="warming",
+            refreshing=True,
+        )
+
+    _release_db_connection(db)
+    previous_snapshot = cached_snapshot
     try:
-        raw_snapshot = MotiveClient(_connection_settings(row))._build_snapshot(light_mode=False, previous_snapshot=None)
+        raw_snapshot = MotiveClient(_connection_settings(connection))._build_snapshot(
+            light_mode=True,
+            previous_snapshot=previous_snapshot,
+        )
     except Exception as exc:
         message = _exception_message("Motive refresh failed", exc)
-        row.last_status = "error"
-        row.last_error = message
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        _store_connection_error(db, connection.id, message)
         if cached_snapshot and allow_stale:
-            stale = _tag_snapshot(row, cached_snapshot, cache_status="stale")
+            stale = _tag_snapshot(connection, cached_snapshot, cache_status="stale")
             warnings = list(stale.get("warnings") or [])
-            warnings.insert(0, f"{row.name}: {message}")
+            warnings.insert(0, f"{connection.name}: {message}")
             stale["warnings"] = list(dict.fromkeys(warnings))
             return stale
         status_code = exc.status_code if isinstance(exc, HTTPException) else status.HTTP_502_BAD_GATEWAY
-        raise HTTPException(status_code=status_code, detail=f"{row.name}: {message}") from exc
+        raise HTTPException(status_code=status_code, detail=f"{connection.name}: {message}") from exc
 
-    row.last_snapshot_payload = raw_snapshot
-    row.last_status = "synced"
-    row.last_error = ""
-    row.last_synced_at = datetime.now(timezone.utc)
-    row.last_vehicle_count = len(raw_snapshot.get("vehicles") or [])
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return _tag_snapshot(row, raw_snapshot, cache_status="fresh")
+    stored_connection = _store_connection_success(db, connection.id, raw_snapshot) or connection
+    return _tag_snapshot(stored_connection, raw_snapshot, cache_status="fresh", refreshing=False)
 
 
 def _empty_multi_snapshot(connections: list[MotiveApiConnection], warnings: list[str]) -> dict:
+    refreshing = any(_connection_is_refreshing(row.id) for row in connections)
     return {
         "configured": bool(connections),
         "auth_mode": "multi-api-key",
@@ -241,7 +396,7 @@ def _empty_multi_snapshot(connections: list[MotiveApiConnection], warnings: list
         "warnings": warnings,
         "fleet_connections": [_connection_response(row) for row in connections],
         "source_mode": "multi_connection",
-        "cache": {"status": "empty", "refreshing": False, "served_at": iso_now()},
+        "cache": {"status": "empty", "refreshing": refreshing, "served_at": iso_now()},
     }
 
 
@@ -286,6 +441,9 @@ def _combine_connection_snapshots(snapshots: list[dict], connections: list[Motiv
     vehicles = [vehicle for snapshot in snapshots for vehicle in (snapshot.get("vehicles") or [])]
     drivers = [driver for snapshot in snapshots for driver in (snapshot.get("drivers") or [])]
     snapshot_warnings = [warning for snapshot in snapshots for warning in (snapshot.get("warnings") or [])]
+    refreshing = any(_connection_is_refreshing(row.id) for row in connections) or any(
+        bool((snapshot.get("cache") or {}).get("refreshing")) for snapshot in snapshots
+    )
     return {
         "configured": True,
         "auth_mode": "multi-api-key",
@@ -300,12 +458,19 @@ def _combine_connection_snapshots(snapshots: list[dict], connections: list[Motiv
         "warnings": list(dict.fromkeys(warnings + snapshot_warnings)),
         "fleet_connections": [_connection_response(row) for row in connections],
         "source_mode": "multi_connection",
-        "cache": {"status": "combined", "refreshing": False, "served_at": iso_now()},
+        "cache": {"status": "refreshing" if refreshing else "combined", "refreshing": refreshing, "served_at": iso_now()},
     }
 
 
-def _fleet_snapshot_for_user(db: Session, user: User, *, refresh: bool = False, allow_stale: bool = True) -> dict:
-    all_connections = _connections_for_user(db, user, active_only=False)
+def _fleet_snapshot_for_user(
+    db: Session,
+    user: User,
+    *,
+    refresh: bool = False,
+    allow_stale: bool = True,
+    wait_for_refresh: bool = False,
+) -> dict:
+    all_connections = _detached_connections_for_user(db, user, active_only=False)
     active_connections = [row for row in all_connections if row.is_active]
 
     if not all_connections:
@@ -318,7 +483,15 @@ def _fleet_snapshot_for_user(db: Session, user: User, *, refresh: bool = False, 
     warnings: list[str] = []
     for row in active_connections:
         try:
-            snapshots.append(_refresh_connection_snapshot(db, row, refresh=refresh, allow_stale=allow_stale))
+            snapshots.append(
+                _refresh_connection_snapshot(
+                    db,
+                    row,
+                    refresh=refresh,
+                    allow_stale=allow_stale,
+                    wait_for_refresh=wait_for_refresh,
+                )
+            )
         except HTTPException as exc:
             detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
             warnings.append(detail)
@@ -334,7 +507,7 @@ def motive_status(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    connections = _connections_for_user(db, current_user, active_only=False)
+    connections = _detached_connections_for_user(db, current_user, active_only=False)
     active_count = sum(1 for row in connections if row.is_active)
     status_payload = client.integration_status()
     status_payload.update({
@@ -352,7 +525,7 @@ def motive_connections(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    connections = _connections_for_user(db, current_user, active_only=False)
+    connections = _detached_connections_for_user(db, current_user, active_only=False)
     return {
         "connections": [_connection_response(row) for row in connections],
         "total": len(connections),
@@ -387,7 +560,7 @@ def refresh_motive_connections(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=True, allow_stale=True)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=True, allow_stale=True, wait_for_refresh=False)
     return enrich_snapshot_with_statistics(db, snapshot)
 
 
@@ -442,8 +615,14 @@ def refresh_motive_connection(
     db: Session = Depends(get_db),
 ):
     row = _connection_for_user(db, current_user, connection_id)
-    snapshot = _refresh_connection_snapshot(db, row, refresh=True, allow_stale=True)
-    return enrich_snapshot_with_statistics(db, snapshot)
+    connection = _detach_connection(row)
+    _release_db_connection(db)
+    _start_connection_refresh(connection)
+    return {
+        "queued": True,
+        "connection": _connection_response(connection),
+        "message": f"{connection.name}: Motive sync is running in the background.",
+    }
 
 
 @router.get("/fleet")
@@ -452,7 +631,7 @@ def motive_fleet(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=True)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=True, wait_for_refresh=False)
     return enrich_snapshot_with_statistics(db, snapshot)
 
 
@@ -466,9 +645,11 @@ def motive_vehicle_detail(
 ):
     if connection_id is not None:
         row = _connection_for_user(db, current_user, connection_id)
-        snapshot = _refresh_connection_snapshot(db, row, refresh=refresh, allow_stale=True)
-        detail = MotiveClient(_connection_settings(row)).build_vehicle_detail_from_snapshot(snapshot, vehicle_id)
-        detail["vehicle"] = _tag_snapshot(row, {"vehicles": [detail.get("vehicle") or {}]}, cache_status="detail")["vehicles"][0]
+        connection = _detach_connection(row)
+        _release_db_connection(db)
+        snapshot = _refresh_connection_snapshot(db, connection, refresh=refresh, allow_stale=True, wait_for_refresh=refresh)
+        detail = MotiveClient(_connection_settings(connection)).build_vehicle_detail_from_snapshot(snapshot, vehicle_id)
+        detail["vehicle"] = _tag_snapshot(connection, {"vehicles": [detail.get("vehicle") or {}]}, cache_status="detail")["vehicles"][0]
     else:
         detail = client.fetch_vehicle_detail(vehicle_id=vehicle_id, force_refresh=refresh)
     detail["statistics"] = build_vehicle_statistics_detail(db, detail.get("vehicle") or {})
@@ -491,7 +672,7 @@ def motive_export(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=not refresh)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=not refresh, wait_for_refresh=refresh)
     workbook_bytes = build_motive_snapshot_workbook(snapshot)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"motive_tracking_export_{timestamp}.xlsx"

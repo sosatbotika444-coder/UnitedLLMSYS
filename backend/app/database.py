@@ -17,12 +17,15 @@ if settings.database_backend == "sqlite":
         "timeout": max(5, settings.sqlite_busy_timeout_ms / 1000),
     }
 else:
-    pool_size = 1 if settings.memory_safe_startup_enabled else settings.database_pool_size
-    max_overflow = 0 if settings.memory_safe_startup_enabled else settings.database_max_overflow
+    pool_size = settings.database_pool_size
+    max_overflow = settings.database_max_overflow
+    if settings.memory_safe_startup_enabled:
+        pool_size = min(max(2, pool_size), 4)
+        max_overflow = min(max(1, max_overflow), 2)
     engine_kwargs.update({
         "pool_size": max(1, pool_size),
         "max_overflow": max(0, max_overflow),
-        "pool_timeout": max(5, settings.database_pool_timeout_seconds),
+        "pool_timeout": max(2, settings.database_pool_timeout_seconds),
         "pool_recycle": max(300, settings.database_pool_recycle_seconds),
         "pool_use_lifo": True,
     })

@@ -106,6 +106,19 @@ def assert_user_can_authenticate(user: User) -> None:
         )
 
 
+def release_authenticated_user(db: Session, user: User) -> User:
+    """Return a detached user so long API calls do not hold a DB connection."""
+    try:
+        db.expunge(user)
+    except Exception:
+        pass
+    try:
+        db.rollback()
+    except Exception:
+        pass
+    return user
+
+
 def mark_user_login(db: Session, user: User) -> None:
     user.last_login_at = datetime.now(timezone.utc)
     record_activity_event(
@@ -148,7 +161,7 @@ def get_optional_user(
         assert_user_can_authenticate(user)
     except HTTPException:
         return None
-    return user
+    return release_authenticated_user(db, user)
 
 
 def get_current_user(
@@ -176,7 +189,7 @@ def get_current_user(
     if not user:
         raise unauthorized
     assert_user_can_authenticate(user)
-    return user
+    return release_authenticated_user(db, user)
 
 
 def require_user_department(*allowed_departments: str):

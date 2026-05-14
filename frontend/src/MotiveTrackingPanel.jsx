@@ -5,22 +5,38 @@ import MapStage from "./MapStage";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
+const MOTIVE_REQUEST_TIMEOUT_MS = 25000;
+const MOTIVE_EXPORT_TIMEOUT_MS = 120000;
 const filterOptions = ["All", "Moving", "Stopped", "Stale", "Low Fuel", "Faults"];
 
 async function apiRequest(path, options = {}, token = "") {
+  const { timeoutMs = MOTIVE_REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const headers = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),
+    ...(fetchOptions.headers || {}),
   };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: fetchOptions.signal || controller.signal,
+    });
+  } catch (requestError) {
+    if (requestError?.name === "AbortError") {
+      throw new Error("Motive request is still running. Cached data stays available while sync finishes.");
+    }
+    throw requestError;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -46,7 +62,19 @@ async function downloadFile(path, token = "") {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, { headers });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), MOTIVE_EXPORT_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { headers, signal: controller.signal });
+  } catch (requestError) {
+    if (requestError?.name === "AbortError") {
+      throw new Error("Export is taking too long. Try again after the fleet sync finishes.");
+    }
+    throw requestError;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || "Download failed");
@@ -648,11 +676,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         if (data.fleet_connections) {
           setConnections(data.fleet_connections);
         }
-        if (forceRefresh && selectedForDetail) {
+        if (forceRefresh && selectedForDetail && !data?.cache?.refreshing) {
           await loadVehicleDetail(selectedForDetail, true);
         }
         if (forceRefresh) {
-          setConnectionMessage("Refresh request finished across active API keys.");
+          setConnectionMessage(data?.cache?.refreshing ? "Fleet sync started. Cached data stays live while fresh Motive data loads." : "Fleet data refreshed across active API keys.");
         }
       } catch (fetchError) {
         setError(fetchError.message);
@@ -742,10 +770,10 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     setConnectionMessage("");
     setError("");
     try {
-      await apiRequest(`/motive/connections/${connectionId}/refresh`, { method: "POST" }, token);
+      const result = await apiRequest(`/motive/connections/${connectionId}/refresh`, { method: "POST" }, token);
       await loadConnections();
       await loadSnapshot(false, true);
-      setConnectionMessage("Selected API key refreshed.");
+      setConnectionMessage(result?.message || "Selected API key sync started in the background.");
     } catch (refreshError) {
       setError(refreshError.message);
     } finally {

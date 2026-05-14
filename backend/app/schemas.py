@@ -760,6 +760,7 @@ class MotiveApiConnectionResponse(BaseModel):
     lastVehicleCount: int = 0
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
+    refreshing: bool = False
 
 
 class MotiveCompanySummary(BaseModel):

@@ -31,6 +31,7 @@ const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";
 const PRODUCT_KEY = "unitedlane_active_product";
 const SIDEBAR_STATE_KEY = "unitedlane_workspace_sidebar_state_v1";
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
 const ROUTE_REQUEST_TIMEOUT_MS = 120000;
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_TRUCK_MPG = 6.0;
@@ -1616,6 +1617,7 @@ export default function App() {
     try {
       const data = await apiRequest(path, {
         method: "POST",
+        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
         body: JSON.stringify({ ...payload, department: selectedDepartment })
       });
 
