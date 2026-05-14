@@ -1,1 +1,6 @@
-INFO:     127.0.0.1:57841 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64489 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64522 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64522 - "GET /api/motive/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64525 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64525 - "POST /api/motive/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64525 - "DELETE /api/motive/connections/1 HTTP/1.1" 200 OK

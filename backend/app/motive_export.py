@@ -64,6 +64,8 @@ def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
         workbook,
         title="Driver Directory",
         columns=[
+            ("Source Account", lambda row: row.get("source_connection_name")),
+            ("Source Key", lambda row: row.get("source_key_label")),
             ("Driver ID", lambda row: row.get("id")),
             ("Full Name", lambda row: row.get("full_name")),
             ("Email", lambda row: row.get("email")),
@@ -253,6 +255,8 @@ def _fleet_status_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec]:
         return roster_by_name.get(_normalize_name(_tracked_driver_name(vehicle)), {})
 
     return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
         ("Truck #", lambda row: row.get("number")),
         ("Working Now", lambda row: _working_now_label(row, roster(row))),
         ("Movement", lambda row: _movement_label(row)),
@@ -299,6 +303,8 @@ def _driver_tracking_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec
         return vehicle.get("driver_scorecard") or {}
 
     return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
         ("Tracked Driver Name", lambda row: _tracked_driver_name(row)),
         ("Driver Name Source", lambda row: _tracked_driver_source(row)),
         ("Roster Driver ID", lambda row: roster(row).get("id")),
@@ -373,6 +379,8 @@ def _driver_tracking_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec
 
 def _vehicle_columns() -> list[ColumnSpec]:
     return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
         ("Vehicle ID", lambda row: row.get("id")),
         ("Vehicle Number", lambda row: row.get("number")),
         ("Tracked Driver Name", lambda row: _tracked_driver_name(row)),
@@ -416,6 +424,8 @@ def _vehicle_columns() -> list[ColumnSpec]:
 
 def _fault_columns() -> list[ColumnSpec]:
     return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
         ("Fault ID", lambda row: row.get("id")),
         ("Vehicle Number", lambda row: row.get("vehicle_number")),
         ("Code", lambda row: row.get("code")),
@@ -435,6 +445,8 @@ def _fault_columns() -> list[ColumnSpec]:
 
 def _performance_columns() -> list[ColumnSpec]:
     return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
         ("Event ID", lambda row: row.get("id")),
         ("Vehicle Number", lambda row: row.get("vehicle_number")),
         ("Driver Name", lambda row: row.get("driver_name")),

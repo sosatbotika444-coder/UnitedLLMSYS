@@ -84,6 +84,8 @@ function dashboardVehicleMatches(vehicle, term) {
     vehicle.resolved_driver?.email,
     vehicle.driver?.email,
     vehicle.permanent_driver?.email,
+    vehicle.source_connection_name,
+    vehicle.source_key_label,
     vehicle.location?.city,
     vehicle.location?.state,
     vehicle.location?.address,
@@ -269,7 +271,7 @@ export default function MotiveDashboardCards({ token, active = true }) {
                 {section.items.length ? section.items.map((vehicle) => (
                   <div key={`${section.id}-${vehicle.id}`} title={vehicleLocationLabel(vehicle) || "Location unavailable"}>
                     <strong>{vehicle.number || "Truck"}</strong>
-                    <small>{[watchlistDetail(section.id, vehicle), vehicleDriverLabel(vehicle)].filter(Boolean).join(" | ")}</small>
+                    <small>{[vehicle.source_connection_name, watchlistDetail(section.id, vehicle), vehicleDriverLabel(vehicle)].filter(Boolean).join(" | ")}</small>
                   </div>
                 )) : <div className="empty-route-card compact">{section.emptyText}</div>}
               </section>

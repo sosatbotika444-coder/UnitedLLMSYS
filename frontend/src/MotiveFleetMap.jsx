@@ -14,6 +14,10 @@ function markerTone(vehicle) {
   return "stopped";
 }
 
+function vehicleIdentity(vehicle) {
+  return vehicle?.source_vehicle_key || `${vehicle?.source_connection_id || "default"}:${vehicle?.id ?? ""}`;
+}
+
 function markerLabel(vehicle) {
   const number = vehicle.number || "?";
   const truckCode = String(number).split("/")[0].trim() || String(number).trim();
@@ -26,13 +30,14 @@ function driverName(vehicle) {
 
 function markerTitle(vehicle) {
   const number = String(vehicle.number || "Truck").split("/")[0].trim() || vehicle.number || "Truck";
-  return `${number} | ${driverName(vehicle)}`;
+  return `${number} | ${driverName(vehicle)}${vehicle.source_connection_name ? ` | ${vehicle.source_connection_name}` : ""}`;
 }
 
 function markerPopup(vehicle) {
   const location = vehicle.location || {};
   return [
     `<strong>${vehicle.number || "Vehicle"}</strong>`,
+    vehicle.source_connection_name ? `Source: ${vehicle.source_connection_name}` : null,
     driverName(vehicle) ? `Driver: ${driverName(vehicle)}` : null,
     vehicle.make || vehicle.model ? `${vehicle.make || ""} ${vehicle.model || ""}`.trim() : null,
     vehicle.status ? `Status: ${vehicle.status}` : null,
@@ -153,7 +158,7 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
       return;
     }
 
-    const selectedVehicle = plottedVehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null;
+    const selectedVehicle = plottedVehicles.find((vehicle) => vehicleIdentity(vehicle) === selectedVehicleId) || null;
 
     const showVehiclePopup = (vehicle) => {
       if (!hasCoordinates(vehicle)) {
@@ -181,10 +186,11 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
 
     const bounds = new maplibregl.LngLatBounds();
     plottedVehicles.forEach((vehicle) => {
-      const isSelected = vehicle.id === selectedVehicleId;
+      const identity = vehicleIdentity(vehicle);
+      const isSelected = identity === selectedVehicleId;
       const element = createMarkerElement(vehicle, isSelected);
       element.addEventListener("click", () => {
-        onSelect?.(vehicle.id);
+        onSelect?.(identity);
         showVehiclePopup(vehicle);
       });
 

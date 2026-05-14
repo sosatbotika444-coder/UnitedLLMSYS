@@ -159,6 +159,26 @@ class MotiveVehicleChangeEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
 
+class MotiveApiConnection(Base):
+    __tablename__ = "motive_api_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(160), default="Motive account", nullable=False, index=True)
+    api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    api_base_url: Mapped[str] = mapped_column(String(255), default="https://api.gomotive.com", nullable=False)
+    metric_units: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    motive_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    last_status: Mapped[str] = mapped_column(String(32), default="ready", nullable=False, index=True)
+    last_error: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_vehicle_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_snapshot_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class CommercialLead(Base):
     __tablename__ = "commercial_leads"
 

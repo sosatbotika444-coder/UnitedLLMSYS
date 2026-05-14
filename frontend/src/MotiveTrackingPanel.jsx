@@ -292,9 +292,17 @@ function vehicleAttentionReason(vehicle) {
   return vehicle?.is_moving ? "Truck is moving and ready for live monitoring." : "Truck is ready for review.";
 }
 
+function vehicleIdentity(vehicle) {
+  return vehicle?.source_vehicle_key || `${vehicle?.source_connection_id || "default"}:${vehicle?.id ?? ""}`;
+}
+
+function vehicleSourceLabel(vehicle) {
+  return vehicle?.source_connection_name || vehicle?.source_key_label || "Default Motive";
+}
+
 function defaultVehicleId(vehicles) {
   const located = vehicles.find((vehicle) => vehicle.location?.lat !== null && vehicle.location?.lat !== undefined);
-  return located?.id ?? vehicles[0]?.id ?? null;
+  return located ? vehicleIdentity(located) : vehicles[0] ? vehicleIdentity(vehicles[0]) : null;
 }
 
 function DetailCard({ label, value, detail }) {
@@ -471,13 +479,13 @@ function AttentionVehicleCard({ vehicle, active, onSelect }) {
     <button
       type="button"
       className={`motive-attention-card ${active ? "active" : ""}`.trim()}
-      onClick={() => onSelect(vehicle.id)}
+      onClick={() => onSelect(vehicleIdentity(vehicle))}
     >
       <div className="motive-attention-card-top">
         <span>{vehicle.number || "Truck"}</span>
         <strong>{vehicleAttentionReason(vehicle)}</strong>
       </div>
-      <small>{vehicleDriverLabel(vehicle)} | {vehicleLocationTitle(vehicle)}</small>
+      <small>{vehicleSourceLabel(vehicle)} | {vehicleDriverLabel(vehicle)} | {vehicleLocationTitle(vehicle)}</small>
     </button>
   );
 }
@@ -492,14 +500,15 @@ function VehicleListCard({ vehicle, selected, onSelect }) {
     <button
       type="button"
       className={`motive-vehicle-card ${selected ? "selected" : ""}`.trim()}
-      onClick={() => onSelect(vehicle.id)}
+      onClick={() => onSelect(vehicleIdentity(vehicle))}
     >
       <div className="motive-vehicle-card-top">
         <div>
           <strong>{vehicle.number || "Vehicle"}</strong>
-          <small>{vehicleDriverLabel(vehicle)}</small>
+          <small>{vehicleSourceLabel(vehicle)} | {vehicleDriverLabel(vehicle)}</small>
         </div>
         <div className="motive-vehicle-card-pills">
+          {vehicle.source_connection_name ? <span className="motive-source-pill">{vehicle.source_connection_name}</span> : null}
           <span className={`motive-status-pill ${vehicleTone(vehicle)}`}>{vehicleStateLabel(vehicle)}</span>
           {faultCount > 0 ? <span className="motive-list-flag">{metricValue(faultCount)} fault{faultCount === 1 ? "" : "s"}</span> : null}
         </div>
@@ -534,6 +543,12 @@ function VehicleListCard({ vehicle, selected, onSelect }) {
 
 export default function MotiveTrackingPanel({ token, active = true }) {
   const [integration, setIntegration] = useState(null);
+  const [connections, setConnections] = useState([]);
+  const [connectionName, setConnectionName] = useState("");
+  const [connectionApiKey, setConnectionApiKey] = useState("");
+  const [connectionSaving, setConnectionSaving] = useState(false);
+  const [connectionRefreshingId, setConnectionRefreshingId] = useState(null);
+  const [connectionMessage, setConnectionMessage] = useState("");
   const [snapshot, setSnapshot] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -544,7 +559,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [detailError, setDetailError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
-  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+  const [sourceFilter, setSourceFilter] = useState("All");
+  const [selectedVehicleKey, setSelectedVehicleKey] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [mapView, setMapView] = useState("fleet");
   const [selectedIncidentId, setSelectedIncidentId] = useState("");
@@ -552,6 +568,12 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
   useEffect(() => {
     setIntegration(null);
+    setConnections([]);
+    setConnectionName("");
+    setConnectionApiKey("");
+    setConnectionSaving(false);
+    setConnectionRefreshingId(null);
+    setConnectionMessage("");
     setSnapshot(null);
     setDetail(null);
     setLoading(Boolean(token));
@@ -559,26 +581,32 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     setDetailLoading(false);
     setError("");
     setDetailError("");
-    setSelectedVehicleId(null);
+    setSourceFilter("All");
+    setSelectedVehicleKey(null);
     setMapView("fleet");
     setSelectedIncidentId("");
     setSelectedIncidentVideoKey("");
   }, [token]);
 
   const fetchVehicleDetail = useCallback(
-    async (vehicleId, forceRefresh = false) => (
-      apiRequest(`/motive/vehicles/${vehicleId}${forceRefresh ? "?refresh=true" : ""}`, {}, token)
-    ),
+    async (vehicle, forceRefresh = false) => {
+      if (!vehicle?.id) return null;
+      const params = new URLSearchParams();
+      if (forceRefresh) params.set("refresh", "true");
+      if (vehicle.source_connection_id) params.set("connection_id", String(vehicle.source_connection_id));
+      const query = params.toString();
+      return apiRequest(`/motive/vehicles/${vehicle.id}${query ? `?${query}` : ""}`, {}, token);
+    },
     [token]
   );
 
   const loadVehicleDetail = useCallback(
-    async (vehicleId, forceRefresh = false) => {
-      if (!token || !vehicleId) return null;
+    async (vehicle, forceRefresh = false) => {
+      if (!token || !vehicle?.id) return null;
       setDetailLoading(true);
       setDetailError("");
       try {
-        const data = await fetchVehicleDetail(vehicleId, forceRefresh);
+        const data = await fetchVehicleDetail(vehicle, forceRefresh);
         setDetail(data);
         return data;
       } catch (fetchError) {
@@ -602,21 +630,29 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       setError("");
       try {
         const data = await apiRequest(`/motive/fleet${forceRefresh ? "?refresh=true" : ""}`, {}, token);
+        const vehicles = data.vehicles || [];
         setSnapshot(data);
         setDetail((current) => {
           if (!current?.vehicle?.id) {
             return current;
           }
-          return data.vehicles.some((vehicle) => String(vehicle.id) === String(current.vehicle.id)) ? current : null;
+          return vehicles.some((vehicle) => vehicleIdentity(vehicle) === vehicleIdentity(current.vehicle)) ? current : null;
         });
-        setSelectedVehicleId((current) => {
-          if (current && data.vehicles.some((vehicle) => vehicle.id === current)) {
-            return current;
-          }
-          return defaultVehicleId(data.vehicles || []);
-        });
-        if (forceRefresh && selectedVehicleId) {
-          await loadVehicleDetail(selectedVehicleId, true);
+
+        const nextKey = selectedVehicleKey && vehicles.some((vehicle) => vehicleIdentity(vehicle) === selectedVehicleKey)
+          ? selectedVehicleKey
+          : defaultVehicleId(vehicles);
+        const selectedForDetail = vehicles.find((vehicle) => vehicleIdentity(vehicle) === nextKey) || null;
+        setSelectedVehicleKey(nextKey);
+
+        if (data.fleet_connections) {
+          setConnections(data.fleet_connections);
+        }
+        if (forceRefresh && selectedForDetail) {
+          await loadVehicleDetail(selectedForDetail, true);
+        }
+        if (forceRefresh) {
+          setConnectionMessage("Refresh request finished across active API keys.");
         }
       } catch (fetchError) {
         setError(fetchError.message);
@@ -625,8 +661,97 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         setRefreshing(false);
       }
     },
-    [loadVehicleDetail, selectedVehicleId, token]
+    [loadVehicleDetail, selectedVehicleKey, token]
   );
+
+  const loadConnections = useCallback(async () => {
+    if (!token) return [];
+    const data = await apiRequest("/motive/connections", {}, token);
+    const rows = data.connections || [];
+    const activeCount = rows.filter((connection) => connection.isActive !== false).length;
+    setConnections(rows);
+    setIntegration((current) => current ? {
+      ...current,
+      configured: activeCount > 0 || (!current.managed_connections && current.configured),
+      managed_connections: rows.length > 0,
+      connection_count: rows.length,
+      active_connection_count: activeCount,
+    } : current);
+    return rows;
+  }, [token]);
+
+  const createConnection = useCallback(async (event) => {
+    event.preventDefault();
+    if (!token || !connectionName.trim() || !connectionApiKey.trim()) return;
+    setConnectionSaving(true);
+    setConnectionMessage("");
+    setError("");
+    try {
+      await apiRequest("/motive/connections", {
+        method: "POST",
+        body: JSON.stringify({
+          name: connectionName.trim(),
+          apiKey: connectionApiKey.trim(),
+        }),
+      }, token);
+      setConnectionName("");
+      setConnectionApiKey("");
+      await loadConnections();
+      await loadSnapshot(true);
+      setConnectionMessage("API key added. Sync status is shown below.");
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setConnectionSaving(false);
+    }
+  }, [connectionApiKey, connectionName, loadConnections, loadSnapshot, token]);
+
+  const patchConnection = useCallback(async (connectionId, payload) => {
+    if (!token) return;
+    setConnectionMessage("");
+    setError("");
+    try {
+      await apiRequest(`/motive/connections/${connectionId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }, token);
+      await loadConnections();
+      await loadSnapshot(false, true);
+    } catch (patchError) {
+      setError(patchError.message);
+    }
+  }, [loadConnections, loadSnapshot, token]);
+
+  const deleteConnection = useCallback(async (connectionId) => {
+    if (!token) return;
+    setConnectionMessage("");
+    setError("");
+    try {
+      await apiRequest(`/motive/connections/${connectionId}`, { method: "DELETE" }, token);
+      await loadConnections();
+      await loadSnapshot(false, true);
+      setConnectionMessage("API key removed from the combined fleet.");
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }, [loadConnections, loadSnapshot, token]);
+
+  const refreshConnection = useCallback(async (connectionId) => {
+    if (!token) return;
+    setConnectionRefreshingId(connectionId);
+    setConnectionMessage("");
+    setError("");
+    try {
+      await apiRequest(`/motive/connections/${connectionId}/refresh`, { method: "POST" }, token);
+      await loadConnections();
+      await loadSnapshot(false, true);
+      setConnectionMessage("Selected API key refreshed.");
+    } catch (refreshError) {
+      setError(refreshError.message);
+    } finally {
+      setConnectionRefreshingId(null);
+    }
+  }, [loadConnections, loadSnapshot, token]);
 
 
   const exportSnapshot = useCallback(async () => {
@@ -651,9 +776,10 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     async function bootstrap() {
       try {
         const status = await apiRequest("/motive/status", {}, token);
+        const connectionRows = await loadConnections();
         if (ignore) return;
         setIntegration(status);
-        if (status.configured) {
+        if (status.configured || connectionRows.length) {
           if (!snapshot) {
             await loadSnapshot(false);
           } else {
@@ -675,7 +801,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => {
       ignore = true;
     };
-  }, [active, integration, loadSnapshot, snapshot, token]);
+  }, [active, integration, loadConnections, loadSnapshot, snapshot, token]);
 
   useEffect(() => {
     if (!token || !integration?.configured || !autoRefresh || !active) {
@@ -720,9 +846,12 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         vehicle.resolved_driver?.email,
         vehicle.driver?.email,
         vehicle.permanent_driver?.email,
+        vehicleSourceLabel(vehicle),
+        vehicle.source_key_label,
         locationText,
       ].filter(Boolean).join(" ").toLowerCase();
       const matchesSearch = !term || haystack.includes(term);
+      const matchesSource = sourceFilter === "All" || String(vehicle.source_connection_id || "default") === String(sourceFilter);
       const fuelPercent = vehicleFuelPercent(vehicle) ?? 100;
       const matchesFilter =
         filter === "All" ||
@@ -731,9 +860,9 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         (filter === "Stale" && vehicle.is_stale) ||
         (filter === "Low Fuel" && fuelPercent <= 25) ||
         (filter === "Faults" && (vehicle.fault_summary?.active_count || 0) > 0);
-      return matchesSearch && matchesFilter;
+      return matchesSearch && matchesSource && matchesFilter;
     });
-  }, [filter, search, snapshot]);
+  }, [filter, search, snapshot, sourceFilter]);
 
   const attentionVehicles = useMemo(
     () => [...filteredVehicles]
@@ -743,37 +872,50 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     [filteredVehicles]
   );
 
+  const sourceOptions = useMemo(() => {
+    const fromSnapshot = snapshot?.fleet_connections || [];
+    const rows = fromSnapshot.length ? fromSnapshot : connections;
+    return rows.map((connection) => ({
+      id: String(connection.id),
+      name: connection.name,
+      keyLabel: connection.keyLabel,
+      vehicleCount: connection.lastVehicleCount || 0,
+      isActive: connection.isActive !== false,
+    }));
+  }, [connections, snapshot]);
+
   const selectedVehicle = useMemo(() => {
     if (!snapshot?.vehicles?.length) return null;
     return (
-      filteredVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ||
+      filteredVehicles.find((vehicle) => vehicleIdentity(vehicle) === selectedVehicleKey) ||
       filteredVehicles[0] ||
-      snapshot.vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ||
+      snapshot.vehicles.find((vehicle) => vehicleIdentity(vehicle) === selectedVehicleKey) ||
       snapshot.vehicles[0] ||
       null
     );
-  }, [filteredVehicles, selectedVehicleId, snapshot]);
+  }, [filteredVehicles, selectedVehicleKey, snapshot]);
 
   useEffect(() => {
-    if (selectedVehicle?.id !== selectedVehicleId) {
-      setSelectedVehicleId(selectedVehicle?.id ?? null);
+    const nextKey = selectedVehicle ? vehicleIdentity(selectedVehicle) : null;
+    if (nextKey !== selectedVehicleKey) {
+      setSelectedVehicleKey(nextKey);
     }
-  }, [selectedVehicle, selectedVehicleId]);
+  }, [selectedVehicle, selectedVehicleKey]);
 
-  const handleVehicleSelect = useCallback((vehicleId) => {
-    const nextVehicle = snapshot?.vehicles?.find((vehicle) => vehicle.id === vehicleId) || null;
-    setSelectedVehicleId(vehicleId);
+  const handleVehicleSelect = useCallback((vehicleKey) => {
+    const nextVehicle = snapshot?.vehicles?.find((vehicle) => vehicleIdentity(vehicle) === vehicleKey) || null;
+    setSelectedVehicleKey(vehicleKey);
     setMapView(hasCoordinates(nextVehicle) ? "street" : "fleet");
     setSelectedIncidentId("");
     setSelectedIncidentVideoKey("");
   }, [snapshot]);
 
   useEffect(() => {
-    if (!token || !selectedVehicleId || !integration?.configured) {
+    if (!token || !selectedVehicle || !selectedVehicleKey || !integration?.configured) {
       return undefined;
     }
 
-    if (detail?.vehicle?.id && String(detail.vehicle.id) === String(selectedVehicleId)) {
+    if (detail?.vehicle?.id && vehicleIdentity(detail.vehicle) === selectedVehicleKey) {
       return undefined;
     }
 
@@ -782,7 +924,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       setDetailLoading(true);
       setDetailError("");
       try {
-        const data = await fetchVehicleDetail(selectedVehicleId);
+        const data = await fetchVehicleDetail(selectedVehicle);
         if (!ignore) {
           setDetail(data);
         }
@@ -801,14 +943,14 @@ export default function MotiveTrackingPanel({ token, active = true }) {
     return () => {
       ignore = true;
     };
-  }, [detail?.vehicle?.id, fetchVehicleDetail, integration?.configured, selectedVehicleId]);
+  }, [detail?.vehicle, fetchVehicleDetail, integration?.configured, selectedVehicle, selectedVehicleKey, token]);
 
   if (!token) {
     return <section className="panel motive-panel"><div className="empty-route-card">Sign in to view Motive fleet tracking.</div></section>;
   }
 
   const historyPoints = detail?.history?.points || [];
-  const currentVehicle = selectedVehicle && detail?.vehicle?.id && String(detail.vehicle.id) === String(selectedVehicle.id)
+  const currentVehicle = selectedVehicle && detail?.vehicle?.id && vehicleIdentity(detail.vehicle) === vehicleIdentity(selectedVehicle)
     ? {
       ...selectedVehicle,
       ...detail.vehicle,
@@ -913,9 +1055,11 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         <div>
           <h2>Motive Fleet Tracking</h2>
           <span>
-            {integration?.configured
-              ? `Live vehicle intelligence${snapshot?.company?.name ? ` for ${snapshot.company.name}` : ""}.`
-              : "Backend connection is ready for a Motive key."}
+            {sourceOptions.length
+              ? `${sourceOptions.length} Motive source${sourceOptions.length === 1 ? "" : "s"} combined into one fleet view.`
+              : integration?.configured
+                ? `Live vehicle intelligence${snapshot?.company?.name ? ` for ${snapshot.company.name}` : ""}.`
+                : "Add a Motive API key to start syncing fleet data."}
           </span>
         </div>
         <div className="motive-panel-actions">
@@ -926,10 +1070,77 @@ export default function MotiveTrackingPanel({ token, active = true }) {
             {exporting ? "Exporting..." : "Export Excel"}
           </button>
           <button type="button" className="primary-button" onClick={() => loadSnapshot(true)} disabled={!integration?.configured || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh now"}
+            {refreshing ? "Refreshing..." : "Refresh all"}
           </button>
         </div>
       </div>
+
+      <section className="motive-connection-panel">
+        <div className="motive-connection-head">
+          <div>
+            <h3>Motive API keys</h3>
+            <span>{connections.length ? `${connections.length} saved key${connections.length === 1 ? "" : "s"}` : "No saved keys yet"}</span>
+          </div>
+          {connections.length ? (
+            <button type="button" className="secondary-button" onClick={() => loadSnapshot(true)} disabled={refreshing}>
+              {refreshing ? "Refreshing..." : "Sync all keys"}
+            </button>
+          ) : null}
+        </div>
+
+        <form className="motive-connection-form" onSubmit={createConnection}>
+          <label>
+            Name
+            <input
+              type="text"
+              value={connectionName}
+              onChange={(event) => setConnectionName(event.target.value)}
+              placeholder="Company, branch, or fleet group"
+              maxLength={160}
+            />
+          </label>
+          <label>
+            Motive API key
+            <input
+              type="password"
+              value={connectionApiKey}
+              onChange={(event) => setConnectionApiKey(event.target.value)}
+              placeholder="Paste x-api-key"
+              autoComplete="off"
+            />
+          </label>
+          <button type="submit" className="primary-button" disabled={connectionSaving || !connectionName.trim() || !connectionApiKey.trim()}>
+            {connectionSaving ? "Adding..." : "Add and sync"}
+          </button>
+        </form>
+
+        {connectionMessage ? <div className="notice success inline-notice">{connectionMessage}</div> : null}
+
+        {connections.length ? (
+          <div className="motive-connection-list">
+            {connections.map((connection) => (
+              <article key={connection.id} className={`motive-connection-row ${connection.isActive ? "" : "inactive"}`.trim()}>
+                <div>
+                  <strong>{connection.name}</strong>
+                  <small>{connection.keyLabel || "Saved key"} | {connection.lastStatus || "ready"} | {metricValue(connection.lastVehicleCount)} trucks</small>
+                  {connection.lastError ? <span>{connection.lastError}</span> : null}
+                </div>
+                <div className="motive-connection-actions">
+                  <button type="button" className="secondary-button" onClick={() => refreshConnection(connection.id)} disabled={connectionRefreshingId === connection.id || !connection.isActive}>
+                    {connectionRefreshingId === connection.id ? "Syncing..." : "Sync"}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => patchConnection(connection.id, { isActive: !connection.isActive })}>
+                    {connection.isActive ? "Disable" : "Enable"}
+                  </button>
+                  <button type="button" className="delete-button" onClick={() => deleteConnection(connection.id)}>
+                    Delete
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       {error ? <div className="notice error inline-notice">{error}</div> : null}
       {detailError ? <div className="notice error inline-notice">{detailError}</div> : null}
@@ -938,8 +1149,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
 
       {!integration?.configured && !loading ? (
         <div className="motive-setup-card">
-          <strong>Motive key is not configured on the backend.</strong>
-          <p>Add `MOTIVE_API_KEY` or OAuth credentials in the backend env to unlock full fleet tracking.</p>
+          <strong>No active Motive key is synced yet.</strong>
+          <p>Add a named key above, then sync it to build the combined fleet view.</p>
         </div>
       ) : null}
 
@@ -1004,8 +1215,8 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     {search ? ` Search: "${search}".` : ""}
                   </span>
                 </div>
-                {(search || filter !== "All") ? (
-                  <button type="button" className="secondary-button" onClick={() => { setSearch(""); setFilter("All"); }}>
+                {(search || filter !== "All" || sourceFilter !== "All") ? (
+                  <button type="button" className="secondary-button" onClick={() => { setSearch(""); setFilter("All"); setSourceFilter("All"); }}>
                     Clear filters
                   </button>
                 ) : null}
@@ -1016,6 +1227,19 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <span>Search fleet</span>
                   <input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Truck, driver, VIN, plate, location" />
                 </label>
+                {sourceOptions.length ? (
+                  <label className="workspace-table-search motive-source-filter">
+                    <span>Source</span>
+                    <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                      <option value="All">All sources</option>
+                      {sourceOptions.map((source) => (
+                        <option key={source.id} value={source.id}>
+                          {source.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
 
               <div className="motive-filter-tabs">
@@ -1036,7 +1260,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   </div>
                   <div className="motive-attention-grid">
                     {attentionVehicles.map((vehicle) => (
-                      <AttentionVehicleCard key={`attention-${vehicle.id}`} vehicle={vehicle} active={currentVehicle?.id === vehicle.id} onSelect={handleVehicleSelect} />
+                      <AttentionVehicleCard key={`attention-${vehicleIdentity(vehicle)}`} vehicle={vehicle} active={vehicleIdentity(currentVehicle) === vehicleIdentity(vehicle)} onSelect={handleVehicleSelect} />
                     ))}
                   </div>
                 </section>
@@ -1045,7 +1269,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
               <div className="motive-vehicle-card-list">
                 {filteredVehicles.length ? (
                   filteredVehicles.map((vehicle) => (
-                    <VehicleListCard key={`${vehicle.id}-${vehicle.number}`} vehicle={vehicle} selected={currentVehicle?.id === vehicle.id} onSelect={handleVehicleSelect} />
+                    <VehicleListCard key={`${vehicleIdentity(vehicle)}-${vehicle.number}`} vehicle={vehicle} selected={vehicleIdentity(currentVehicle) === vehicleIdentity(vehicle)} onSelect={handleVehicleSelect} />
                   ))
                 ) : (
                   <div className="empty-route-card">No vehicles match your search or filters.</div>
@@ -1061,11 +1285,12 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <h3>{currentVehicle?.number || "No truck selected"}</h3>
                     <p>
                       {currentVehicle
-                        ? `${selectedDriverLabel} | ${selectedLocationLabel}`
+                        ? `${vehicleSourceLabel(currentVehicle)} | ${selectedDriverLabel} | ${selectedLocationLabel}`
                         : "Choose a truck from the left to inspect live position, fuel, faults, and route breadcrumbs."}
                     </p>
                   </div>
                   <div className="motive-focus-pills">
+                    {currentVehicle?.source_connection_name ? <span className="motive-source-pill">{currentVehicle.source_connection_name}</span> : null}
                     {currentVehicle ? <span className={`motive-status-pill ${vehicleTone(currentVehicle)}`}>{vehicleStateLabel(currentVehicle)}</span> : null}
                     {currentVehicle ? <span className={`motive-status-pill ${eldTone(currentVehicle)}`}>HOS {eldStatusLabel(currentEldHours)}</span> : null}
                   </div>
@@ -1134,7 +1359,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <MotiveFleetMap
                     active={active}
                     vehicles={filteredVehicles}
-                    selectedVehicleId={currentVehicle?.id ?? null}
+                    selectedVehicleId={currentVehicle ? vehicleIdentity(currentVehicle) : null}
                     onSelect={handleVehicleSelect}
                     viewMode={mapView}
                   />
@@ -1171,6 +1396,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     </div>
 
                     <div className="motive-detail-list">
+                      <div><span>Source</span><strong>{vehicleSourceLabel(currentVehicle)}</strong><small>{currentVehicle.source_key_label || "Motive API"}</small></div>
                       <div><span>Driver</span><strong>{vehicleDriverLabel(currentVehicle)}</strong><small>{currentVehicle.resolved_driver?.email || currentVehicle.resolved_driver?.phone || currentVehicle.driver?.email || currentVehicle.driver?.phone || currentVehicle.permanent_driver?.email || "No driver contact"}</small></div>
                       <div><span>Vehicle</span><strong>{[currentVehicle.year, currentVehicle.make, currentVehicle.model].filter(Boolean).join(" ") || "Unknown unit"}</strong><small>{currentVehicle.license_plate_number ? `${currentVehicle.license_plate_state || ""} ${currentVehicle.license_plate_number}`.trim() : "No plate"}</small></div>
                       <div><span>ELD / HOS</span><strong>{currentVehicle.eld_device?.identifier || currentEldHours.source || "Unavailable"}</strong><small>{currentEldHours.summary || currentVehicle.eld_device?.model || "No gateway model"}</small></div>
@@ -1267,7 +1493,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
           setSelectedIncidentId("");
           setSelectedIncidentVideoKey("");
         }}
-        onRefresh={() => loadVehicleDetail(selectedVehicleId, true)}
+        onRefresh={() => currentVehicle && loadVehicleDetail(currentVehicle, true)}
         refreshing={detailLoading}
       />
     </section>

@@ -15063,6 +15063,7 @@ body.theme-dark .full-road-health-badge.tone-dark {
 }
 
 .motive-guidance-card,
+.motive-connection-panel,
 .motive-summary-section,
 .motive-focus-card,
 .motive-list-panel-commercial,
@@ -15080,6 +15081,93 @@ body.theme-dark .full-road-health-badge.tone-dark {
   grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.35fr);
   gap: 16px;
   padding: 18px;
+}
+
+.motive-connection-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.motive-connection-head,
+.motive-connection-row,
+.motive-connection-actions,
+.motive-connection-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.motive-connection-head,
+.motive-connection-row {
+  justify-content: space-between;
+}
+
+.motive-connection-head h3 {
+  margin: 0;
+}
+
+.motive-connection-head span,
+.motive-connection-row small,
+.motive-connection-row span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.motive-connection-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.65fr) minmax(260px, 1fr) auto;
+  align-items: end;
+}
+
+.motive-connection-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.motive-connection-form input,
+.motive-source-filter select {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+}
+
+.motive-connection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.motive-connection-row {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.motive-connection-row.inactive {
+  opacity: 0.66;
+}
+
+.motive-connection-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.motive-connection-row strong {
+  font-size: 16px;
+}
+
+.motive-connection-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .motive-guidance-copy {
@@ -15168,7 +15256,7 @@ body.theme-dark .full-road-health-badge.tone-dark {
 }
 
 .motive-list-toolbar-commercial {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
 }
 
 .motive-attention-queue {
@@ -15364,6 +15452,15 @@ body.theme-dark .full-road-health-badge.tone-dark {
   .motive-list-panel-commercial {
     position: static;
   }
+
+  .motive-connection-form,
+  .motive-list-toolbar-commercial {
+    grid-template-columns: 1fr;
+  }
+
+  .motive-connection-row {
+    display: grid;
+  }
 }
 
 @media (max-width: 960px) {
@@ -15395,6 +15492,7 @@ body.theme-dark .full-road-health-badge.tone-dark {
   .workspace-orientation-strip,
   .workspace-command-hero-card,
   .motive-guidance-card,
+  .motive-connection-panel,
   .motive-summary-section,
   .motive-list-panel-commercial,
   .motive-focus-card,
@@ -19268,6 +19366,24 @@ body.theme-dark .auth-shift-item-meta span {
   color: #f7fbff;
   font-size: 12px;
   font-weight: 700;
+}
+
+.motive-source-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 180px;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-focus-copy {

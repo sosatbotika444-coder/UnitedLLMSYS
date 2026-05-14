@@ -722,6 +722,44 @@ class MotiveIntegrationStatus(BaseModel):
     metric_units: bool
     time_zone: str
     fleet_user_id: int | None = None
+    auth_mode: str = "none"
+    connection_count: int = 0
+    active_connection_count: int = 0
+    managed_connections: bool = False
+
+
+class MotiveApiConnectionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    apiKey: str = Field(min_length=8, max_length=4000)
+    apiBaseUrl: str = Field(default="https://api.gomotive.com", max_length=255)
+    metricUnits: bool = False
+    motiveUserId: int | None = Field(default=None, ge=1)
+    isActive: bool = True
+
+
+class MotiveApiConnectionUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    apiKey: str | None = Field(default=None, min_length=8, max_length=4000)
+    apiBaseUrl: str | None = Field(default=None, max_length=255)
+    metricUnits: bool | None = None
+    motiveUserId: int | None = Field(default=None, ge=1)
+    isActive: bool | None = None
+
+
+class MotiveApiConnectionResponse(BaseModel):
+    id: int
+    name: str
+    keyLabel: str = ""
+    apiBaseUrl: str
+    metricUnits: bool = False
+    motiveUserId: int | None = None
+    isActive: bool = True
+    lastStatus: str = "ready"
+    lastError: str = ""
+    lastSyncedAt: datetime | None = None
+    lastVehicleCount: int = 0
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
 
 
 class MotiveCompanySummary(BaseModel):

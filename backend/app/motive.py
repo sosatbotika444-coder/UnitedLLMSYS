@@ -1081,6 +1081,9 @@ class MotiveClient:
 
     def _build_vehicle_detail(self, vehicle_id: int, force_refresh: bool = False) -> dict:
         snapshot = self.fetch_snapshot(force_refresh=force_refresh)
+        return self.build_vehicle_detail_from_snapshot(snapshot, vehicle_id)
+
+    def build_vehicle_detail_from_snapshot(self, snapshot: dict, vehicle_id: int) -> dict:
         vehicle = next((item for item in snapshot.get("vehicles", []) if item.get("id") == vehicle_id), None)
         if not vehicle:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found in Motive fleet")
