@@ -2,7 +2,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,7 +11,6 @@ from app.database import get_db
 from app.driver_identity import parse_driver_vehicle_id
 from app.models import SafetyDocument, SafetyInvestigationCase, SafetyNote, SafetyShiftBrief, User
 from app.motive import MotiveClient
-from app.safety_documents import SafetyDocumentError, analyze_uploaded_safety_document
 from app.safety_fleet import build_safety_fleet_snapshot
 from app.safety_service_map import build_service_map_snapshot
 from app.schemas import (
@@ -124,6 +122,8 @@ def _apply_shift_brief_payload(brief: SafetyShiftBrief, payload: SafetyShiftBrie
 
 
 def _excel_response(rows: list[dict], file_name: str, sheet_name: str) -> StreamingResponse:
+    from openpyxl import Workbook
+
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = sheet_name[:31] or "Safety Export"
@@ -278,6 +278,8 @@ def list_safety_documents(current_user: User = Depends(require_user_department("
 
 @router.post("/documents", response_model=SafetyDocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_safety_document(payload: SafetyDocumentUpload, current_user: User = Depends(require_user_department("safety")), db: Session = Depends(get_db)):
+    from app.safety_documents import SafetyDocumentError, analyze_uploaded_safety_document
+
     try:
         analysis = analyze_uploaded_safety_document(
             file_name=payload.file_name,

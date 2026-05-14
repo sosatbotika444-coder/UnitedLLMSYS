@@ -3,7 +3,6 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -146,6 +145,8 @@ def _trip_export_rows(records: list[FullRoadTrip]) -> list[dict]:
 
 
 def _excel_response(rows: list[dict], file_name: str, sheet_name: str) -> StreamingResponse:
+    from openpyxl import Workbook
+
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = (sheet_name or "Full Road Export")[:31]

@@ -6,25 +6,40 @@ from datetime import datetime, timezone
 from io import BytesIO
 from typing import Callable
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.worksheet import Worksheet
 
-
-HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
-SECTION_FILL = PatternFill(fill_type="solid", fgColor="D9EAF7") 
-HEADER_FONT = Font(color="FFFFFF", bold=True)
-SECTION_FONT = Font(bold=True)
-TITLE_FONT = Font(bold=True, size=16)
-WRAP_ALIGNMENT = Alignment(vertical="top", wrap_text=True)
+HEADER_FILL = None
+SECTION_FILL = None
+HEADER_FONT = None
+SECTION_FONT = None
+TITLE_FONT = None
+WRAP_ALIGNMENT = None
+get_column_letter = None
 DEFAULT_TANK_CAPACITY_GALLONS = 200.0
 
 
 ColumnSpec = tuple[str, Callable[[dict], object]]
 
 
+def _load_openpyxl():
+    global HEADER_FILL, SECTION_FILL, HEADER_FONT, SECTION_FONT, TITLE_FONT, WRAP_ALIGNMENT, get_column_letter
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter as openpyxl_get_column_letter
+
+    if HEADER_FILL is None:
+        HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
+        SECTION_FILL = PatternFill(fill_type="solid", fgColor="D9EAF7")
+        HEADER_FONT = Font(color="FFFFFF", bold=True)
+        SECTION_FONT = Font(bold=True)
+        TITLE_FONT = Font(bold=True, size=16)
+        WRAP_ALIGNMENT = Alignment(vertical="top", wrap_text=True)
+        get_column_letter = openpyxl_get_column_letter
+    return Workbook
+
+
 def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
+    Workbook = _load_openpyxl()
     workbook = Workbook()
     overview = workbook.active
     overview.title = "Overview"

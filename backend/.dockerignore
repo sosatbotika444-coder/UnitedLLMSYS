@@ -1,0 +1,14 @@
+.env
+.venv
+__pycache__
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.err.log
+*.out.log
+.pytest_cache
+.mypy_cache
+.ruff_cache
+app/data/motive_snapshot_cache.json

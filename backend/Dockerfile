@@ -13,11 +13,9 @@ ENV DATABASE_MAX_OVERFLOW=0
 
 WORKDIR /app
 
-COPY backend/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY backend /app/backend
-
-WORKDIR /app/backend
+COPY . /app
 
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-1}"]
