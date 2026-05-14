@@ -36,9 +36,9 @@ def _bootstrap_database() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _bootstrap_database()
-    if settings.station_catalog_startup_refresh_enabled:
+    if settings.station_catalog_startup_refresh_enabled and not settings.memory_safe_startup_enabled:
         start_station_catalog_refresh_if_needed()
-    if settings.motive_background_refresh_enabled:
+    if settings.motive_background_refresh_enabled and not settings.memory_safe_startup_enabled:
         start_motive_snapshot_refresh_worker(settings)
     try:
         yield

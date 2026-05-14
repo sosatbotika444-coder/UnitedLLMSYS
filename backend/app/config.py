@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,6 +50,7 @@ class Settings(BaseSettings):
     motive_snapshot_cache_file: str = ""
     motive_background_refresh_enabled: bool = True
     motive_startup_refresh_enabled: bool = True
+    railway_memory_safe_startup: bool = True
     motive_background_refresh_interval_seconds: int = 600
     motive_api_fetch_workers: int = 4
     motive_snapshot_archive_retention_days: int = 7
@@ -114,6 +116,22 @@ class Settings(BaseSettings):
         if lowered.startswith("postgresql+psycopg"):
             return "postgresql"
         return "other"
+
+    @property
+    def is_railway_runtime(self) -> bool:
+        return any(
+            os.getenv(name)
+            for name in (
+                "RAILWAY_ENVIRONMENT",
+                "RAILWAY_PROJECT_ID",
+                "RAILWAY_SERVICE_ID",
+                "RAILWAY_DEPLOYMENT_ID",
+            )
+        )
+
+    @property
+    def memory_safe_startup_enabled(self) -> bool:
+        return bool(self.railway_memory_safe_startup and self.is_railway_runtime)
 
 
 class TruckData:
