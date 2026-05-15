@@ -15,8 +15,8 @@ const features = [
   },
   {
     icon: "fuel",
-    title: "Fuel cost control",
-    detail: "Estimate gallons, price caps, savings, and authorizations before the truck reaches the pump.",
+    title: "Fuel authorization workflow",
+    detail: "Plan stops, prepare driver instructions, and keep approvals connected to the route context.",
   },
   {
     icon: "fleet",
@@ -41,55 +41,52 @@ const features = [
 ];
 
 const analyticsCards = [
-  { label: "Active Loads", value: "128", delta: "+18%" },
-  { label: "Fuel Saved", value: "$42.8k", delta: "+11%" },
-  { label: "At Risk Units", value: "7", delta: "-24%" },
-  { label: "Avg Response", value: "4.2m", delta: "-31%" },
+  { label: "Role Workspaces", value: "5", detail: "Admin, Fuel, Statistics, Safety, and Driver" },
+  { label: "Core Modules", value: "8+", detail: "Loads, routing, tracking, approvals, documents, chat" },
+  { label: "Fleet Sources", value: "2", detail: "Motive telemetry plus TomTom route intelligence" },
+  { label: "Driver Flow", value: "Truck Match", detail: "Drivers connect through their assigned vehicle" },
 ];
 
 const dashboardRows = [
-  { truck: "UL-148", lane: "Dalton, GA -> Dallas, TX", status: "On Route", score: "96%" },
-  { truck: "UL-214", lane: "Chicago, IL -> Newark, NJ", status: "Fuel Review", score: "82%" },
-  { truck: "UL-088", lane: "Atlanta, GA -> Tampa, FL", status: "Ready", score: "91%" },
+  { area: "Routing", fact: "Build A/B routes with truck context", owner: "Fuel Service", status: "Live" },
+  { area: "Safety", fact: "Cases, documents, notes, and shift briefs", owner: "Safety", status: "Ready" },
+  { area: "Driver Portal", fact: "Mobile workspace linked to Motive truck match", owner: "Driver", status: "Active" },
 ];
 
-const plans = [
+const projectFactGroups = [
   {
-    name: "Launch",
-    price: "Private",
-    detail: "For a small dispatch team getting fuel, route, and truck visibility into one workspace.",
-    items: ["Role-based login", "Load board", "Route history", "Team chat"],
+    name: "Access Model",
+    label: "Private",
+    detail: "The platform is built for internal operations, with office accounts created by Admin.",
+    items: ["Role-based login", "Protected backend routes", "Driver truck matching", "Admin account controls"],
   },
   {
     name: "Operations",
-    price: "Growth",
-    detail: "For fleets that need daily command-center work across dispatch, fuel, safety, and drivers.",
-    items: ["Motive fleet sync", "Fuel approvals", "Analytics dashboard", "Safety workspace"],
+    label: "Connected",
+    detail: "Daily work is grouped around loads, routes, live fleet status, approvals, and shared messages.",
+    items: ["Motive fleet sync", "Route builder", "Fleet analytics", "Team chat"],
     featured: true,
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    detail: "For multi-role teams that want tighter workflows, reporting, and managed deployment support.",
-    items: ["Admin controls", "Custom workflows", "Data exports", "Priority support"],
+    name: "Safety Layer",
+    label: "Organized",
+    detail: "Safety users get a separate workspace for follow-up, evidence, documents, and handoffs.",
+    items: ["Safety notes", "Document review", "Incident cases", "Shift briefs"],
   },
 ];
 
-const testimonials = [
+const projectNotes = [
   {
-    quote: "United Lane puts routing, fuel decisions, and driver context in one place. The team moves faster because the screen matches the shift.",
-    name: "Dispatch Lead",
-    role: "Fuel Service",
+    title: "One login, different workspaces",
+    detail: "Admin, Fuel Service, Statistics, Safety, and Driver accounts land in different areas after sign-in.",
   },
   {
-    quote: "The safety workspace keeps reviews, notes, documents, and urgent support organized without sending people through five systems.",
-    name: "Safety Manager",
-    role: "Compliance",
+    title: "Driver access stays focused",
+    detail: "Drivers use a mobile-first workspace tied to truck matching instead of seeing the whole office system.",
   },
   {
-    quote: "The driver portal is simple enough for the road, but it still connects back to the office view. That is the balance we needed.",
-    name: "Fleet Operator",
-    role: "Driver Support",
+    title: "Safety has its own record flow",
+    detail: "Notes, uploaded documents, investigations, service tools, and shift briefs stay grouped together.",
   },
 ];
 
@@ -119,14 +116,14 @@ function DashboardPreview() {
         <span />
         <span />
         <span />
-        <strong>Operations Command</strong>
+        <strong>Project Facts</strong>
       </div>
 
       <div className="startup-preview-grid">
         <section className="startup-preview-chart">
           <div className="startup-preview-heading">
-            <span>Fuel Performance</span>
-            <strong>$42.8k saved</strong>
+            <span>Core Workspaces</span>
+            <strong>5 roles</strong>
           </div>
           <div className="startup-bars" aria-hidden="true">
             {[42, 70, 55, 88, 64, 94, 78].map((height, index) => (
@@ -136,8 +133,8 @@ function DashboardPreview() {
         </section>
 
         <section className="startup-preview-card startup-preview-map">
-          <span>Live Fleet</span>
-          <strong>47 moving</strong>
+          <span>Fleet Layer</span>
+          <strong>Motive sync</strong>
           <div className="startup-route-line" aria-hidden="true">
             <i />
             <i />
@@ -146,24 +143,24 @@ function DashboardPreview() {
         </section>
 
         <section className="startup-preview-card startup-preview-risk">
-          <span>Safety Queue</span>
-          <strong>7 reviews</strong>
-          <small>3 critical follow-ups today</small>
+          <span>Route Layer</span>
+          <strong>TomTom tools</strong>
+          <small>Maps, search, routing, and traffic</small>
         </section>
 
         <section className="startup-preview-table">
           <div className="startup-table-head">
-            <span>Truck</span>
-            <span>Lane</span>
+            <span>Area</span>
+            <span>Project fact</span>
+            <span>Workspace</span>
             <span>Status</span>
-            <span>Score</span>
           </div>
           {dashboardRows.map((row) => (
-            <div className="startup-table-row" key={row.truck}>
-              <strong>{row.truck}</strong>
-              <span>{row.lane}</span>
+            <div className="startup-table-row" key={row.area}>
+              <strong>{row.area}</strong>
+              <span>{row.fact}</span>
+              <span>{row.owner}</span>
               <em>{row.status}</em>
-              <b>{row.score}</b>
             </div>
           ))}
         </section>
@@ -189,7 +186,7 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
               Request Access
             </a>
             <a className="startup-button startup-button-secondary" href="#analytics">
-              View Dashboard
+              View Facts
             </a>
           </div>
 
@@ -242,11 +239,11 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
           <div className="startup-about-panel">
             <article>
               <strong>Mission</strong>
-              <p>Reduce dispatch drag, fuel waste, and handoff confusion by giving every role a focused workspace backed by shared operational data.</p>
+              <p>Reduce dispatch drag and handoff confusion by giving every role a focused workspace backed by shared operational data.</p>
             </article>
             <article>
               <strong>Why it matters</strong>
-              <p>When live fleet status, route economics, safety notes, and driver tools sit together, teams spend less time hunting and more time deciding.</p>
+              <p>When live fleet status, route context, safety notes, and driver tools sit together, teams spend less time hunting and more time deciding.</p>
             </article>
           </div>
         </div>
@@ -255,8 +252,8 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
       <section className="startup-section startup-analytics startup-reveal" id="analytics">
         <div className="startup-container">
           <div className="startup-section-heading">
-            <span>Dashboard Preview</span>
-            <h2>Analytics that feel like a control room, not a spreadsheet.</h2>
+            <span>Project Facts</span>
+            <h2>A quick look at what the platform actually includes.</h2>
           </div>
 
           <div className="startup-analytics-grid">
@@ -265,7 +262,7 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
                 <article className="startup-stat-card" key={item.label}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
-                  <small>{item.delta} this month</small>
+                  <small>{item.detail}</small>
                 </article>
               ))}
             </div>
@@ -275,30 +272,30 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
         </div>
       </section>
 
-      <section className="startup-section startup-pricing startup-reveal" id="pricing">
+      <section className="startup-section startup-pricing startup-reveal" id="project-facts">
         <div className="startup-container">
           <div className="startup-section-heading">
-            <span>Plans</span>
-            <h2>Flexible plans for growing fleet operations.</h2>
-            <p>Choose the operating model that fits the team now, then scale into deeper analytics and managed workflows.</p>
+            <span>Inside The Project</span>
+            <h2>Three simple facts about how the product is organized.</h2>
+            <p>Access, operations, and safety are separated so each team sees the workspace meant for its role.</p>
           </div>
 
           <div className="startup-pricing-grid">
-            {plans.map((plan) => (
-              <article className={`startup-plan-card ${plan.featured ? "startup-plan-featured" : ""}`.trim()} key={plan.name}>
-                <span>{plan.name}</span>
-                <h3>{plan.price}</h3>
-                <p>{plan.detail}</p>
+            {projectFactGroups.map((group) => (
+              <article className={`startup-plan-card ${group.featured ? "startup-plan-featured" : ""}`.trim()} key={group.name}>
+                <span>{group.name}</span>
+                <h3>{group.label}</h3>
+                <p>{group.detail}</p>
                 <ul>
-                  {plan.items.map((item) => (
+                  {group.items.map((item) => (
                     <li key={item}>
                       <UnitedIcon name="success" size={15} />
                       {item}
                     </li>
                   ))}
                 </ul>
-                <a className={plan.featured ? "startup-button startup-button-primary" : "startup-button startup-button-secondary"} href="#client-access">
-                  Talk to Team
+                <a className={group.featured ? "startup-button startup-button-primary" : "startup-button startup-button-secondary"} href="#client-access">
+                  Open Access
                 </a>
               </article>
             ))}
@@ -309,17 +306,17 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
       <section className="startup-section startup-testimonials startup-reveal" id="testimonials">
         <div className="startup-container">
           <div className="startup-section-heading">
-            <span>Testimonials</span>
-            <h2>Designed for the people running the day.</h2>
+            <span>Project Notes</span>
+            <h2>Small details that explain the system better.</h2>
           </div>
 
           <div className="startup-testimonial-grid">
-            {testimonials.map((item) => (
-              <article className="startup-testimonial-card" key={item.name}>
-                <p>{item.quote}</p>
+            {projectNotes.map((item) => (
+              <article className="startup-testimonial-card" key={item.title}>
+                <p>{item.detail}</p>
                 <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.role}</span>
+                  <strong>{item.title}</strong>
+                  <span>Project fact</span>
                 </div>
               </article>
             ))}
@@ -380,7 +377,7 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
             <a href="#features">Features</a>
             <a href="#about">About</a>
             <a href="#analytics">Analytics</a>
-            <a href="#pricing">Plans</a>
+            <a href="#project-facts">Facts</a>
             <a href="#faq">FAQ</a>
           </nav>
           <small>Copyright 2026 United Lane LLC. Built for private logistics operations.</small>
