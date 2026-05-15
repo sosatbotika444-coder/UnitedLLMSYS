@@ -1,5 +1,6 @@
 import { UnitedIcon } from "./UnitedLaneIcons";
 import { UnitedLaneMark } from "./UnitedLaneSiteChrome";
+import FreeTimeHub from "./FreeTimeHub";
 
 const heroStats = [
   { value: "58+", label: "fleet units monitored" },
@@ -324,6 +325,18 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
         </div>
       </section>
 
+      <section className="startup-section startup-free-time startup-reveal" id="free-time">
+        <div className="startup-container">
+          <div className="startup-section-heading">
+            <span>Free Time</span>
+            <h2>A clean little place to relax before the next login.</h2>
+            <p>Mini games for quick pauses, plus a calm ball screen for when the desk needs to breathe.</p>
+          </div>
+
+          <FreeTimeHub />
+        </div>
+      </section>
+
       <section className="startup-section startup-access startup-reveal" id="client-access">
         <div className="startup-container startup-access-grid">
           <div className="startup-access-copy">
@@ -378,6 +391,7 @@ export default function CommercialLanding({ authPanel, mobile = false }) {
             <a href="#about">About</a>
             <a href="#analytics">Analytics</a>
             <a href="#project-facts">Facts</a>
+            <a href="#free-time">Free Time</a>
             <a href="#faq">FAQ</a>
           </nav>
           <small>Copyright 2026 United Lane LLC. Built for private logistics operations.</small>

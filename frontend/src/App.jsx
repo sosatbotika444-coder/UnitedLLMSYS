@@ -2060,7 +2060,7 @@ export default function App() {
           onHome={handleHomeNavigation}
           onAbout={() => scrollToMarketingSection("about")}
           onDocs={() => scrollToMarketingSection("analytics")}
-          onPrivacy={() => scrollToMarketingSection("pricing")}
+          onPrivacy={() => scrollToMarketingSection("project-facts")}
           activeItem={activeSiteNav}
           action={{ label: "Client Sign In", icon: "user", onClick: focusClientAccess }}
           navItems={[
@@ -2068,7 +2068,8 @@ export default function App() {
             { id: "features", label: "Features", icon: "spark", onClick: () => scrollToMarketingSection("features") },
             { id: "about", label: "About", icon: "about", onClick: () => scrollToMarketingSection("about") },
             { id: "analytics", label: "Analytics", icon: "chart", onClick: () => scrollToMarketingSection("analytics") },
-            { id: "pricing", label: "Plans", icon: "approvals", onClick: () => scrollToMarketingSection("pricing") },
+            { id: "project-facts", label: "Facts", icon: "approvals", onClick: () => scrollToMarketingSection("project-facts") },
+            { id: "free-time", label: "Free Time", icon: "theme", onClick: () => scrollToMarketingSection("free-time") },
             { id: "faq", label: "FAQ", icon: "info", onClick: () => scrollToMarketingSection("faq") },
           ]}
         />
