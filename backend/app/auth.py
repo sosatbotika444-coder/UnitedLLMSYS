@@ -191,7 +191,6 @@ def get_current_user(
     assert_user_can_authenticate(user)
     return release_authenticated_user(db, user)
 
-
 def require_user_department(*allowed_departments: str):
     allowed = {department.strip().lower() for department in allowed_departments if department.strip()}
 

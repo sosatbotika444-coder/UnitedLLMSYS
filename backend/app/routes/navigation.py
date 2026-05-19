@@ -76,6 +76,9 @@ TOMTOM_BRAND_KEYWORDS = [
 ]
 ALONG_ROUTE_PAGE_SIZE = 100
 ALONG_ROUTE_MAX_RESULTS = 180
+MIN_ROUTE_POINT_COUNT = 100
+DISPLAY_ROUTE_POINT_LIMIT = 1200
+ROUTING_ROUTE_POINT_LIMIT = 1800
 BRAND_SEARCH_DETOUR_SECONDS = 2400
 OFFICIAL_SITE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0 Safari/537.36"
@@ -619,6 +622,37 @@ def build_fallback_location_secondary_text(address: dict) -> str:
     return ", ".join(parts[:3])
 
 
+def build_coordinate_query_label(label: str, lat: object, lon: object) -> str:
+    coordinate_label = format_coordinate_label(lat, lon)
+    cleaned_label = str(label or "").strip()
+    if not cleaned_label or cleaned_label == coordinate_label:
+        return coordinate_label
+    return f"{cleaned_label} ({coordinate_label})"
+
+
+def build_coordinate_suggestion(query: str, lat: float, lon: float) -> LocationSuggestion:
+    coordinate_label = format_coordinate_label(lat, lon)
+    reverse_match = reverse_geocode_point(lat, lon, settings.tomtom_api_key)
+    reverse_label = str((reverse_match or {}).get("label") or "").strip()
+    label = reverse_label or coordinate_label
+    return LocationSuggestion(
+        id=f"coord:{round(lat, 6)}:{round(lon, 6)}",
+        label=label,
+        secondary_text=f"Exact coordinates: {coordinate_label}",
+        lat=lat,
+        lon=lon,
+        type="coordinate",
+        query=build_coordinate_query_label(label, lat, lon),
+    )
+
+
+def build_location_suggestion_query(label: str, lat: object, lon: object) -> str:
+    coordinate_label = format_coordinate_label(lat, lon)
+    if not coordinate_label:
+        return str(label or "").strip()
+    return build_coordinate_query_label(label, lat, lon)
+
+
 def fallback_location_suggestions(query: str, limit: int = 6) -> list[LocationSuggestion]:
     params = urlencode({
         "q": query,
@@ -658,6 +692,7 @@ def fallback_location_suggestions(query: str, limit: int = 6) -> list[LocationSu
             lat=lat,
             lon=lon,
             type=str(item.get("type")) if item.get("type") else None,
+            query=build_location_suggestion_query(label, lat, lon),
         ))
     return suggestions
 
@@ -744,6 +779,11 @@ def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSugg
     if len(trimmed_query) < 2:
         return []
 
+    coordinate_point = parse_coordinate_query(trimmed_query)
+    if coordinate_point:
+        lat, lon = coordinate_point
+        return [build_coordinate_suggestion(trimmed_query, lat, lon)]
+
     if settings.tomtom_api_key and TOMTOM_SEARCH_ACCESS is not False:
         encoded_query = quote(trimmed_query)
         params = urlencode({
@@ -788,6 +828,7 @@ def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSugg
                     lat=float(lat),
                     lon=float(lon),
                     type=str(suggestion_type) if suggestion_type else None,
+                    query=build_location_suggestion_query(label, lat, lon),
                 ))
             if suggestions:
                 return suggestions
@@ -798,7 +839,8 @@ def search_location_suggestions(query: str, limit: int = 6) -> list[LocationSugg
 @lru_cache(maxsize=512)
 def geocode_address(query: str) -> tuple[GeocodedPoint, str]:
     global TOMTOM_SEARCH_ACCESS
-    coordinate_point = parse_coordinate_query(query)
+    trimmed_query = (query or "").strip()
+    coordinate_point = parse_coordinate_query(trimmed_query)
     if coordinate_point:
         lat, lon = coordinate_point
         reverse_match = reverse_geocode_point(lat, lon, settings.tomtom_api_key)
@@ -806,8 +848,8 @@ def geocode_address(query: str) -> tuple[GeocodedPoint, str]:
         return GeocodedPoint(label=label, lat=lat, lon=lon), "Direct coordinates"
 
     if settings.tomtom_api_key and TOMTOM_SEARCH_ACCESS is not False:
-        encoded_query = quote(query)
-        params = urlencode({"key": settings.tomtom_api_key, "limit": 1})
+        encoded_query = quote(trimmed_query)
+        params = urlencode({"key": settings.tomtom_api_key, "limit": 1, "language": "en-US", "countrySet": "US,CA"})
         try:
             data = raw_http_json(f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?{params}")
             TOMTOM_SEARCH_ACCESS = True
@@ -821,9 +863,17 @@ def geocode_address(query: str) -> tuple[GeocodedPoint, str]:
             first = results[0]
             position = first.get("position", {})
             address = first.get("address", {})
-            return GeocodedPoint(label=address.get("freeformAddress", query), lat=position.get("lat"), lon=position.get("lon")), "TomTom geocoding"
+            try:
+                lat = float(position.get("lat"))
+                lon = float(position.get("lon"))
+            except (TypeError, ValueError):
+                lat = None
+                lon = None
+            if lat is not None and lon is not None and math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+                label = address.get("freeformAddress") or trimmed_query
+                return GeocodedPoint(label=label, lat=lat, lon=lon), "TomTom geocoding"
 
-    return fallback_geocode_address(query), "OpenStreetMap geocoding"
+    return fallback_geocode_address(trimmed_query), "OpenStreetMap geocoding"
 
 
 def build_map_link(origin: str, destination: str) -> str:
@@ -873,24 +923,172 @@ def get_routes(origin: GeocodedPoint, destination: GeocodedPoint, vehicle_type: 
     )
 
 
-def to_route_points(route: dict, max_points: int = 220) -> list[RoutePoint]:
+def route_distance_m(left: RoutePoint, right: RoutePoint) -> float:
+    phi1 = math.radians(left.lat)
+    phi2 = math.radians(right.lat)
+    dphi = math.radians(right.lat - left.lat)
+    dlambda = math.radians(right.lon - left.lon)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * 6371008.8 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def route_point_from_provider(point: dict) -> RoutePoint | None:
+    try:
+        lat = float(point.get("latitude"))
+        lon = float(point.get("longitude"))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if not math.isfinite(lat) or not math.isfinite(lon) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return RoutePoint(lat=lat, lon=lon)
+
+
+def append_route_point(points: list[RoutePoint], point: RoutePoint) -> None:
+    if points and round(points[-1].lat, 7) == round(point.lat, 7) and round(points[-1].lon, 7) == round(point.lon, 7):
+        return
+    points.append(point)
+
+
+def extract_route_points(route: dict) -> list[RoutePoint]:
     points: list[RoutePoint] = []
     for leg in route.get("legs", []):
         for point in leg.get("points", []):
-            points.append(RoutePoint(lat=point.get("latitude"), lon=point.get("longitude")))
+            route_point = route_point_from_provider(point)
+            if route_point:
+                append_route_point(points, route_point)
+    return points
+
+
+def project_route_point(point: RoutePoint, ref_lat: float) -> tuple[float, float]:
+    x = math.radians(point.lon) * math.cos(math.radians(ref_lat)) * 6371008.8
+    y = math.radians(point.lat) * 6371008.8
+    return x, y
+
+
+def perpendicular_distance_m(point_xy: tuple[float, float], start_xy: tuple[float, float], end_xy: tuple[float, float]) -> float:
+    px, py = point_xy
+    ax, ay = start_xy
+    bx, by = end_xy
+    abx = bx - ax
+    aby = by - ay
+    segment_length_sq = abx * abx + aby * aby
+    if segment_length_sq == 0:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * abx + (py - ay) * aby) / segment_length_sq))
+    closest_x = ax + t * abx
+    closest_y = ay + t * aby
+    return math.hypot(px - closest_x, py - closest_y)
+
+
+def rdp_simplify_route_points(points: list[RoutePoint], tolerance_m: float) -> list[RoutePoint]:
+    if len(points) <= 2:
+        return points
+    ref_lat = sum(point.lat for point in points) / len(points)
+    projected = [project_route_point(point, ref_lat) for point in points]
+    keep = {0, len(points) - 1}
+    stack = [(0, len(points) - 1)]
+    while stack:
+        start, end = stack.pop()
+        if end <= start + 1:
+            continue
+        start_xy = projected[start]
+        end_xy = projected[end]
+        max_distance = -1.0
+        max_index = start
+        for index in range(start + 1, end):
+            distance = perpendicular_distance_m(projected[index], start_xy, end_xy)
+            if distance > max_distance:
+                max_distance = distance
+                max_index = index
+        if max_distance > tolerance_m:
+            keep.add(max_index)
+            stack.append((start, max_index))
+            stack.append((max_index, end))
+    return [points[index] for index in sorted(keep)]
+
+
+def evenly_cap_route_points(points: list[RoutePoint], max_points: int) -> list[RoutePoint]:
     if len(points) <= max_points:
         return points
-    step = max(1, len(points) // max_points)
-    sampled = points[::step]
-    if sampled[-1] != points[-1]:
-        sampled.append(points[-1])
-    return sampled
+    capped: list[RoutePoint] = []
+    last_index = len(points) - 1
+    for output_index in range(max_points):
+        source_index = round(output_index * last_index / (max_points - 1))
+        point = points[source_index]
+        if not capped or capped[-1] != point:
+            capped.append(point)
+    if capped[-1] != points[-1]:
+        capped.append(points[-1])
+    return capped[:max_points]
+
+
+def simplify_route_points(points: list[RoutePoint], max_points: int) -> list[RoutePoint]:
+    if len(points) <= max_points:
+        return points
+    low = 0.0
+    high = max(5.0, sum(route_distance_m(points[index - 1], points[index]) for index in range(1, len(points))) / max(max_points, 1))
+    best = points
+    for _ in range(12):
+        candidate = rdp_simplify_route_points(points, high)
+        if len(candidate) <= max_points:
+            best = candidate
+            break
+        high *= 2
+    for _ in range(18):
+        mid = (low + high) / 2
+        candidate = rdp_simplify_route_points(points, mid)
+        if len(candidate) > max_points:
+            low = mid
+        else:
+            high = mid
+            best = candidate
+    return evenly_cap_route_points(best, max_points)
+
+
+def densify_route_points(points: list[RoutePoint], min_points: int) -> list[RoutePoint]:
+    if len(points) >= min_points or len(points) < 2:
+        return points
+    segment_lengths = [route_distance_m(points[index], points[index + 1]) for index in range(len(points) - 1)]
+    total_length = sum(segment_lengths)
+    if total_length <= 0:
+        return points
+
+    missing_points = min_points - len(points)
+    result = [points[0]]
+    inserted = 0
+    covered_length = 0.0
+    for index, segment_length in enumerate(segment_lengths):
+        start = points[index]
+        end = points[index + 1]
+        covered_length += segment_length
+        target_inserted = round(missing_points * covered_length / total_length)
+        inserts_for_segment = max(0, target_inserted - inserted)
+        for insert_index in range(1, inserts_for_segment + 1):
+            t = insert_index / (inserts_for_segment + 1)
+            result.append(RoutePoint(
+                lat=start.lat + (end.lat - start.lat) * t,
+                lon=start.lon + (end.lon - start.lon) * t,
+            ))
+        result.append(end)
+        inserted += inserts_for_segment
+    return result
+
+
+def to_route_points(
+    route: dict,
+    min_points: int = MIN_ROUTE_POINT_COUNT,
+    max_points: int = DISPLAY_ROUTE_POINT_LIMIT,
+) -> list[RoutePoint]:
+    points = extract_route_points(route)
+    points = simplify_route_points(points, max_points)
+    points = densify_route_points(points, min_points)
+    return points
 
 
 def build_route_station_context(index: int, route: dict, fuel_type: str) -> RouteStationContext:
     summary = route.get("summary", {})
     route_points = to_route_points(route)
-    routing_points = to_route_points(route, max_points=360)
+    routing_points = to_route_points(route, max_points=ROUTING_ROUTE_POINT_LIMIT)
     return RouteStationContext(
         index=index,
         summary=summary,

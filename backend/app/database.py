@@ -60,7 +60,14 @@ def _execute_schema_statements(statements: list[str]) -> None:
 
 def ensure_runtime_schema() -> None:
     inspector = inspect(engine)
+    #here if u want to make or add existing account or tables u can enter here all needed information that u nedd so that be cool
+
+
     table_names = set(inspector.get_table_names())
+
+
+
+
     if "users" in table_names:
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         user_statements: list[str] = []

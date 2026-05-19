@@ -266,6 +266,10 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         id: ROUTES_LAYER_ID,
         type: "line",
         source: ROUTES_SOURCE_ID,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round"
+        },
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["get", "width"],

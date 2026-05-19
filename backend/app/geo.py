@@ -5,14 +5,27 @@ import math
 import re
 import ssl
 from functools import lru_cache
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 from urllib.request import Request, urlopen
 
 import certifi
 
 
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
-COORDINATE_QUERY_RE = re.compile(r"^\s*\(?\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*\)?\s*$")
+NUMBER_PATTERN = r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)"
+COORDINATE_QUERY_RE = re.compile(rf"^\s*\(?\s*({NUMBER_PATTERN})\s*[,;\s]\s*({NUMBER_PATTERN})\s*\)?\s*$")
+COORDINATE_PAIR_RE = re.compile(rf"(?<![\w.])({NUMBER_PATTERN})\s*[,;]\s*({NUMBER_PATTERN})(?![\w.])")
+DECIMAL_COORDINATE_PAIR_RE = re.compile(r"(?<![\w.])([-+]?\d{1,3}\.\d+)\s+([-+]?\d{1,3}\.\d+)(?![\w.])")
+NAMED_LAT_LON_RE = re.compile(
+    rf"\b(?:lat|latitude)\s*[:=]\s*({NUMBER_PATTERN}).{{0,40}}?\b(?:lon|lng|long|longitude)\s*[:=]\s*({NUMBER_PATTERN})",
+    re.IGNORECASE,
+)
+NAMED_LON_LAT_RE = re.compile(
+    rf"\b(?:lon|lng|long|longitude)\s*[:=]\s*({NUMBER_PATTERN}).{{0,40}}?\b(?:lat|latitude)\s*[:=]\s*({NUMBER_PATTERN})",
+    re.IGNORECASE,
+)
+WKT_POINT_RE = re.compile(rf"\bPOINT\s*\(\s*({NUMBER_PATTERN})\s+({NUMBER_PATTERN})\s*\)", re.IGNORECASE)
+GOOGLE_3D_4D_RE = re.compile(rf"!3d({NUMBER_PATTERN})!4d({NUMBER_PATTERN})", re.IGNORECASE)
 APPROXIMATE_DISTANCE_RE = re.compile(
     r"\b\d+(?:\.\d+)?\s*(?:mi|mile|miles|km|kilometer|kilometers)\s+"
     r"(?:n|s|e|w|ne|nw|se|sw|north|south|east|west|northeast|northwest|southeast|southwest)\s+of\b",
@@ -40,18 +53,81 @@ def _first_text(*values: object) -> str | None:
     return None
 
 
+def _coordinate_pair(lat: object, lon: object) -> tuple[float, float] | None:
+    try:
+        parsed_lat = float(lat)
+        parsed_lon = float(lon)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed_lat) or not math.isfinite(parsed_lon):
+        return None
+    if -90 <= parsed_lat <= 90 and -180 <= parsed_lon <= 180:
+        return parsed_lat, parsed_lon
+    return None
+
+
+def _looks_like_us_lon_lat(first: float, second: float) -> bool:
+    return -170 <= first <= -50 and 15 <= second <= 75
+
+
+def _normalize_coordinate_order(first: object, second: object) -> tuple[float, float] | None:
+    direct = _coordinate_pair(first, second)
+    swapped = _coordinate_pair(second, first)
+    if direct and swapped:
+        parsed_first = float(first)
+        parsed_second = float(second)
+        if abs(parsed_first) > 90 or _looks_like_us_lon_lat(parsed_first, parsed_second):
+            return swapped
+        return direct
+    return direct or swapped
+
+
 def parse_coordinate_query(value: object) -> tuple[float, float] | None:
     text = _clean_text(value)
     if not text:
         return None
-    match = COORDINATE_QUERY_RE.match(text)
+
+    decoded_text = unquote(text)
+
+    match = GOOGLE_3D_4D_RE.search(decoded_text)
+    if match:
+        coordinate_pair = _coordinate_pair(match.group(1), match.group(2))
+        if coordinate_pair:
+            return coordinate_pair
+
+    match = WKT_POINT_RE.search(decoded_text)
     if not match:
-        return None
-    lat = float(match.group(1))
-    lon = float(match.group(2))
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-        return None
-    return lat, lon
+        match = NAMED_LAT_LON_RE.search(decoded_text)
+        if match:
+            coordinate_pair = _coordinate_pair(match.group(1), match.group(2))
+            if coordinate_pair:
+                return coordinate_pair
+
+    if match:
+        coordinate_pair = _coordinate_pair(match.group(2), match.group(1))
+        if coordinate_pair:
+            return coordinate_pair
+
+    match = NAMED_LON_LAT_RE.search(decoded_text)
+    if match:
+        coordinate_pair = _coordinate_pair(match.group(2), match.group(1))
+        if coordinate_pair:
+            return coordinate_pair
+
+    match = COORDINATE_QUERY_RE.match(decoded_text)
+    if match:
+        coordinate_pair = _normalize_coordinate_order(match.group(1), match.group(2))
+        if coordinate_pair:
+            return coordinate_pair
+
+    for pattern in (COORDINATE_PAIR_RE, DECIMAL_COORDINATE_PAIR_RE):
+        match = pattern.search(decoded_text)
+        if match:
+            coordinate_pair = _normalize_coordinate_order(match.group(1), match.group(2))
+            if coordinate_pair:
+                return coordinate_pair
+
+    return None
 
 
 def format_coordinate_label(lat: object, lon: object, precision: int = 5) -> str:

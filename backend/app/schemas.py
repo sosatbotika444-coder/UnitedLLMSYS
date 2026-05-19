@@ -483,6 +483,7 @@ class LocationSuggestion(BaseModel):
     lat: float
     lon: float
     type: str | None = None
+    query: str | None = None
 
 
 class LocationSuggestionResponse(BaseModel):

@@ -659,7 +659,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
   }
 
   function selectLocationSuggestion(field, suggestion) {
-    setRouteForm((current) => ({ ...current, [field]: suggestion.label }));
+    setRouteForm((current) => ({ ...current, [field]: suggestion.query || suggestion.label }));
     setSuggestionsForField(field, []);
     setSuggestionLoading(field, false);
     setLocationFieldFocus("");
