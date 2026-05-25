@@ -27,5 +27,5 @@ export function LoadingState({ label = "Loading data...", className = "" }) {
 }
 
 export function LoadingButtonLabel({ loading, loadingLabel = "Loading...", children }) {
-  return loading ? <LoadingSpinner label={loadingLabel} inline /> : children;
+  return loading ? <LoadingSpinner label={loadingLabel} inline className="loading-spinner-button" /> : children;
 }

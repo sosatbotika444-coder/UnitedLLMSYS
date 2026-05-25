@@ -5072,59 +5072,98 @@ body.theme-dark .readiness-ring::after {
 
 .loading-spinner-block,
 .loading-spinner-inline {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
   color: inherit;
-  line-height: 1.2;
-}
-
-.loading-spinner-block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  line-height: 1.25;
   text-align: center;
 }
 
+.loading-spinner-block {
+  width: 100%;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 96px;
+}
+
+.loading-spinner-inline {
+  width: 100%;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 76px;
+}
+
 .loading-spinner-circle {
-  width: 1.1em;
-  height: 1.1em;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   border-radius: 999px;
-  border: 2px solid currentColor;
+  border: 4px solid currentColor;
   border-right-color: transparent;
   border-top-color: rgba(37, 99, 235, 0.26);
   animation: loading-spinner-spin 0.72s linear infinite;
 }
 
 .loading-spinner-md .loading-spinner-circle {
-  width: 28px;
-  height: 28px;
-  border-width: 3px;
+  width: 48px;
+  height: 48px;
+  border-width: 5px;
 }
 
 .loading-spinner-lg .loading-spinner-circle {
-  width: 42px;
-  height: 42px;
-  border-width: 4px;
+  width: 60px;
+  height: 60px;
+  border-width: 6px;
 }
 
 .loading-spinner-label {
   font-weight: 800;
+  display: block;
 }
 
 .loading-state {
-  min-height: 120px;
+  min-height: 160px;
   display: grid;
   place-items: center;
   width: 100%;
   color: var(--muted-strong);
 }
 
-.module-loader .loading-spinner-block {
+.module-loader .loading-spinner-block,
+.module-loader .loading-spinner-inline {
   position: relative;
   z-index: 1;
+}
+
+button .loading-spinner-inline,
+.loading-spinner-button {
+  width: auto;
+  min-height: 0;
+  display: inline-flex;
+  flex-direction: row;
+  gap: 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+button .loading-spinner-circle,
+.loading-spinner-button .loading-spinner-circle {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+.empty-route-card > .loading-spinner-inline,
+.mobile-empty-card > .loading-spinner-inline,
+.team-chat-empty > .loading-spinner-inline,
+.safety-empty-state > .loading-spinner-inline,
+.safety-document-empty > .loading-spinner-inline,
+.route-history-empty > .loading-spinner-inline,
+.notice.inline-notice > .loading-spinner-inline,
+.notice.info > .loading-spinner-inline,
+.unitedlane-ai-thinking > .loading-spinner-inline {
+  min-height: 110px;
 }
 
 @keyframes loading-spinner-spin {
