@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 export const DEFAULT_SHIFT_PLANNER_STORAGE_KEY = "unitedlane_auth_shift_planner_v1";
@@ -873,7 +874,7 @@ export default function AuthShiftPlanner({
   }
 
   const persistenceLabel = token
-    ? (remoteSyncing ? "Syncing account planner" : "Saved to account")
+    ? (remoteSyncing ? <LoadingSpinner label="Syncing account planner" inline /> : "Saved to account")
     : "Saved in this browser";
 
   return (
@@ -967,7 +968,7 @@ export default function AuthShiftPlanner({
               />
             </label>
             <button type="submit" className="primary-button auth-shift-add-button" disabled={plannerSaving}>
-              {plannerSaving ? "Saving..." : "Add item"}
+              <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Add item</LoadingButtonLabel>
             </button>
           </div>
 
@@ -985,9 +986,15 @@ export default function AuthShiftPlanner({
             <div className="auth-shift-quick-group compact">
               <span>Quick breaks</span>
               <div>
-                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(15)} disabled={plannerSaving}>Break 15m</button>
-                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(30)} disabled={plannerSaving}>Break 30m</button>
-                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(45)} disabled={plannerSaving}>Break 45m</button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(15)} disabled={plannerSaving}>
+                  <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Break 15m</LoadingButtonLabel>
+                </button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(30)} disabled={plannerSaving}>
+                  <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Break 30m</LoadingButtonLabel>
+                </button>
+                <button type="button" className="secondary-button auth-shift-quick-button" onClick={() => quickBreak(45)} disabled={plannerSaving}>
+                  <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Break 45m</LoadingButtonLabel>
+                </button>
               </div>
             </div>
           </div>
@@ -998,7 +1005,7 @@ export default function AuthShiftPlanner({
         <div className="auth-shift-list-head compact">
           <div>
             <strong>Live queue</strong>
-            <small>{remoteSyncing && !items.length ? "Loading saved planner" : liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
+            <small>{remoteSyncing && !items.length ? <LoadingSpinner label="Loading saved planner" inline /> : liveItems.length ? "Current tasks and breaks" : "Planner is clear"}</small>
           </div>
         </div>
 
@@ -1025,21 +1032,21 @@ export default function AuthShiftPlanner({
                   <div className="auth-shift-item-actions">
                     {!item.completedAt ? (
                       <button type="button" className="primary-button" onClick={() => finishItem(item.id)} disabled={plannerSaving}>
-                        Finish now
+                        <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Finish now</LoadingButtonLabel>
                       </button>
                     ) : null}
                     {!item.verifiedAt ? (
                       <button type="button" className="secondary-button" onClick={() => verifyItem(item.id)} disabled={plannerSaving}>
-                        Verify & hide
+                        <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Verify & hide</LoadingButtonLabel>
                       </button>
                     ) : null}
                     {!item.verifiedAt ? (
                       <button type="button" className="secondary-button" onClick={() => extendItem(item.id, 10)} disabled={plannerSaving}>
-                        +10 min
+                        <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">+10 min</LoadingButtonLabel>
                       </button>
                     ) : null}
                     <button type="button" className="secondary-button" onClick={() => removeItem(item.id)} disabled={plannerSaving}>
-                      Delete
+                      <LoadingButtonLabel loading={plannerSaving} loadingLabel="Saving...">Delete</LoadingButtonLabel>
                     </button>
                   </div>
                 </article>
@@ -1048,7 +1055,7 @@ export default function AuthShiftPlanner({
           </div>
         ) : (
           <div className="empty-route-card compact">
-            {remoteSyncing ? "Loading your saved planner..." : "Planner is clear. Add work items or breaks, then verify them when the shift step is done."}
+            {remoteSyncing ? <LoadingSpinner label="Loading your saved planner..." inline /> : "Planner is clear. Add work items or breaks, then verify them when the shift step is done."}
           </div>
         )}
       </section>

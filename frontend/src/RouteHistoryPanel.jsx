@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 
@@ -151,7 +152,7 @@ export default function RouteHistoryPanel({ token, active = true }) {
           <p>Search every saved routing run by account, driver, truck, origin, destination, or date.</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => setRefreshTick((current) => current + 1)} disabled={loading}>
-          {loading ? "Refreshing..." : "Refresh"}
+          <LoadingButtonLabel loading={loading} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
         </button>
       </header>
 
@@ -208,7 +209,7 @@ export default function RouteHistoryPanel({ token, active = true }) {
               </span>
             </button>
           )) : (
-            <div className="route-history-empty">{loading ? "Loading route history..." : "No route builds found for these filters."}</div>
+            <div className="route-history-empty">{loading ? <LoadingSpinner label="Loading route history..." inline /> : "No route builds found for these filters."}</div>
           )}
         </div>
 

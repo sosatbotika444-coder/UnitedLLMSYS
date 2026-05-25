@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { setActivityContext, trackActivity } from "./activityTracker";
 import { useConfirmDialog } from "./feedback";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -220,10 +221,10 @@ function UserRow({ user, currentUserId, busyId, onPatch, onDelete, onResetPasswo
       </div>
 
       <footer className="admin-user-actions">
-        <button className="primary-button" type="button" onClick={saveUser} disabled={busy}>Save</button>
-        <button className={user.is_banned ? "secondary-button" : "delete-button"} type="button" onClick={toggleBan} disabled={busy || isSelf}>{user.is_banned ? "Unban" : "Ban"}</button>
-        <button className="secondary-button" type="button" onClick={() => onResetPassword(user)} disabled={busy}>Reset password</button>
-        <button className="delete-button" type="button" onClick={() => onDelete(user)} disabled={busy || isSelf}>Delete</button>
+        <button className="primary-button" type="button" onClick={saveUser} disabled={busy}><LoadingButtonLabel loading={busy} loadingLabel="Saving...">Save</LoadingButtonLabel></button>
+        <button className={user.is_banned ? "secondary-button" : "delete-button"} type="button" onClick={toggleBan} disabled={busy || isSelf}><LoadingButtonLabel loading={busy} loadingLabel="Updating...">{user.is_banned ? "Unban" : "Ban"}</LoadingButtonLabel></button>
+        <button className="secondary-button" type="button" onClick={() => onResetPassword(user)} disabled={busy}><LoadingButtonLabel loading={busy} loadingLabel="Resetting...">Reset password</LoadingButtonLabel></button>
+        <button className="delete-button" type="button" onClick={() => onDelete(user)} disabled={busy || isSelf}><LoadingButtonLabel loading={busy} loadingLabel="Deleting...">Delete</LoadingButtonLabel></button>
       </footer>
     </article>
   );
@@ -457,7 +458,7 @@ export default function AdminPanel({ token, user }) {
           <p>Accounts, bans, roles, passwords, and live system statistics.</p>
         </div>
         <button className="primary-button" type="button" onClick={activeTab === "live" ? refreshLivePanel : refreshAll} disabled={activeTab === "live" ? liveLoading : loading}>
-          {(activeTab === "live" ? liveLoading : loading) ? "Refreshing..." : "Refresh"}
+          <LoadingButtonLabel loading={activeTab === "live" ? liveLoading : loading} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
         </button>
       </div>
 
@@ -511,7 +512,7 @@ export default function AdminPanel({ token, user }) {
               <label>Username<input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} placeholder="optional" /></label>
               <label>Password<input type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} minLength="6" required /></label>
               <label>Role<select value={createForm.department} onChange={(event) => setCreateForm({ ...createForm, department: event.target.value })}>{departmentOptions.map((department) => <option key={department} value={department}>{departmentLabels[department]}</option>)}</select></label>
-              <button className="primary-button" type="submit" disabled={loading}>Create</button>
+              <button className="primary-button" type="submit" disabled={loading}><LoadingButtonLabel loading={loading} loadingLabel="Creating...">Create</LoadingButtonLabel></button>
             </form>
 
             <section className="admin-users-panel">
@@ -545,7 +546,7 @@ export default function AdminPanel({ token, user }) {
                     onDelete={deleteUser}
                     onResetPassword={resetPassword}
                   />
-                )) : <div className="empty-route-card">{loading ? "Loading users..." : "No accounts match this filter."}</div>}
+                )) : <div className="empty-route-card">{loading ? <LoadingSpinner label="Loading users..." inline /> : "No accounts match this filter."}</div>}
               </div>
             </section>
           </section>
@@ -590,7 +591,7 @@ export default function AdminPanel({ token, user }) {
 
       {activeTab === "fleet" ? (
         <section className="admin-workspace-panel">
-          <Suspense fallback={<div className="empty-route-card">Loading fleet control...</div>}>
+          <Suspense fallback={<div className="empty-route-card"><LoadingSpinner label="Loading fleet control..." inline /></div>}>
             <MotiveTrackingPanel token={token} active={activeTab === "fleet"} />
           </Suspense>
         </section>
@@ -598,7 +599,7 @@ export default function AdminPanel({ token, user }) {
 
       {activeTab === "service" ? (
         <section className="admin-workspace-panel">
-          <Suspense fallback={<div className="empty-route-card">Loading service map...</div>}>
+          <Suspense fallback={<div className="empty-route-card"><LoadingSpinner label="Loading service map..." inline /></div>}>
             <SafetyServiceTools token={token} mode="service" active={activeTab === "service"} />
           </Suspense>
         </section>

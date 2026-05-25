@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useConfirmDialog } from "./feedback";
+import { LoadingSpinner } from "./LoadingSpinner";
 import { UnitedIcon, unitedIconNames } from "./UnitedLaneIcons";
 
 const productScreens = [
@@ -215,7 +216,7 @@ export default function DesignSystemShowcase({ compact = false }) {
             <div className="notice success inline-notice"><UnitedIcon name="success" size={16} />Route saved and sent to approvals.</div>
             <div className="notice info inline-notice"><UnitedIcon name="info" size={16} />Fresh Motive data is syncing in the background.</div>
             <div className="notice error inline-notice"><UnitedIcon name="error" size={16} />Driver message could not be delivered.</div>
-            <div className="module-loader design-loader-preview">Loading intelligent route comparison...</div>
+            <div className="module-loader design-loader-preview"><LoadingSpinner label="Loading intelligent route comparison..." inline /></div>
             <div className="design-skeleton-card">
               <span className="design-skeleton-line w-40" />
               <span className="design-skeleton-line w-85" />

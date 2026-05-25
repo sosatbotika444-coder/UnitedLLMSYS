@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import SafetyServiceMapCanvas from "./SafetyServiceMapCanvas";
 import MapStage from "./MapStage";
 
@@ -227,7 +228,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
             <span>{pageSubtitle}</span>
           </div>
           <button className="primary-button" type="button" onClick={() => loadData(true)} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
+            <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
           </button>
         </div>
 
@@ -399,7 +400,7 @@ export default function SafetyServiceTools({ token, mode = "service", active = f
             </div>
             <div className="safety-service-result-list">
               {loading && !data ? (
-                <div className="safety-empty-state">Loading service data...</div>
+                <div className="safety-empty-state"><LoadingSpinner label="Loading service data..." inline /></div>
               ) : filteredItems.length ? (
                 filteredItems.map((item) => (
                   <button

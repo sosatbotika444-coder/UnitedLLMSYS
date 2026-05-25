@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildVehicleLocationLabel } from "./locationFormatting";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import MotiveFleetMap from "./MotiveFleetMap";
 import MapStage from "./MapStage";
 
@@ -438,7 +439,7 @@ function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRe
 
           <div className="motive-incident-actions">
             <button type="button" className="secondary-button" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? "Refreshing clip..." : "Refresh clip link"}
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing clip...">Refresh clip link</LoadingButtonLabel>
             </button>
             {activeVideo ? (
               <a className="secondary-button" href={activeVideo.url} target="_blank" rel="noreferrer">
@@ -1095,10 +1096,10 @@ export default function MotiveTrackingPanel({ token, active = true }) {
             {autoRefresh ? "Auto refresh on" : "Auto refresh off"}
           </button>
           <button type="button" className="secondary-button" onClick={exportSnapshot} disabled={!integration?.configured || loading || exporting}>
-            {exporting ? "Exporting..." : "Export Excel"}
+            <LoadingButtonLabel loading={exporting} loadingLabel="Exporting...">Export Excel</LoadingButtonLabel>
           </button>
           <button type="button" className="primary-button" onClick={() => loadSnapshot(true)} disabled={!integration?.configured || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh all"}
+            <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh all</LoadingButtonLabel>
           </button>
         </div>
       </div>
@@ -1111,7 +1112,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
           </div>
           {connections.length ? (
             <button type="button" className="secondary-button" onClick={() => loadSnapshot(true)} disabled={refreshing}>
-              {refreshing ? "Refreshing..." : "Sync all keys"}
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Sync all keys</LoadingButtonLabel>
             </button>
           ) : null}
         </div>
@@ -1138,7 +1139,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
             />
           </label>
           <button type="submit" className="primary-button" disabled={connectionSaving || !connectionName.trim() || !connectionApiKey.trim()}>
-            {connectionSaving ? "Adding..." : "Add and sync"}
+            <LoadingButtonLabel loading={connectionSaving} loadingLabel="Adding...">Add and sync</LoadingButtonLabel>
           </button>
         </form>
 
@@ -1155,7 +1156,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 </div>
                 <div className="motive-connection-actions">
                   <button type="button" className="secondary-button" onClick={() => refreshConnection(connection.id)} disabled={connectionRefreshingId === connection.id || !connection.isActive}>
-                    {connectionRefreshingId === connection.id ? "Syncing..." : "Sync"}
+                    <LoadingButtonLabel loading={connectionRefreshingId === connection.id} loadingLabel="Syncing...">Sync</LoadingButtonLabel>
                   </button>
                   <button type="button" className="secondary-button" onClick={() => patchConnection(connection.id, { isActive: !connection.isActive })}>
                     {connection.isActive ? "Disable" : "Enable"}
@@ -1183,7 +1184,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
       ) : null}
 
       {loading ? (
-        <div className="empty-route-card">Loading fleet snapshot...</div>
+        <div className="empty-route-card"><LoadingSpinner label="Loading fleet snapshot..." inline /></div>
       ) : integration?.configured && snapshot ? (
         <>
           <section className="motive-guidance-card">
@@ -1359,7 +1360,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                     <h3>3. Map and live position</h3>
                     <span>
                       {snapshot.metrics.located_vehicles} vehicles with coordinates. Updated {formatTimestamp(snapshot.fetched_at)}.
-                      {cacheStatusText ? ` ${cacheStatusText}` : ""}
+                      {cacheStatusText ? <> <LoadingSpinner label={cacheStatusText} inline /></> : null}
                       {mapView === "street" ? " Street focus keeps the selected truck at road level so street names stay readable." : " Select a truck to jump into street focus."}
                     </span>
                   </div>
@@ -1491,7 +1492,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                 <div className="motive-subhead">
                   <div>
                     <h3>Location history</h3>
-                    <span>{detailLoading ? "Loading route breadcrumbs..." : `${historyPoints.length} recent breadcrumbs loaded`}</span>
+                    <span>{detailLoading ? <LoadingSpinner label="Loading route breadcrumbs..." inline /> : `${historyPoints.length} recent breadcrumbs loaded`}</span>
                   </div>
                 </div>
                 {historyPoints.length ? (

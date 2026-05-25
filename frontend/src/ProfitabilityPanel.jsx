@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingSpinner } from "./LoadingSpinner";
 import {
   buildTripProfitabilitySnapshot,
   normalizeText,
@@ -319,7 +320,7 @@ export default function ProfitabilityPanel({ token, active = true, loadRows = []
       </section>
 
       {error ? <div className="notice error inline-notice">{error}</div> : null}
-      {loading ? <div className="notice info inline-notice">Loading profitability data...</div> : null}
+      {loading ? <div className="notice info inline-notice"><LoadingSpinner label="Loading profitability data..." inline /></div> : null}
 
       {view === "loads" ? (
         <section className="panel workspace-table-panel">

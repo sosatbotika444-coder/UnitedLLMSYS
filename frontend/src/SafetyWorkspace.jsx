@@ -3,6 +3,7 @@ import UnitedLaneChat from "./UnitedLaneChat";
 import SafetyServiceTools from "./SafetyServiceTools";
 import TeamChat from "./TeamChat";
 import { useConfirmDialog } from "./feedback";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -405,11 +406,9 @@ function SafetyNotesPanel({ token, user }) {
 
   const hasChanges = note !== savedNote;
   const noteStatus = useMemo(() => {
-    if (loading) return "Loading...";
-    if (saving) return "Saving...";
     if (hasChanges) return "Unsaved";
     return "Saved";
-  }, [hasChanges, loading, saving]);
+  }, [hasChanges]);
 
   async function saveNote() {
     if (!token || saving || !hasChanges) {
@@ -448,7 +447,7 @@ function SafetyNotesPanel({ token, user }) {
           <span>{user?.full_name || "User"}</span>
         </div>
         <button className="primary-button" type="button" onClick={saveNote} disabled={saving || loading || !hasChanges}>
-          {saving ? "Saving..." : "Save"}
+          <LoadingButtonLabel loading={saving} loadingLabel="Saving...">Save</LoadingButtonLabel>
         </button>
       </div>
 
@@ -456,7 +455,7 @@ function SafetyNotesPanel({ token, user }) {
       {error ? <div className="notice error inline-notice">{error}</div> : null}
 
       <label className="safety-notes-field">
-        <span>{noteStatus}</span>
+        <span>{loading ? <LoadingSpinner label="Loading notes..." inline /> : saving ? <LoadingSpinner label="Saving notes..." inline /> : noteStatus}</span>
         <textarea
           value={note}
           onChange={(event) => setNote(event.target.value)}
@@ -569,7 +568,7 @@ function SafetyDocumentsPanel({ token }) {
             <span>Upload and sort with AI.</span>
           </div>
           <button className="primary-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-            {uploading ? "Uploading..." : "Upload Document"}
+            <LoadingButtonLabel loading={uploading} loadingLabel="Uploading...">Upload Document</LoadingButtonLabel>
           </button>
         </div>
 
@@ -612,7 +611,7 @@ function SafetyDocumentsPanel({ token }) {
 
               <div className="safety-document-list">
                 {loading ? (
-                  <div className="safety-document-empty">Loading...</div>
+                  <div className="safety-document-empty"><LoadingSpinner label="Loading documents..." inline /></div>
                 ) : items.length ? (
                   items.map((document) => (
                     <article className="safety-document-card" key={document.id}>
@@ -706,7 +705,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
             <span>{data?.company?.name ? `${data.company.name} live truck safety view.` : "Truck safety data from Motive."}</span>
           </div>
           <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
+            <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
           </button>
         </div>
 
@@ -751,7 +750,7 @@ function SafetyFleetPanel({ data, loading, refreshing, error, onRefresh }) {
       </section>
 
       {loading && !data ? (
-        <section className="panel safety-empty-state">Loading fleet safety data...</section>
+        <section className="panel safety-empty-state"><LoadingSpinner label="Loading fleet safety data..." inline /></section>
       ) : (
         <div className="safety-fleet-layout">
           <section className="panel safety-vehicle-list-panel">
@@ -902,7 +901,7 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
             <span>{algorithm.summary || "Automated queueing for safety operations."}</span>
           </div>
           <button className="primary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
+            <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
           </button>
         </div>
 
@@ -955,7 +954,7 @@ function SafetyAutomationPanel({ data, loading, refreshing, error, onRefresh }) 
         </div>
       </section>
 
-      {loading && !data ? <section className="panel safety-empty-state">Loading automation queues...</section> : null}
+      {loading && !data ? <section className="panel safety-empty-state"><LoadingSpinner label="Loading automation queues..." inline /></section> : null}
 
       <section className="safety-automation-grid">
         {queues.map((queue) => (
@@ -1279,11 +1278,17 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           </div>
           <div className="safety-management-actions">
             <button className="secondary-button" type="button" onClick={startNewCase} disabled={caseSaving}>New Incident</button>
-            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save Incident"}</button>
-            <button className="secondary-button" type="button" onClick={exportCasesExcel} disabled={caseExporting || !token}>{caseExporting ? "Exporting..." : "Export Incidents Excel"}</button>
-            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={caseExporting || !token}>Export Risky People Excel</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>
+              <LoadingButtonLabel loading={caseSaving} loadingLabel="Saving...">Save Incident</LoadingButtonLabel>
+            </button>
+            <button className="secondary-button" type="button" onClick={exportCasesExcel} disabled={caseExporting || !token}>
+              <LoadingButtonLabel loading={caseExporting} loadingLabel="Exporting...">Export Incidents Excel</LoadingButtonLabel>
+            </button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={caseExporting || !token}>
+              <LoadingButtonLabel loading={caseExporting} loadingLabel="Exporting...">Export Risky People Excel</LoadingButtonLabel>
+            </button>
             <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-              {refreshing ? "Refreshing..." : "Refresh Fleet"}
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh Fleet</LoadingButtonLabel>
             </button>
           </div>
         </div>
@@ -1305,7 +1310,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           <div className="panel-head compact-panel-head">
             <div>
               <h2>Incident Registry</h2>
-              <span>{casesLoading ? "Loading incidents..." : `${formatCount(filteredCases.length)} incident(s) visible`}</span>
+              <span>{casesLoading ? <LoadingSpinner label="Loading incidents..." inline /> : `${formatCount(filteredCases.length)} incident(s) visible`}</span>
             </div>
           </div>
 
@@ -1343,7 +1348,7 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
                   <em>Updated {formatDateTime(caseItem.updatedAt)}</em>
                 </button>
               );
-            }) : <div className="safety-empty-state small">{casesLoading ? "Loading saved incidents..." : "No incidents yet. Save the current packet or wait for worker reports to start the registry."}</div>}
+            }) : <div className="safety-empty-state small">{casesLoading ? <LoadingSpinner label="Loading saved incidents..." inline /> : "No incidents yet. Save the current packet or wait for worker reports to start the registry."}</div>}
           </div>
         </section>
 
@@ -1422,7 +1427,9 @@ function SafetyInvestigationPanel({ token, user, data, loading, refreshing, erro
           </datalist>
 
           <div className="safety-management-actions case-actions">
-            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>{caseSaving ? "Saving..." : "Save"}</button>
+            <button className="primary-button" type="button" onClick={() => saveCase()} disabled={caseSaving || !token}>
+              <LoadingButtonLabel loading={caseSaving} loadingLabel="Saving...">Save</LoadingButtonLabel>
+            </button>
             <button className="secondary-button" type="button" onClick={duplicateCase} disabled={caseSaving || !token}>Duplicate</button>
             <button className="secondary-button" type="button" onClick={closeCase} disabled={caseSaving || !token}>Close Incident</button>
             <button className="delete-button" type="button" onClick={() => deleteCase()} disabled={!draft.id || caseSaving || !token}>Delete</button>
@@ -1767,11 +1774,17 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
           </div>
           <div className="safety-management-actions">
             <button className="secondary-button" type="button" onClick={startNewBrief} disabled={briefSaving}>New Brief</button>
-            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>{briefSaving ? "Saving..." : "Save Brief"}</button>
-            <button className="secondary-button" type="button" onClick={exportBriefExcel} disabled={briefSaving || briefExporting || !token}>{briefExporting ? "Exporting..." : "Export Brief Excel"}</button>
-            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={briefExporting || !token}>Export Risky People Excel</button>
+            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>
+              <LoadingButtonLabel loading={briefSaving} loadingLabel="Saving...">Save Brief</LoadingButtonLabel>
+            </button>
+            <button className="secondary-button" type="button" onClick={exportBriefExcel} disabled={briefSaving || briefExporting || !token}>
+              <LoadingButtonLabel loading={briefExporting} loadingLabel="Exporting...">Export Brief Excel</LoadingButtonLabel>
+            </button>
+            <button className="secondary-button" type="button" onClick={exportRiskyPeopleExcel} disabled={briefExporting || !token}>
+              <LoadingButtonLabel loading={briefExporting} loadingLabel="Exporting...">Export Risky People Excel</LoadingButtonLabel>
+            </button>
             <button className="secondary-button" type="button" onClick={() => onRefresh(true)} disabled={loading || refreshing}>
-              {refreshing ? "Refreshing..." : "Refresh Brief"}
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh Brief</LoadingButtonLabel>
             </button>
           </div>
         </div>
@@ -1788,7 +1801,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
         </div>
       </section>
 
-      {loading && !data ? <section className="panel safety-empty-state">Loading shift brief...</section> : null}
+      {loading && !data ? <section className="panel safety-empty-state"><LoadingSpinner label="Loading shift brief..." inline /></section> : null}
 
       <div className="safety-brief-management-layout">
         <section className="panel safety-brief-editor-panel">
@@ -1825,7 +1838,9 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
           </div>
 
           <div className="safety-management-actions case-actions">
-            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>{briefSaving ? "Saving..." : "Save"}</button>
+            <button className="primary-button" type="button" onClick={() => saveBrief()} disabled={briefSaving || !token}>
+              <LoadingButtonLabel loading={briefSaving} loadingLabel="Saving...">Save</LoadingButtonLabel>
+            </button>
             <button className="secondary-button" type="button" onClick={duplicateBrief} disabled={briefSaving || !token}>Duplicate</button>
             <button className="secondary-button" type="button" onClick={archiveBrief} disabled={briefSaving || !token}>Archive</button>
             <button className="delete-button" type="button" onClick={() => deleteBrief()} disabled={!draft.id || briefSaving || !token}>Delete</button>
@@ -1835,7 +1850,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
             <div className="panel-head compact-panel-head">
               <div>
                 <h2>Shared Briefs</h2>
-                <span>{briefsLoading ? "Loading history..." : `${formatCount(filteredBriefs.length)} visible`}</span>
+                <span>{briefsLoading ? <LoadingSpinner label="Loading history..." inline /> : `${formatCount(filteredBriefs.length)} visible`}</span>
               </div>
             </div>
             <label className="safety-management-search-field">
@@ -1858,7 +1873,7 @@ function SafetyShiftBriefPanel({ token, data, user, loading, refreshing, error, 
                   <p>{brief.handoffNote || "No handoff note yet."}</p>
                   <em>Updated {formatDateTime(brief.updatedAt)}</em>
                 </button>
-              )) : <div className="safety-empty-state small">{briefsLoading ? "Loading shared shift briefs..." : "No shared shift briefs yet."}</div>}
+              )) : <div className="safety-empty-state small">{briefsLoading ? <LoadingSpinner label="Loading shared shift briefs..." inline /> : "No shared shift briefs yet."}</div>}
             </div>
           </div>
         </section>

@@ -3,6 +3,7 @@ import CommercialLanding from "./CommercialLanding";
 import DesignSystemShowcase from "./DesignSystemShowcase";
 import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import SafetyWorkspace from "./SafetyWorkspace";
 import TeamChat from "./TeamChat";
 import { readClickActivityTarget, setActivityContext, trackActivity } from "./activityTracker";
@@ -504,7 +505,7 @@ function normalizeRow(row) {
 }
 
 function ModuleLoader({ label = "Loading workspace module..." }) {
-  return <div className="module-loader"><UnitedIcon name="spark" size={18} />{label}</div>;
+  return <div className="module-loader"><LoadingSpinner label={label} size="md" /></div>;
 }
 
 function scrollToMarketingSection(sectionId) {
@@ -979,6 +980,7 @@ function MobileLoadCard({ row, savingId, smartFillId, fleetLoading, vehicles, on
               <option key={vehicle.id} value={vehicle.id}>{vehicleOptionLabel(vehicle)}</option>
             ))}
           </select>
+          {fleetLoading ? <small><LoadingSpinner label="Syncing Motive fleet..." inline /></small> : null}
         </label>
         <label>Driver<input value={row.driver} onChange={(event) => onUpdate(row.id, "driver", event.target.value)} onBlur={(event) => onSave({ ...row, driver: event.target.value })} /></label>
         <label>Truck<input value={row.truck} onChange={(event) => onUpdate(row.id, "truck", event.target.value)} onBlur={(event) => onSave({ ...row, truck: event.target.value })} /></label>
@@ -1019,7 +1021,7 @@ function MobileLoadCard({ row, savingId, smartFillId, fleetLoading, vehicles, on
         <summary>Stops, appointments, and profit</summary>
         <div className="mobile-load-controls">
           <button className="secondary-button" type="button" onClick={() => onSmartFill(row)} disabled={smartFillId === row.id || savingId === row.id || fleetLoading || !vehicles.length}>
-            {smartFillId === row.id ? "Planning..." : "Smart Fill from Truck + A/B"}
+            <LoadingButtonLabel loading={smartFillId === row.id} loadingLabel="Planning...">Smart Fill from Truck + A/B</LoadingButtonLabel>
           </button>
           <small>{selectedVehicle ? `${vehicleLabel(selectedVehicle)} ready` : "Pick a truck, enter pickup/delivery, then Smart Fill."}</small>
         </div>
@@ -1050,7 +1052,7 @@ function MobileLoadCard({ row, savingId, smartFillId, fleetLoading, vehicles, on
       </details>
 
       <footer>
-        <span>{savingId === row.id ? "Saving..." : "Auto-saves on field exit"}</span>
+        <span>{savingId === row.id ? <LoadingSpinner label="Saving..." inline /> : "Auto-saves on field exit"}</span>
         <button className="delete-button" type="button" onClick={() => onDelete(row.id)}><UnitedIcon name="warning" size={16} />Delete</button>
       </footer>
     </article>
@@ -1139,7 +1141,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
               onVehicleSelect={syncRowVehicle}
               onSmartFill={smartFillRow}
             />
-          )) : <div className="mobile-empty-card">{gridLoading ? "Loading loads..." : "No loads yet."}</div>}
+          )) : <div className="mobile-empty-card">{gridLoading ? <LoadingSpinner label="Loading loads..." inline /> : "No loads yet."}</div>}
         </div>
       </section>
     );
@@ -1934,7 +1936,7 @@ export default function App() {
 
         {message ? <div className="notice success">{message}</div> : null}
         {error ? <div className="notice error">{error}</div> : null}
-        {isRestoringSession ? <div className="notice info">Checking access...</div> : null}
+        {isRestoringSession ? <div className="notice info"><LoadingSpinner label="Checking access..." inline /></div> : null}
 
         <div className="auth-department-grid">
           {departmentOptions.map((option) => (
@@ -1994,7 +1996,7 @@ export default function App() {
                   />
                 </label>
                 <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                  {loading ? "Signing in..." : "Continue"}
+                  <LoadingButtonLabel loading={loading} loadingLabel="Signing in...">Continue</LoadingButtonLabel>
                 </button>
               </form>
             ) : (
@@ -2037,7 +2039,7 @@ export default function App() {
                   />
                 </label>
                 <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                  {loading ? "Creating..." : "Create Account"}
+                  <LoadingButtonLabel loading={loading} loadingLabel="Creating...">Create Account</LoadingButtonLabel>
                 </button>
               </form>
             )}
@@ -2467,7 +2469,7 @@ export default function App() {
           activeTab={activeWorkspace}
           onSelectTab={setActiveWorkspace}
           footerDate={currentDate}
-          footerTitle={savingId ? `Saving load #${savingId}` : "Fuel Service ready"}
+          footerTitle={savingId ? <LoadingSpinner label={`Saving load #${savingId}`} inline /> : "Fuel Service ready"}
           footerSubtitle={`${metrics.readiness}% readiness score`}
           onLogout={logout}
         />
@@ -2644,7 +2646,9 @@ export default function App() {
               <div className="workspace-table-toolbar">
                 <div>
                   <h2>Dispatch Sheet</h2>
-                  <span>{gridLoading ? "Syncing..." : savingId ? `Saving row #${savingId}` : smartFillId ? `Smart Fill on row #${smartFillId}` : "Pick truck, enter pickup + delivery + rate, then let Smart Fill build the economics."}</span>
+                  <span>
+                    {gridLoading ? <LoadingSpinner label="Syncing..." inline /> : savingId ? <LoadingSpinner label={`Saving row #${savingId}`} inline /> : smartFillId ? <LoadingSpinner label={`Smart Fill on row #${smartFillId}`} inline /> : "Pick truck, enter pickup + delivery + rate, then let Smart Fill build the economics."}
+                  </span>
                 </div>
                 <div className="workspace-table-toolbar-actions">
                   <div className="workspace-main-usercard subdued compact">
@@ -2653,7 +2657,7 @@ export default function App() {
                   </div>
                   <div className="workspace-main-usercard subdued compact">
                     <span>Motive trucks</span>
-                    <strong>{fleetLoading ? "..." : fleetVehicles.length}</strong>
+                    <strong>{fleetLoading ? <LoadingSpinner label="" inline /> : fleetVehicles.length}</strong>
                   </div>
                 </div>
               </div>
@@ -2944,7 +2948,7 @@ export default function App() {
                               </td>
                               <td className="action-cell">
                                 <button className="secondary-button" type="button" onClick={() => smartFillRow(row)} disabled={smartFillId === row.id || savingId === row.id || fleetLoading || !fleetVehicles.length}>
-                                  {smartFillId === row.id ? "Planning..." : "Smart Fill"}
+                                  <LoadingButtonLabel loading={smartFillId === row.id} loadingLabel="Planning...">Smart Fill</LoadingButtonLabel>
                                 </button>
                               </td>
                               <td className="action-cell">
@@ -2959,7 +2963,7 @@ export default function App() {
                       ) : (
                         <tr>
                           <td colSpan="34" className="empty-state-cell">
-                            {gridLoading ? "Loading data..." : "No loads yet."}
+                            {gridLoading ? <LoadingSpinner label="Loading data..." inline /> : "No loads yet."}
                           </td>
                         </tr>
                       )}

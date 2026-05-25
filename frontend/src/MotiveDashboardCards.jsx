@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildVehicleLocationLabel } from "./locationFormatting";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const DASHBOARD_REFRESH_INTERVAL_MS = 300000;
@@ -223,9 +224,9 @@ export default function MotiveDashboardCards({ token, active = true }) {
       {!error && warnings.length ? <div className="notice info inline-notice">{warnings[0]}</div> : null}
 
       {loading ? (
-        <div className="empty-route-card">Loading Motive dashboard cards...</div>
+        <div className="empty-route-card"><LoadingSpinner label="Loading Motive dashboard cards..." inline /></div>
       ) : isWarming ? (
-        <div className="empty-route-card">Motive fleet is syncing right now. The dashboard will fill in as soon as the first live snapshot finishes.</div>
+        <div className="empty-route-card"><LoadingSpinner label="Motive fleet is syncing right now. The dashboard will fill in as soon as the first live snapshot finishes." inline /></div>
       ) : snapshot ? (
         <>
           <div className="motive-command-metrics">

@@ -7,6 +7,7 @@ import {
   parsePriceTarget
 } from "./priceSignals";
 import { buildVehicleLocationLabel, buildVehicleLocationQuery } from "./locationFormatting";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import MapStage from "./MapStage";
 
 const RouteMap = lazy(() => import("./RouteMap"));
@@ -673,7 +674,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
 
     return (
       <div className="route-location-suggestions">
-        {isLoading ? <div className="route-location-suggestions-empty">Searching real locations...</div> : null}
+        {isLoading ? <div className="route-location-suggestions-empty"><LoadingSpinner label="Searching real locations..." inline /></div> : null}
         {!isLoading && suggestions.length ? suggestions.map((suggestion) => (
           <button
             key={`${field}-${suggestion.id}-${suggestion.lat}-${suggestion.lon}`}
@@ -1075,7 +1076,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
           <span>{driverMode ? "Your truck is locked from Motive. Enter point B and the system uses live fuel plus a fixed 200 gallon tank capacity." : "Select a truck or driver, enter only A and B, and the system fills live fuel plus a fixed 200 gallon tank capacity automatically."}</span>
         </div>
         <div className="route-vehicle-bridge-status">
-          <strong>{fleetLoading ? "Syncing Motive fleet..." : driverMode ? "Driver truck ready" : `${fleetVehicles.length} trucks ready`}</strong>
+          <strong>{fleetLoading ? <LoadingSpinner label="Syncing Motive fleet..." inline /> : driverMode ? "Driver truck ready" : `${fleetVehicles.length} trucks ready`}</strong>
           <span>{selectedVehicle ? `${vehicleLabel(selectedVehicle)} | ${vehicleDriverName(selectedVehicle)}` : "Choose a Motive truck to auto-fill route fuel inputs."}</span>
         </div>
       </div>
@@ -1170,7 +1171,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
           <small className="route-builder-hint">Planner aims for this auto diesel price and only goes above it when safety or reachability requires.</small>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading || !routeForm.origin.trim() || !routeForm.destination.trim()}>
-          {routeLoading ? `Building route... ${routeLoadingSeconds}s` : "Build route"}
+          <LoadingButtonLabel loading={routeLoading} loadingLabel={`Building route... ${routeLoadingSeconds}s`}>Build route</LoadingButtonLabel>
         </button>
       </div>
 
@@ -1220,7 +1221,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
       </div>
 
       {fleetError ? <div className="notice error inline-notice">{fleetError}</div> : null}
-      {routeLoading ? <div className="notice info inline-notice" aria-live="polite">{routeLoadingMessage}</div> : null}
+      {routeLoading ? <div className="notice info inline-notice" aria-live="polite"><LoadingSpinner label={routeLoadingMessage} inline /></div> : null}
       {routeError ? <div className="notice error inline-notice">{routeError}</div> : null}
       {approvalMessage ? <div className="notice success inline-notice">{approvalMessage}</div> : null}
       {approvalError ? <div className="notice error inline-notice">{approvalError}</div> : null}
@@ -1230,7 +1231,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
           <div className="route-main-grid route-main-grid-brand">
             <MapStage title="Map" detail="Prices remain visible under each station as you zoom in." className="route-map-stage-brand">
               {({ isFullscreen }) => (
-                <Suspense fallback={<div className="module-loader">Loading interactive map...</div>}>
+                <Suspense fallback={<div className="module-loader"><LoadingSpinner label="Loading interactive map..." size="md" /></div>}>
                   <RouteMap
                     plan={routePlan}
                     isFullscreen={isFullscreen}
@@ -1323,7 +1324,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
                 </div>
 
                 <button className="primary-button filter-apply-button primary-button-brand" onClick={applyDraftFilters} disabled={routeLoading}>
-                  {plannerNeedsRefresh ? (routeLoading ? "Refreshing plan..." : "Apply filters + rebuild smart route") : "Apply View Filter"}
+                  {plannerNeedsRefresh ? <LoadingButtonLabel loading={routeLoading} loadingLabel="Refreshing plan...">Apply filters + rebuild smart route</LoadingButtonLabel> : "Apply View Filter"}
                 </button>
 
                 {priceTargetStats ? (
@@ -1429,7 +1430,7 @@ export default function RouteAssistant({ token, active = true, loadRows = [], fl
                             onClick={() => createFuelAuthorization(item)}
                             disabled={!selectedVehicle || approvalBusyKey === `${item.sequence}-${item.stop.id}`}
                           >
-                            {approvalBusyKey === `${item.sequence}-${item.stop.id}` ? "Approving..." : "Approve fuel stop"}
+                            <LoadingButtonLabel loading={approvalBusyKey === `${item.sequence}-${item.stop.id}`} loadingLabel="Approving...">Approve fuel stop</LoadingButtonLabel>
                           </button>
                         ) : null}
                       </article>

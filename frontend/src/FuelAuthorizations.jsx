@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useConfirmDialog } from "./feedback";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const statusOptions = [
@@ -132,9 +133,9 @@ function AuthorizationCard({ item, busy, onMarkSent, onCancel, onReconcile, onCo
 
       <footer className="fuel-auth-actions">
         <button className="secondary-button" type="button" onClick={() => onCopy(item)} disabled={!item.driver_message}>Copy message</button>
-        <button className="secondary-button" type="button" onClick={() => onReconcile(item)} disabled={busy}>Reconcile</button>
-        <button className="secondary-button" type="button" onClick={() => onMarkSent(item)} disabled={busy || terminal || item.status === "sent"}>Mark sent</button>
-        <button className="delete-button" type="button" onClick={() => onCancel(item)} disabled={busy || item.status === "used" || item.status === "cancelled"}>Cancel</button>
+        <button className="secondary-button" type="button" onClick={() => onReconcile(item)} disabled={busy}><LoadingButtonLabel loading={busy} loadingLabel="Checking...">Reconcile</LoadingButtonLabel></button>
+        <button className="secondary-button" type="button" onClick={() => onMarkSent(item)} disabled={busy || terminal || item.status === "sent"}><LoadingButtonLabel loading={busy} loadingLabel="Saving...">Mark sent</LoadingButtonLabel></button>
+        <button className="delete-button" type="button" onClick={() => onCancel(item)} disabled={busy || item.status === "used" || item.status === "cancelled"}><LoadingButtonLabel loading={busy} loadingLabel="Cancelling...">Cancel</LoadingButtonLabel></button>
         {item.station_map_link ? <a className="fuel-source-link" href={item.station_map_link} target="_blank" rel="noreferrer">Route</a> : null}
       </footer>
     </article>
@@ -281,8 +282,8 @@ export default function FuelAuthorizations({ token, active = true }) {
           <span>Approved stops, card limits, Motive purchase checks.</span>
         </div>
         <div className="fuel-auth-head-actions">
-          <button className="secondary-button" type="button" onClick={() => loadAuthorizations(statusFilter)} disabled={loading}>Refresh</button>
-          <button className="primary-button" type="button" onClick={reconcileOpen} disabled={busyId === "bulk"}>{busyId === "bulk" ? "Checking..." : "Reconcile open"}</button>
+          <button className="secondary-button" type="button" onClick={() => loadAuthorizations(statusFilter)} disabled={loading}><LoadingButtonLabel loading={loading} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel></button>
+          <button className="primary-button" type="button" onClick={reconcileOpen} disabled={busyId === "bulk"}><LoadingButtonLabel loading={busyId === "bulk"} loadingLabel="Checking...">Reconcile open</LoadingButtonLabel></button>
         </div>
       </div>
 
@@ -304,7 +305,7 @@ export default function FuelAuthorizations({ token, active = true }) {
             {statusOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>
-        <span>{loading ? "Loading approvals..." : `${items.length} approvals shown`}</span>
+        <span>{loading ? <LoadingSpinner label="Loading approvals..." inline /> : `${items.length} approvals shown`}</span>
       </div>
 
       <div className="fuel-auth-grid">
@@ -318,7 +319,7 @@ export default function FuelAuthorizations({ token, active = true }) {
             onReconcile={reconcile}
             onCopy={copyMessage}
           />
-        )) : <div className="empty-route-card">{loading ? "Loading fuel authorizations..." : "No fuel authorizations match this filter yet."}</div>}
+        )) : <div className="empty-route-card">{loading ? <LoadingSpinner label="Loading fuel authorizations..." inline /> : "No fuel authorizations match this filter yet."}</div>}
       </div>
     </section>
   );

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirmDialog } from "./feedback";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { useIsMobileViewport } from "./useViewportMode";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -385,14 +386,16 @@ export default function TeamChat({ token, user, active = true, room = "general",
                 <span key={person.id}><b>{authorInitials(person)}</b>{person.fullName || "Unknown"}</span>
               ))}
             </div>
-            <button type="button" className="secondary-button" onClick={() => loadMessages({ mode: "manual" })} disabled={refreshing || loading}>{refreshing ? "Refreshing..." : "Refresh"}</button>
+            <button type="button" className="secondary-button" onClick={() => loadMessages({ mode: "manual" })} disabled={refreshing || loading}>
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
+            </button>
           </section>
         ) : null}
 
         {error ? <div className="notice error inline-notice">{error}</div> : null}
 
         <div className="team-chat-mobile-log" ref={messageListRef} onScroll={handleListScroll}>
-          {loading ? <div className="team-chat-empty">Loading Team Chat...</div> : null}
+          {loading ? <div className="team-chat-empty"><LoadingSpinner label="Loading Team Chat..." inline /></div> : null}
           {!loading && !filteredMessages.length ? (
             <div className="team-chat-empty"><strong>No messages found.</strong><span>Start the shared channel or clear filters.</span></div>
           ) : null}
@@ -415,7 +418,9 @@ export default function TeamChat({ token, user, active = true, room = "general",
           <form className="team-chat-mobile-composer editing" onSubmit={saveEdit}>
             <div className="team-chat-composer-context"><strong>Editing message</strong><button type="button" onClick={() => { setEditingId(null); setEditDraft(""); }}>Cancel</button></div>
             <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={2} maxLength={4000} />
-            <button className="primary-button" type="submit" disabled={sending || !editDraft.trim()}>{sending ? "Saving..." : "Save"}</button>
+            <button className="primary-button" type="submit" disabled={sending || !editDraft.trim()}>
+              <LoadingButtonLabel loading={sending} loadingLabel="Saving...">Save</LoadingButtonLabel>
+            </button>
           </form>
         ) : (
           <form className="team-chat-mobile-composer" onSubmit={sendMessage}>
@@ -427,7 +432,9 @@ export default function TeamChat({ token, user, active = true, room = "general",
             ) : null}
             <div className="team-chat-mobile-inputbar">
               <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={4000} placeholder="Message everyone..." />
-              <button className="primary-button" type="submit" disabled={!canSend}>{sending ? "..." : "Send"}</button>
+              <button className="primary-button" type="submit" disabled={!canSend}>
+                <LoadingButtonLabel loading={sending} loadingLabel="Sending...">Send</LoadingButtonLabel>
+              </button>
             </div>
           </form>
         )}
@@ -495,7 +502,7 @@ export default function TeamChat({ token, user, active = true, room = "general",
           <header className="team-chat-toolbar">
             <div>
               <h3>General Channel</h3>
-              <span>{loading ? "Loading history..." : `${visibleMessageCount} visible messages`}</span>
+              <span>{loading ? <LoadingSpinner label="Loading history..." inline /> : `${visibleMessageCount} visible messages`}</span>
             </div>
             <div className="team-chat-toolbar-actions">
               <input
@@ -505,13 +512,13 @@ export default function TeamChat({ token, user, active = true, room = "general",
                 placeholder="Search messages, people, departments"
               />
               <button type="button" className="secondary-button" onClick={() => loadMessages({ mode: "manual" })} disabled={refreshing || loading}>
-                {refreshing ? "Refreshing..." : "Refresh"}
+                <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh</LoadingButtonLabel>
               </button>
             </div>
           </header>
 
           <div className="team-chat-log" ref={messageListRef} onScroll={handleListScroll}>
-            {loading ? <div className="team-chat-empty">Loading Team Chat...</div> : null}
+            {loading ? <div className="team-chat-empty"><LoadingSpinner label="Loading Team Chat..." inline /></div> : null}
             {!loading && !filteredMessages.length ? (
               <div className="team-chat-empty">
                 <strong>No messages found.</strong>
@@ -542,7 +549,9 @@ export default function TeamChat({ token, user, active = true, room = "general",
               <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={3} maxLength={4000} />
               <div className="team-chat-composer-actions">
                 <span>{editDraft.trim().length}/4000</span>
-                <button className="primary-button" type="submit" disabled={sending || !editDraft.trim()}>{sending ? "Saving..." : "Save Edit"}</button>
+                <button className="primary-button" type="submit" disabled={sending || !editDraft.trim()}>
+                  <LoadingButtonLabel loading={sending} loadingLabel="Saving...">Save Edit</LoadingButtonLabel>
+                </button>
               </div>
             </form>
           ) : (
@@ -566,7 +575,9 @@ export default function TeamChat({ token, user, active = true, room = "general",
               />
               <div className="team-chat-composer-actions">
                 <span>Enter sends, Shift+Enter adds a line</span>
-                <button className="primary-button" type="submit" disabled={!canSend}>{sending ? "Sending..." : "Send Message"}</button>
+                <button className="primary-button" type="submit" disabled={!canSend}>
+                  <LoadingButtonLabel loading={sending} loadingLabel="Sending...">Send Message</LoadingButtonLabel>
+                </button>
               </div>
             </form>
           )}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { LoadingButtonLabel, LoadingSpinner } from './LoadingSpinner';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 
@@ -153,7 +154,7 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       <div className='driver-match-panel'>
         <div className='driver-match-panel-head'>
           <strong>Motive truck match</strong>
-          <span>{matchLoading ? 'Searching...' : matches.length ? `${matches.length} found` : 'Type truck number'}</span>
+          <span>{matchLoading ? <LoadingSpinner label='Searching...' inline /> : matches.length ? `${matches.length} found` : 'Type truck number'}</span>
         </div>
         {matchError ? <div className='notice error inline-notice'>{matchError}</div> : null}
         <div className='driver-match-list'>
@@ -195,7 +196,9 @@ export default function DriverAuth({ mode = 'login', loading = false, onBusyChan
       ) : null}
 
       <button type='submit' className='primary-button auth-submit' disabled={loading || matchLoading || !selectedMatch}>
-        {loading ? 'Working...' : mode === 'register' ? 'Create Driver Workspace' : 'Open Driver Workspace'}
+        <LoadingButtonLabel loading={loading} loadingLabel='Working...'>
+          {mode === 'register' ? 'Create Driver Workspace' : 'Open Driver Workspace'}
+        </LoadingButtonLabel>
       </button>
     </form>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
@@ -515,7 +516,7 @@ function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRe
 
           <div className="motive-incident-actions">
             <button type="button" className="secondary-button" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? "Refreshing clip..." : "Refresh clip link"}
+              <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing clip...">Refresh clip link</LoadingButtonLabel>
             </button>
             {activeVideo ? (
               <a className="secondary-button" href={activeVideo.url} target="_blank" rel="noreferrer">
@@ -1156,7 +1157,7 @@ export default function FleetStatisticsPanel({
               .catch((refreshError) => setError(refreshError.message))
               .finally(() => setRefreshing(false));
           }}>
-            {refreshing ? "Refreshing..." : "Refresh live"}
+            <LoadingButtonLabel loading={refreshing} loadingLabel="Refreshing...">Refresh live</LoadingButtonLabel>
           </button>
         </div>
       </div>
@@ -1165,7 +1166,7 @@ export default function FleetStatisticsPanel({
       {detailPerformanceWarning ? <div className="notice info inline-notice">{detailPerformanceWarning}</div> : null}
 
       {loading ? (
-        <div className="empty-route-card">Loading truck analytics...</div>
+        <div className="empty-route-card"><LoadingSpinner label="Loading truck analytics..." inline /></div>
       ) : (
         <div className="statistics-premium-stack">
           <section className="statistics-premium-hero">
@@ -1584,12 +1585,12 @@ export default function FleetStatisticsPanel({
                         <h2>Safety Incidents & Video</h2>
                         <span>
                           {detailLoading
-                            ? "Refreshing Motive incident media..."
+                            ? <LoadingSpinner label="Refreshing Motive incident media..." inline />
                             : `${selectedSafetyEvents.length} recent incident(s), ${metricValue(selectedCameraIncidentCount)} with downloadable video. ${dataDateText(fleetDataDate)}`}
                         </span>
                       </div>
                       <button className="secondary-button" type="button" onClick={() => refreshSelectedDetail(true)} disabled={detailLoading}>
-                        {detailLoading ? "Refreshing..." : "Refresh incidents"}
+                        <LoadingButtonLabel loading={detailLoading} loadingLabel="Refreshing...">Refresh incidents</LoadingButtonLabel>
                       </button>
                     </div>
 
@@ -1633,7 +1634,7 @@ export default function FleetStatisticsPanel({
                     <div className="panel-head">
                       <div>
                         <h2>Profile Growth</h2>
-                        <span>{detailLoading ? "Refreshing truck archive..." : `Recent daily miles from the archive that keeps building over time. ${dataDateText(selectedArchiveDataDate)}`}</span>
+                        <span>{detailLoading ? <LoadingSpinner label="Refreshing truck archive..." inline /> : `Recent daily miles from the archive that keeps building over time. ${dataDateText(selectedArchiveDataDate)}`}</span>
                       </div>
                     </div>
                     {(selectedStatistics?.daily_history || []).length ? (
@@ -1647,7 +1648,7 @@ export default function FleetStatisticsPanel({
                     <div className="panel-head">
                       <div>
                         <h2>Real-Time Trace</h2>
-                        <span>{detailLoading ? "Loading live breadcrumbs..." : `${(detail?.history?.points || []).length} breadcrumb point(s) loaded. ${dataDateText(selectedLiveDataDate)}`}</span>
+                        <span>{detailLoading ? <LoadingSpinner label="Loading live breadcrumbs..." inline /> : `${(detail?.history?.points || []).length} breadcrumb point(s) loaded. ${dataDateText(selectedLiveDataDate)}`}</span>
                       </div>
                     </div>
                     {(detail?.history?.points || []).length ? (

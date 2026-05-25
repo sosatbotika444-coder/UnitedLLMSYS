@@ -6,6 +6,7 @@ import {
   recordTripTimelineEvent,
 } from "./profitability";
 import { useConfirmDialog } from "./feedback";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { buildVehicleLocationLabel, buildVehicleLocationQuery, vehicleLocationPoint } from "./locationFormatting";
 import MapStage from "./MapStage";
 
@@ -1767,7 +1768,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               onClick={exportTripsExcel}
               disabled={!token || tripExporting || tripsLoading}
             >
-              {tripExporting ? "Exporting..." : "Export Trips Excel"}
+              <LoadingButtonLabel loading={tripExporting} loadingLabel="Exporting...">Export Trips Excel</LoadingButtonLabel>
             </button>
           </div>
         </div>
@@ -1841,11 +1842,11 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
 
         <div className="full-road-builder-actions">
           <button className="primary-button" type="button" onClick={() => buildTrip()} disabled={tripBusy || fleetLoading || tripsLoading}>
-            {tripBusy ? "Building Full Road..." : "Create Full Road Trip"}
+            <LoadingButtonLabel loading={tripBusy} loadingLabel="Building Full Road...">Create Full Road Trip</LoadingButtonLabel>
           </button>
           {selectedTrip ? (
             <button className="secondary-button" type="button" onClick={() => buildTrip(selectedTrip)} disabled={tripBusy || tripsLoading}>
-              {tripBusy ? "Refreshing..." : "Refresh Selected Trip"}
+              <LoadingButtonLabel loading={tripBusy} loadingLabel="Refreshing...">Refresh Selected Trip</LoadingButtonLabel>
             </button>
           ) : null}
         </div>
@@ -1853,8 +1854,8 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
         {message ? <div className="notice success inline-notice">{message}</div> : null}
         {tripError ? <div className="notice error inline-notice">{tripError}</div> : null}
         {fleetError ? <div className="notice error inline-notice">{fleetError}</div> : null}
-        {tripsLoading ? <div className="notice info inline-notice">Loading saved Full Road trips...</div> : null}
-        {fleetLoading ? <div className="notice info inline-notice">Refreshing live Motive fleet...</div> : null}
+        {tripsLoading ? <div className="notice info inline-notice"><LoadingSpinner label="Loading saved Full Road trips..." inline /></div> : null}
+        {fleetLoading ? <div className="notice info inline-notice"><LoadingSpinner label="Refreshing live Motive fleet..." inline /></div> : null}
       </section>
 
       <section className="panel full-road-trip-strip-panel">
@@ -1946,7 +1947,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
             <SummaryCard label="Fuel Reserve" value={formatGallons(selectedTripInsights?.projectedReserveGallons)} detail={`${selectedTripInsights?.projectedReservePercent?.toFixed(0) || "0"}% projected on arrival`} tone="blue" />
             <SummaryCard label="Live Next" value={nextDistance !== null && nextDistance !== undefined ? formatDistanceMiles(nextDistance) : "No GPS"} detail={nextEta ? `Last ETA ${formatDateTime(nextEta)}` : "Waiting on route"} tone="green" />
           </section>
-          {livePickupPlanLoading ? <div className="notice info inline-notice">Updating live truck-to-pickup road path...</div> : null}
+          {livePickupPlanLoading ? <div className="notice info inline-notice"><LoadingSpinner label="Updating live truck-to-pickup road path..." inline /></div> : null}
 
           <section className="panel full-road-control-panel">
             <div className="panel-head compact-panel-head">
@@ -2190,7 +2191,7 @@ export default function FullRoadWorkspace({ token, active = true, loadRows = [] 
               {combinedMapPlan ? (
                 <MapStage title="Map" detail="Truck location, pickup, delivery, and fuel stops in one full screen view." className="route-map-stage-brand full-road-map-stage">
                   {({ isFullscreen }) => (
-                    <Suspense fallback={<div className="module-loader">Loading Full Road map...</div>}>
+                    <Suspense fallback={<div className="module-loader"><LoadingSpinner label="Loading Full Road map..." size="md" /></div>}>
                       <RouteMap
                         plan={combinedMapPlan}
                         isFullscreen={isFullscreen}

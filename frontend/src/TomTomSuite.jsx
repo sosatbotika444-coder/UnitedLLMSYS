@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const categoryOrder = ["Maps", "Search", "Routing", "Traffic", "Operations", "Platform"];
@@ -133,7 +134,7 @@ export default function TomTomSuite({ token }) {
       {error ? <div className="notice error inline-notice">{error}</div> : null}
 
       {loading ? (
-        <div className="empty-route-card">Loading services...</div>
+        <div className="empty-route-card"><LoadingSpinner label="Loading services..." inline /></div>
       ) : (
         <>
           <div className="panel-filter-card">

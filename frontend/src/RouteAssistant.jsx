@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import RouteMap from "./RouteMap";
 import MapStage from "./MapStage";
 import {
@@ -337,11 +338,11 @@ export default function RouteAssistant({ token }) {
           <small className="route-builder-hint">Planner aims for this auto diesel price and only goes above it when safety or reachability requires.</small>
         </label>
         <button className="primary-button primary-button-brand" onClick={() => buildRoutePlan(draftFilters)} disabled={routeLoading}>
-          {routeLoading ? `Scanning networks... ${routeLoadingSeconds}s` : "Scan Networks"}
+          <LoadingButtonLabel loading={routeLoading} loadingLabel={`Scanning networks... ${routeLoadingSeconds}s`}>Scan Networks</LoadingButtonLabel>
         </button>
       </div>
 
-      {routeLoading ? <div className="notice info inline-notice" aria-live="polite">{routeLoadingMessage}</div> : null}
+      {routeLoading ? <div className="notice info inline-notice" aria-live="polite"><LoadingSpinner label={routeLoadingMessage} inline /></div> : null}
       {routeError ? <div className="notice error inline-notice">{routeError}</div> : null}
 
       {routePlan ? (
@@ -401,7 +402,7 @@ export default function RouteAssistant({ token }) {
                 </div>
 
                 <button className="primary-button filter-apply-button primary-button-brand" onClick={applyDraftFilters} disabled={routeLoading}>
-                  {plannerNeedsRefresh ? (routeLoading ? "Refreshing plan..." : "Apply filters + rebuild smart route") : "Apply View Filter"}
+                  {plannerNeedsRefresh ? <LoadingButtonLabel loading={routeLoading} loadingLabel="Refreshing plan...">Apply filters + rebuild smart route</LoadingButtonLabel> : "Apply View Filter"}
                 </button>
 
                 {priceTargetStats ? (

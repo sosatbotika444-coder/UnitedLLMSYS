@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import AuthShiftPlanner, { DEFAULT_SHIFT_PLANNER_STORAGE_KEY } from './AuthShiftPlanner';
 import { buildVehicleLocationLabel } from './locationFormatting';
+import { LoadingSpinner } from './LoadingSpinner';
 import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
 import { UnitedIcon } from './UnitedLaneIcons';
@@ -102,7 +103,7 @@ function vehicleStatus(vehicle) {
 }
 
 function ModuleLoader({ label }) {
-  return <div className='module-loader'><UnitedIcon name='spark' size={18} />{label}</div>;
+  return <div className='module-loader'><LoadingSpinner label={label} size='md' /></div>;
 }
 
 function DriverMetric({ label, value, detail, tone = 'neutral' }) {

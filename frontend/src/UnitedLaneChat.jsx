@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MAX_IMAGE_ATTACHMENT_BYTES = 4 * 1024 * 1024;
@@ -188,10 +189,10 @@ export default function UnitedLaneChat({
       <div className="panel-head unitedlane-ai-head">
         <div>
           <h2>{title}</h2>
-          <span>{sending ? "Working..." : "Ready"}</span>
+          <span>{sending ? <LoadingSpinner label="Working..." inline /> : "Ready"}</span>
         </div>
         <div className="unitedlane-ai-status">
-          <span>{sending ? "Thinking" : "Online"}</span>
+          <span>{sending ? <LoadingSpinner label="Thinking" inline /> : "Online"}</span>
           <strong>{assistantName}</strong>
         </div>
       </div>
@@ -215,7 +216,7 @@ export default function UnitedLaneChat({
                 <p>{message.text}</p>
               </article>
             ))}
-            {sending ? <div className="unitedlane-ai-thinking">Working...</div> : null}
+            {sending ? <div className="unitedlane-ai-thinking"><LoadingSpinner label="Working..." inline /></div> : null}
           </div>
 
           <form className="unitedlane-ai-form" onSubmit={handleSubmit}>
@@ -255,7 +256,7 @@ export default function UnitedLaneChat({
                   {attachment ? "Change image" : "Attach image"}
                 </button>
                 <button className="primary-button primary-button-brand" type="submit" disabled={sending || (!input.trim() && !attachment)}>
-                  Send
+                  <LoadingButtonLabel loading={sending} loadingLabel="Sending...">Send</LoadingButtonLabel>
                 </button>
               </div>
             </div>
