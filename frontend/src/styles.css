@@ -13602,6 +13602,29 @@ body.theme-blue .route-history-stops div.selected {
   color: var(--muted);
 }
 
+.statistics-data-date {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.statistics-hero-stat .statistics-data-date,
+.statistics-focus-metric .statistics-data-date,
+.statistics-focus-detail-grid .statistics-data-date,
+.statistics-vehicle-spotlight .statistics-data-date,
+.statistics-safety-incident .statistics-data-date,
+.motive-incident-stat .statistics-data-date {
+  padding-top: 4px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.statistics-premium-coverage .statistics-data-date {
+  color: rgba(226, 232, 240, 0.9);
+}
+
 .statistics-hero-stat.tone-emerald {
   background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(220, 252, 231, 0.92));
 }

@@ -66,8 +66,10 @@ function compactDate(value) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   }).format(parsed);
 }
 
@@ -78,7 +80,27 @@ function shortDate(value) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
   }).format(parsed);
+}
+
+function firstDateValue(...values) {
+  return values.find((value) => value !== null && value !== undefined && String(value).trim()) || "";
+}
+
+function dataDateText(value, fallback = "Data date unavailable") {
+  const resolved = firstDateValue(value);
+  return resolved ? `Data date: ${compactDate(resolved)}` : fallback;
+}
+
+function dataDayText(value, fallback = "Data date unavailable") {
+  const resolved = firstDateValue(value);
+  return resolved ? `Data date: ${shortDate(resolved)}` : fallback;
+}
+
+function inlineDataDate(value, fallback = "date unavailable") {
+  const resolved = firstDateValue(value);
+  return resolved ? compactDate(resolved) : fallback;
 }
 
 function formatMiles(value) {
@@ -315,17 +337,18 @@ function sortRows(rows, sortBy) {
   return sorted;
 }
 
-function HeroStat({ label, value, detail, tone = "neutral" }) {
+function HeroStat({ label, value, detail, dataDate = "Data date unavailable", tone = "neutral" }) {
   return (
     <article className={`statistics-hero-stat tone-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
+      <small className="statistics-data-date">{dataDate}</small>
     </article>
   );
 }
 
-function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVehicleId }) {
+function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVehicleId, getItemDate }) {
   return (
     <article className="statistics-leader-card">
       <div className="statistics-leader-head">
@@ -345,6 +368,7 @@ function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVe
                 <span>{index + 1}</span>
                 <strong>{item.truck_number}</strong>
                 <small>{item.driver_name || "Unassigned"}</small>
+                <small className="statistics-data-date">{getItemDate ? getItemDate(item) : "Data date unavailable"}</small>
               </div>
               <em>{formatter(item.value)}</em>
             </>
@@ -376,12 +400,13 @@ function LeaderboardColumn({ title, hint, items, formatter, onSelect, selectedVe
   );
 }
 
-function FocusMetric({ label, value, detail, tone = "neutral" }) {
+function FocusMetric({ label, value, detail, dataDate = "Data date unavailable", tone = "neutral" }) {
   return (
     <article className={`statistics-focus-metric tone-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
+      <small className="statistics-data-date">{dataDate}</small>
     </article>
   );
 }
@@ -406,12 +431,13 @@ function TrendBars({ points }) {
   );
 }
 
-function IncidentStat({ label, value, detail }) {
+function IncidentStat({ label, value, detail, dataDate }) {
   return (
     <article className="motive-incident-stat">
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
+      {dataDate ? <small className="statistics-data-date">{dataDate}</small> : null}
     </article>
   );
 }
@@ -427,6 +453,7 @@ function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRe
   const behaviors = performanceEventBehaviors(event);
   const contextEntries = Object.entries(event.additional_context || {});
   const cameraPositions = event.camera_media?.camera_positions || [];
+  const incidentDataDate = firstDateValue(event.end_time, event.start_time, event.updated_at, event.created_at, event.camera_media?.uploaded_at);
 
   return (
     <div className="motive-incident-backdrop" onClick={onClose}>
@@ -443,6 +470,7 @@ function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRe
               .filter(Boolean)
               .join(" | ")}
           </p>
+          <small className="statistics-data-date">{dataDateText(incidentDataDate)}</small>
         </div>
 
         <div className="motive-incident-media-shell">
@@ -504,9 +532,9 @@ function IncidentViewerDialog({ event, videoKey, onVideoKeyChange, onClose, onRe
         <div className="motive-incident-stat-grid">
           <IncidentStat label="Start" value={compactDate(event.start_time)} detail={formatSpeed(event.start_speed)} />
           <IncidentStat label="End" value={compactDate(event.end_time)} detail={formatSpeed(event.end_speed)} />
-          <IncidentStat label="Max speed" value={formatSpeed(event.max_speed)} detail={event.duration_seconds ? formatDurationSeconds(event.duration_seconds) : "Duration unknown"} />
-          <IncidentStat label="Trigger" value={event.trigger ? formatKeyLabel(event.trigger) : "Unknown"} detail={event.intensity ? `Intensity: ${event.intensity}` : "Trigger context"} />
-          <IncidentStat label="Camera" value={cameraPositions.length ? cameraPositions.map(formatKeyLabel).join(", ") : "No camera angle"} detail={event.camera_media?.camera_type || event.camera_media?.auto_transcode_status || "Camera meta unavailable"} />
+          <IncidentStat label="Max speed" value={formatSpeed(event.max_speed)} detail={event.duration_seconds ? formatDurationSeconds(event.duration_seconds) : "Duration unknown"} dataDate={dataDateText(incidentDataDate)} />
+          <IncidentStat label="Trigger" value={event.trigger ? formatKeyLabel(event.trigger) : "Unknown"} detail={event.intensity ? `Intensity: ${event.intensity}` : "Trigger context"} dataDate={dataDateText(incidentDataDate)} />
+          <IncidentStat label="Camera" value={cameraPositions.length ? cameraPositions.map(formatKeyLabel).join(", ") : "No camera angle"} detail={event.camera_media?.camera_type || event.camera_media?.auto_transcode_status || "Camera meta unavailable"} dataDate={dataDateText(firstDateValue(event.camera_media?.uploaded_at, incidentDataDate))} />
           <IncidentStat label="Uploaded" value={compactDate(event.camera_media?.uploaded_at)} detail={event.driver_name || "Driver unavailable"} />
         </div>
 
@@ -925,6 +953,63 @@ export default function FleetStatisticsPanel({
   const statisticsArchive = snapshotStatistics.archive || {};
   const leaderboards = snapshotStatistics.leaders || {};
   const recentSafetyEvents = (snapshot?.recent_activity?.performance_events || []).slice(0, 8);
+  const fleetDataDate = firstDateValue(snapshot?.fetched_at, snapshot?.cache?.served_at);
+  const archiveDataDate = firstDateValue(statisticsArchive.last_tracked_at, fleetDataDate);
+  const archiveStartDate = firstDateValue(statisticsArchive.first_tracked_at);
+  const selectedArchiveDataDate = firstDateValue(
+    selectedStatistics?.coverage?.archive_last_seen_at,
+    selectedStatistics?.archive_last_seen_at,
+    selectedRow?.archiveLastSeenAt,
+    fleetDataDate
+  );
+  const selectedLiveDataDate = firstDateValue(
+    selectedDetailVehicle?.location?.located_at,
+    selectedRow?.lastLocatedAt,
+    fleetDataDate
+  );
+  const selectedVehicleDataDate = firstDateValue(
+    selectedDetailVehicle?.updated_at,
+    selectedDetailVehicle?.created_at,
+    selectedLiveDataDate
+  );
+  const selectedHosDataDate = firstDateValue(
+    selectedDetailVehicle?.eld_hours?.last_status?.time,
+    selectedDetailVehicle?.eld_hours?.available_time?.updated_at,
+    selectedDetailVehicle?.eld_hours?.updated_at,
+    selectedLiveDataDate
+  );
+
+  function rowLiveDataDate(row) {
+    return firstDateValue(row?.lastLocatedAt, row?.vehicle?.updated_at, fleetDataDate);
+  }
+
+  function rowArchiveDataDate(row) {
+    return firstDateValue(row?.archiveLastSeenAt, rowLiveDataDate(row), fleetDataDate);
+  }
+
+  function rowLoadDataDate(row) {
+    const load = row?.matchedLoad || {};
+    return firstDateValue(load.updated_at, load.updatedAt, load.created_at, load.createdAt, fleetDataDate);
+  }
+
+  function leaderDateText(item, source = "archive") {
+    const row = fleetRows.find((candidate) => String(candidate.id) === String(item?.vehicle_id));
+    const date = source === "live"
+      ? rowLiveDataDate(row)
+      : source === "load"
+        ? rowLoadDataDate(row)
+        : rowArchiveDataDate(row);
+    return dataDateText(date);
+  }
+
+  function eventDataDate(event) {
+    return firstDateValue(event?.end_time, event?.start_time, event?.updated_at, event?.created_at, fleetDataDate);
+  }
+
+  function historyDataDate(point) {
+    return firstDateValue(point?.located_at, point?.updated_at, fleetDataDate);
+  }
+
   const hasActiveFilters = useMemo(() => {
     const defaults = createDefaultFilters();
     return quickFocus !== "all"
@@ -1054,7 +1139,7 @@ export default function FleetStatisticsPanel({
           </span>
         </div>
         <div className="fleet-statistics-head-meta">
-          {snapshot?.fetched_at ? <small>Updated {compactDate(snapshot.fetched_at)}</small> : null}
+          {fleetDataDate ? <small>{dataDateText(fleetDataDate)}</small> : null}
           <button className="secondary-button" type="button" onClick={clearFilters}>
             Clear filters
           </button>
@@ -1098,36 +1183,39 @@ export default function FleetStatisticsPanel({
                 <span>Archive started</span>
                 <strong>{statisticsArchive.first_tracked_at ? shortDate(statisticsArchive.first_tracked_at) : "Starting now"}</strong>
                 <small>{metricValue(statisticsArchive.vehicle_days || 0)} archived vehicle-days</small>
+                <small className="statistics-data-date">{dataDayText(archiveStartDate)}</small>
               </div>
               <div>
                 <span>Tracked units</span>
                 <strong>{metricValue(statisticsArchive.vehicles_with_history || 0)}</strong>
                 <small>{metricValue(snapshot?.metrics?.total_vehicles || 0)} total live trucks</small>
+                <small className="statistics-data-date">{dataDateText(fleetDataDate)}</small>
               </div>
               <div>
                 <span>Last archive ping</span>
                 <strong>{statisticsArchive.last_tracked_at ? compactDate(statisticsArchive.last_tracked_at) : "Waiting"}</strong>
                 <small>Archive grows automatically as Motive snapshots refresh</small>
+                <small className="statistics-data-date">{dataDateText(archiveDataDate)}</small>
               </div>
             </div>
           </section>
 
           <section className="statistics-hero-grid">
-            <HeroStat label="Visible trucks" value={metricValue(visibleMetrics.total)} detail={`${metricValue(snapshot?.metrics?.total_vehicles || 0)} total live units`} tone="blue" />
-            <HeroStat label="Miles today" value={formatMiles(statisticsTotals.today_miles ?? visibleMetrics.todayMiles)} detail="Archive-based daily movement" tone="emerald" />
-            <HeroStat label="Miles 7d" value={formatMiles(statisticsTotals.week_miles ?? visibleMetrics.weekMiles)} detail="Rolling weekly movement" tone="sky" />
-            <HeroStat label="Miles 30d" value={formatMiles(statisticsTotals.month_miles ?? visibleMetrics.monthMiles)} detail="Rolling monthly movement" tone="amber" />
-            <HeroStat label="Speed now" value={formatSpeed(statisticsTotals.avg_speed_now_mph ?? visibleMetrics.avgSpeedNow)} detail={`${metricValue(visibleMetrics.moving)} trucks moving now`} tone="violet" />
-            <HeroStat label="Avg speed 7d" value={formatSpeed(statisticsTotals.avg_speed_7d_mph ?? visibleMetrics.avgSpeed7d)} detail="Rolling driving average" tone="blue" />
-            <HeroStat label="Low fuel units" value={metricValue(visibleMetrics.lowFuel)} detail="25% or below" tone={visibleMetrics.lowFuel ? "amber" : "blue"} />
-            <HeroStat label="Fault units" value={metricValue(visibleMetrics.withFaults)} detail={`${metricValue(visibleMetrics.stale)} stale telemetry`} tone={visibleMetrics.withFaults ? "rose" : "blue"} />
+            <HeroStat label="Visible trucks" value={metricValue(visibleMetrics.total)} detail={`${metricValue(snapshot?.metrics?.total_vehicles || 0)} total live units`} dataDate={dataDateText(fleetDataDate)} tone="blue" />
+            <HeroStat label="Miles today" value={formatMiles(statisticsTotals.today_miles ?? visibleMetrics.todayMiles)} detail="Archive-based daily movement" dataDate={dataDateText(archiveDataDate)} tone="emerald" />
+            <HeroStat label="Miles 7d" value={formatMiles(statisticsTotals.week_miles ?? visibleMetrics.weekMiles)} detail="Rolling weekly movement" dataDate={dataDateText(archiveDataDate)} tone="sky" />
+            <HeroStat label="Miles 30d" value={formatMiles(statisticsTotals.month_miles ?? visibleMetrics.monthMiles)} detail="Rolling monthly movement" dataDate={dataDateText(archiveDataDate)} tone="amber" />
+            <HeroStat label="Speed now" value={formatSpeed(statisticsTotals.avg_speed_now_mph ?? visibleMetrics.avgSpeedNow)} detail={`${metricValue(visibleMetrics.moving)} trucks moving now`} dataDate={dataDateText(fleetDataDate)} tone="violet" />
+            <HeroStat label="Avg speed 7d" value={formatSpeed(statisticsTotals.avg_speed_7d_mph ?? visibleMetrics.avgSpeed7d)} detail="Rolling driving average" dataDate={dataDateText(archiveDataDate)} tone="blue" />
+            <HeroStat label="Low fuel units" value={metricValue(visibleMetrics.lowFuel)} detail="25% or below" dataDate={dataDateText(fleetDataDate)} tone={visibleMetrics.lowFuel ? "amber" : "blue"} />
+            <HeroStat label="Fault units" value={metricValue(visibleMetrics.withFaults)} detail={`${metricValue(visibleMetrics.stale)} stale telemetry`} dataDate={dataDateText(fleetDataDate)} tone={visibleMetrics.withFaults ? "rose" : "blue"} />
           </section>
 
           <section className="statistics-leader-grid">
-            <LeaderboardColumn title="Top Today Miles" hint="Who moved most today" items={leaderboards.today_miles || []} formatter={(value) => formatMiles(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
-            <LeaderboardColumn title="Fastest Right Now" hint="Live speed leaderboard" items={leaderboards.speed_now || []} formatter={(value) => formatSpeed(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
-            <LeaderboardColumn title="Most Faults" hint="Units that need review" items={leaderboards.faults || []} formatter={(value) => `${metricValue(value)} fault${Number(value) === 1 ? "" : "s"}`} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
-            <LeaderboardColumn title="Lowest Fuel" hint="Fuel risk first" items={leaderboards.fuel_low || []} formatter={(value) => formatPercent(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} />
+            <LeaderboardColumn title="Top Today Miles" hint="Who moved most today" items={leaderboards.today_miles || []} formatter={(value) => formatMiles(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} getItemDate={(item) => leaderDateText(item, "archive")} />
+            <LeaderboardColumn title="Fastest Right Now" hint="Live speed leaderboard" items={leaderboards.speed_now || []} formatter={(value) => formatSpeed(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} getItemDate={(item) => leaderDateText(item, "live")} />
+            <LeaderboardColumn title="Most Faults" hint="Units that need review" items={leaderboards.faults || []} formatter={(value) => `${metricValue(value)} fault${Number(value) === 1 ? "" : "s"}`} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} getItemDate={(item) => leaderDateText(item, "live")} />
+            <LeaderboardColumn title="Lowest Fuel" hint="Fuel risk first" items={leaderboards.fuel_low || []} formatter={(value) => formatPercent(value)} onSelect={setSelectedVehicleId} selectedVehicleId={selectedVehicleId} getItemDate={(item) => leaderDateText(item, "live")} />
           </section>
 
           <section className="statistics-safety-panel statistics-safety-global-panel">
@@ -1154,6 +1242,7 @@ export default function FleetStatisticsPanel({
                         <div>
                           <strong>{event.vehicle_number || "Truck"} | {formatKeyLabel(event.type || "event")}</strong>
                           <small>{event.driver_name || "Unassigned"} | {event.location || compactDate(event.end_time)}</small>
+                          <small className="statistics-data-date">{dataDateText(eventDataDate(event))}</small>
                         </div>
                         <span className={`statistics-safety-pill ${videoCount ? "live" : event.camera_available ? "pending" : "plain"}`.trim()}>
                           {videoCount ? `Watch ${videoCount} clip${videoCount === 1 ? "" : "s"}` : imageCount ? `${imageCount} frame${imageCount === 1 ? "" : "s"}` : event.camera_available ? "Media pending" : "No clip"}
@@ -1300,7 +1389,7 @@ export default function FleetStatisticsPanel({
 
             <div className="panel-filter-summary">
               Compare every truck by live speed, archive miles today, rolling week and month movement, fuel, MPG, faults,
-              utilization, assignment, stale age, and matched load context.
+              utilization, assignment, stale age, and matched load context. {dataDateText(fleetDataDate)}
             </div>
           </section>
 
@@ -1320,10 +1409,11 @@ export default function FleetStatisticsPanel({
                     </div>
                     <strong>{row.truckNumber}</strong>
                     <p>{row.driverName}</p>
+                    <small className="statistics-data-date">{dataDateText(rowLiveDataDate(row))}</small>
                     <div className="statistics-vehicle-spotlight-metrics">
-                      <div><span>Today</span><em>{formatMiles(row.todayMiles)}</em></div>
-                      <div><span>Speed</span><em>{formatSpeed(row.currentSpeedMph)}</em></div>
-                      <div><span>Faults</span><em>{metricValue(row.activeFaults)}</em></div>
+                      <div><span>Today</span><em>{formatMiles(row.todayMiles)}</em><small>{inlineDataDate(rowArchiveDataDate(row))}</small></div>
+                      <div><span>Speed</span><em>{formatSpeed(row.currentSpeedMph)}</em><small>{inlineDataDate(rowLiveDataDate(row))}</small></div>
+                      <div><span>Faults</span><em>{metricValue(row.activeFaults)}</em><small>{inlineDataDate(fleetDataDate)}</small></div>
                     </div>
                   </button>
                 ))}
@@ -1352,7 +1442,7 @@ export default function FleetStatisticsPanel({
                           <th>Faults</th>
                           <th>Load</th>
                           <th>Location</th>
-                          <th>Updated</th>
+                          <th>Data date</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1372,40 +1462,49 @@ export default function FleetStatisticsPanel({
                             </td>
                             <td>
                               <strong>{formatMiles(row.todayMiles)}</strong>
+                              <small>{dataDateText(rowArchiveDataDate(row))}</small>
                               <small>{metricValue(row.healthScore)} health score</small>
                             </td>
                             <td>
                               <strong>{formatMiles(row.weekMiles)}</strong>
+                              <small>{dataDateText(rowArchiveDataDate(row))}</small>
                               <small>{formatMiles(row.averageDailyMiles)} avg/day</small>
                             </td>
                             <td>
                               <strong>{formatMiles(row.monthMiles)}</strong>
+                              <small>{dataDateText(rowArchiveDataDate(row))}</small>
                               <small>{formatMiles(row.trackedMiles)} tracked total</small>
                             </td>
                             <td>
                               <strong>{formatSpeed(row.currentSpeedMph)}</strong>
+                              <small>{dataDateText(rowLiveDataDate(row))}</small>
                               <small>{formatSpeed(row.averageSpeedMph7d)} 7d avg</small>
                             </td>
                             <td>
                               <strong className={`statistics-fuel-${fuelFilterTone(row.fuelPercent)}`}>
                                 {formatPercent(row.fuelPercent)}
                               </strong>
+                              <small>{dataDateText(rowLiveDataDate(row))}</small>
                               <small>{row.fuelType || "Fuel n/a"}</small>
                             </td>
                             <td>
                               <strong>{metricValue(row.activeFaults)}</strong>
+                              <small>{dataDateText(fleetDataDate)}</small>
                               <small>{metricValue(row.totalFaults)} total recent</small>
                             </td>
                             <td>
                               <strong>{row.loadStatus || "No matched load"}</strong>
+                              <small>{dataDateText(rowLoadDataDate(row))}</small>
                               <small>{row.loadRoute || "No active route"}</small>
                             </td>
                             <td>
                               <strong>{row.locationLabel}</strong>
+                              <small>{dataDateText(rowLiveDataDate(row))}</small>
                               <small>{row.locationCityState || "No city/state"}</small>
                             </td>
                             <td>
                               <strong>{compactDate(row.lastLocatedAt)}</strong>
+                              <small>{dataDateText(rowLiveDataDate(row))}</small>
                               <small>{row.hasLocation ? "Live GPS" : "No live GPS"}</small>
                             </td>
                           </tr>
@@ -1436,43 +1535,46 @@ export default function FleetStatisticsPanel({
                         <span className={`statistics-status-pill tone-${statusTone(selectedRow)}`}>{fleetStatusLabel(selectedRow)}</span>
                         <h3>{selectedRow.truckNumber}</h3>
                         <p>{selectedRow.driverName} | {selectedRow.locationLabel}</p>
+                        <small className="statistics-data-date">{dataDateText(selectedLiveDataDate)}</small>
                       </div>
                       <div className="statistics-focus-health">
                         <span>Truck profile</span>
                         <strong>{metricValue(selectedRow.healthScore)}</strong>
                         <small>Health score</small>
+                        <small className="statistics-data-date">{dataDateText(selectedLiveDataDate)}</small>
                       </div>
                     </div>
 
                     <div className="statistics-focus-metric-grid">
-                      <FocusMetric label="Speed now" value={formatSpeed(selectedStatistics?.current_speed_mph ?? selectedRow.currentSpeedMph)} detail={selectedRow.isMoving ? "Truck is moving right now" : "Truck is not moving now"} tone="blue" />
-                      <FocusMetric label="Avg speed 7d" value={formatSpeed(selectedStatistics?.average_speed_mph_7d ?? selectedRow.averageSpeedMph7d)} detail="Rolling driving average" tone="violet" />
-                      <FocusMetric label="Miles today" value={formatMiles(selectedStatistics?.today_miles ?? selectedRow.todayMiles)} detail="Archive-based daily mileage" tone="emerald" />
-                      <FocusMetric label="Miles 7d" value={formatMiles(selectedStatistics?.week_miles ?? selectedRow.weekMiles)} detail="Rolling weekly distance" tone="sky" />
-                      <FocusMetric label="Miles 30d" value={formatMiles(selectedStatistics?.month_miles ?? selectedRow.monthMiles)} detail="Rolling monthly distance" tone="amber" />
-                      <FocusMetric label="Tracked total" value={formatMiles(selectedStatistics?.tracked_miles ?? selectedRow.trackedMiles)} detail={`${metricValue(selectedStatistics?.tracked_days ?? selectedRow.trackedDays)} tracked day(s)`} tone="dark" />
-                      <FocusMetric label="Fuel" value={formatPercent(selectedRow.fuelPercent)} detail={selectedRow.fuelType || "Fuel type unavailable"} tone={fuelFilterTone(selectedRow.fuelPercent)} />
-                      <FocusMetric label="MPG" value={selectedRow.mpg !== null ? decimalValue(selectedRow.mpg) : "-"} detail={selectedRow.mpgSource || "No MPG source"} tone="blue" />
+                      <FocusMetric label="Speed now" value={formatSpeed(selectedStatistics?.current_speed_mph ?? selectedRow.currentSpeedMph)} detail={selectedRow.isMoving ? "Truck is moving right now" : "Truck is not moving now"} dataDate={dataDateText(selectedLiveDataDate)} tone="blue" />
+                      <FocusMetric label="Avg speed 7d" value={formatSpeed(selectedStatistics?.average_speed_mph_7d ?? selectedRow.averageSpeedMph7d)} detail="Rolling driving average" dataDate={dataDateText(selectedArchiveDataDate)} tone="violet" />
+                      <FocusMetric label="Miles today" value={formatMiles(selectedStatistics?.today_miles ?? selectedRow.todayMiles)} detail="Archive-based daily mileage" dataDate={dataDateText(selectedArchiveDataDate)} tone="emerald" />
+                      <FocusMetric label="Miles 7d" value={formatMiles(selectedStatistics?.week_miles ?? selectedRow.weekMiles)} detail="Rolling weekly distance" dataDate={dataDateText(selectedArchiveDataDate)} tone="sky" />
+                      <FocusMetric label="Miles 30d" value={formatMiles(selectedStatistics?.month_miles ?? selectedRow.monthMiles)} detail="Rolling monthly distance" dataDate={dataDateText(selectedArchiveDataDate)} tone="amber" />
+                      <FocusMetric label="Tracked total" value={formatMiles(selectedStatistics?.tracked_miles ?? selectedRow.trackedMiles)} detail={`${metricValue(selectedStatistics?.tracked_days ?? selectedRow.trackedDays)} tracked day(s)`} dataDate={dataDateText(selectedArchiveDataDate)} tone="dark" />
+                      <FocusMetric label="Fuel" value={formatPercent(selectedRow.fuelPercent)} detail={selectedRow.fuelType || "Fuel type unavailable"} dataDate={dataDateText(selectedLiveDataDate)} tone={fuelFilterTone(selectedRow.fuelPercent)} />
+                      <FocusMetric label="MPG" value={selectedRow.mpg !== null ? decimalValue(selectedRow.mpg) : "-"} detail={selectedRow.mpgSource || "No MPG source"} dataDate={dataDateText(firstDateValue(selectedArchiveDataDate, selectedLiveDataDate))} tone="blue" />
                       <FocusMetric
                         label="Faults"
                         value={metricValue(selectedRow.activeFaults)}
                         detail={`${metricValue(selectedRow.totalFaults)} recent total${selectedCameraIncidentCount ? ` | ${metricValue(selectedCameraIncidentCount)} camera incident${selectedCameraIncidentCount === 1 ? "" : "s"}` : ""}`}
+                        dataDate={dataDateText(fleetDataDate)}
                         tone={selectedRow.activeFaults ? "rose" : "dark"}
                       />
-                      <FocusMetric label="Drive left" value={formatDurationSeconds(selectedDetailVehicle?.eld_hours?.available_time?.drive_seconds)} detail={selectedDetailVehicle?.eld_hours?.duty_status || selectedDetailVehicle?.eld_hours?.status || "HOS clock"} tone="dark" />
-                      <FocusMetric label="Idle 7d" value={formatHours(selectedRow.idleHours)} detail={`${metricValue(selectedDetailVehicle?.idle_summary?.count || 0)} idle event(s)`} tone="amber" />
-                      <FocusMetric label="IFTA 30d" value={formatMiles(selectedRow.iftaMiles)} detail={`${metricValue(selectedDetailVehicle?.ifta_summary?.count || 0)} trip(s)`} tone="sky" />
+                      <FocusMetric label="Drive left" value={formatDurationSeconds(selectedDetailVehicle?.eld_hours?.available_time?.drive_seconds)} detail={selectedDetailVehicle?.eld_hours?.duty_status || selectedDetailVehicle?.eld_hours?.status || "HOS clock"} dataDate={dataDateText(selectedHosDataDate)} tone="dark" />
+                      <FocusMetric label="Idle 7d" value={formatHours(selectedRow.idleHours)} detail={`${metricValue(selectedDetailVehicle?.idle_summary?.count || 0)} idle event(s)`} dataDate={dataDateText(firstDateValue(selectedDetailVehicle?.idle_summary?.last_idle_end, selectedArchiveDataDate))} tone="amber" />
+                      <FocusMetric label="IFTA 30d" value={formatMiles(selectedRow.iftaMiles)} detail={`${metricValue(selectedDetailVehicle?.ifta_summary?.count || 0)} trip(s)`} dataDate={dataDateText(firstDateValue(selectedDetailVehicle?.ifta_summary?.last_trip_date, selectedArchiveDataDate))} tone="sky" />
                     </div>
                   </section>
 
                   <section className="statistics-focus-detail-panel">
                     <div className="statistics-focus-detail-grid">
-                      <div><span>Vehicle</span><strong>{selectedRow.unitLabel || "Unknown unit"}</strong><small>{selectedRow.vin || "No VIN"}</small></div>
-                      <div><span>Archive started</span><strong>{selectedStatistics?.coverage?.archive_started_at ? shortDate(selectedStatistics.coverage.archive_started_at) : "Starting now"}</strong><small>{selectedStatistics?.coverage?.tracked_days || selectedRow.trackedDays} tracked day(s)</small></div>
-                      <div><span>Latest odometer</span><strong>{selectedStatistics?.latest_odometer_miles !== null && selectedStatistics?.latest_odometer_miles !== undefined ? formatMiles(selectedStatistics.latest_odometer_miles) : "-"}</strong><small>Latest telemetry reading</small></div>
-                      <div><span>Engine hours</span><strong>{selectedStatistics?.latest_engine_hours !== null && selectedStatistics?.latest_engine_hours !== undefined ? decimalValue(selectedStatistics.latest_engine_hours) : "-"}</strong><small>Current engine runtime</small></div>
-                      <div><span>Utilization</span><strong>{formatPercent(selectedRow.utilizationPct)}</strong><small>7-day utilization</small></div>
-                      <div><span>Load</span><strong>{selectedRow.loadStatus || "No matched load"}</strong><small>{selectedRow.loadRoute || "No active route"}</small></div>
+                      <div><span>Vehicle</span><strong>{selectedRow.unitLabel || "Unknown unit"}</strong><small>{selectedRow.vin || "No VIN"}</small><small className="statistics-data-date">{dataDateText(selectedVehicleDataDate)}</small></div>
+                      <div><span>Archive started</span><strong>{selectedStatistics?.coverage?.archive_started_at ? shortDate(selectedStatistics.coverage.archive_started_at) : "Starting now"}</strong><small>{selectedStatistics?.coverage?.tracked_days || selectedRow.trackedDays} tracked day(s)</small><small className="statistics-data-date">{dataDayText(selectedStatistics?.coverage?.archive_started_at || selectedRow.archiveStartedAt)}</small></div>
+                      <div><span>Latest odometer</span><strong>{selectedStatistics?.latest_odometer_miles !== null && selectedStatistics?.latest_odometer_miles !== undefined ? formatMiles(selectedStatistics.latest_odometer_miles) : "-"}</strong><small>Latest telemetry reading</small><small className="statistics-data-date">{dataDateText(selectedLiveDataDate)}</small></div>
+                      <div><span>Engine hours</span><strong>{selectedStatistics?.latest_engine_hours !== null && selectedStatistics?.latest_engine_hours !== undefined ? decimalValue(selectedStatistics.latest_engine_hours) : "-"}</strong><small>Current engine runtime</small><small className="statistics-data-date">{dataDateText(selectedLiveDataDate)}</small></div>
+                      <div><span>Utilization</span><strong>{formatPercent(selectedRow.utilizationPct)}</strong><small>7-day utilization</small><small className="statistics-data-date">{dataDateText(selectedArchiveDataDate)}</small></div>
+                      <div><span>Load</span><strong>{selectedRow.loadStatus || "No matched load"}</strong><small>{selectedRow.loadRoute || "No active route"}</small><small className="statistics-data-date">{dataDateText(rowLoadDataDate(selectedRow))}</small></div>
                     </div>
                   </section>
 
@@ -1483,7 +1585,7 @@ export default function FleetStatisticsPanel({
                         <span>
                           {detailLoading
                             ? "Refreshing Motive incident media..."
-                            : `${selectedSafetyEvents.length} recent incident(s), ${metricValue(selectedCameraIncidentCount)} with downloadable video.`}
+                            : `${selectedSafetyEvents.length} recent incident(s), ${metricValue(selectedCameraIncidentCount)} with downloadable video. ${dataDateText(fleetDataDate)}`}
                         </span>
                       </div>
                       <button className="secondary-button" type="button" onClick={() => refreshSelectedDetail(true)} disabled={detailLoading}>
@@ -1507,6 +1609,7 @@ export default function FleetStatisticsPanel({
                                 <div>
                                   <strong>{formatKeyLabel(event.type || "event")}</strong>
                                   <small>{event.location || compactDate(event.end_time)}</small>
+                                  <small className="statistics-data-date">{dataDateText(eventDataDate(event))}</small>
                                 </div>
                                 <span className={`statistics-safety-pill ${videoCount ? "live" : event.camera_available ? "pending" : "plain"}`.trim()}>
                                   {videoCount ? `${videoCount} clip${videoCount === 1 ? "" : "s"}` : imageCount ? `${imageCount} frame${imageCount === 1 ? "" : "s"}` : event.camera_available ? "Media pending" : "No clip"}
@@ -1530,7 +1633,7 @@ export default function FleetStatisticsPanel({
                     <div className="panel-head">
                       <div>
                         <h2>Profile Growth</h2>
-                        <span>{detailLoading ? "Refreshing truck archive..." : "Recent daily miles from the archive that keeps building over time."}</span>
+                        <span>{detailLoading ? "Refreshing truck archive..." : `Recent daily miles from the archive that keeps building over time. ${dataDateText(selectedArchiveDataDate)}`}</span>
                       </div>
                     </div>
                     {(selectedStatistics?.daily_history || []).length ? (
@@ -1544,7 +1647,7 @@ export default function FleetStatisticsPanel({
                     <div className="panel-head">
                       <div>
                         <h2>Real-Time Trace</h2>
-                        <span>{detailLoading ? "Loading live breadcrumbs..." : `${(detail?.history?.points || []).length} breadcrumb point(s) loaded`}</span>
+                        <span>{detailLoading ? "Loading live breadcrumbs..." : `${(detail?.history?.points || []).length} breadcrumb point(s) loaded. ${dataDateText(selectedLiveDataDate)}`}</span>
                       </div>
                     </div>
                     {(detail?.history?.points || []).length ? (
@@ -1554,6 +1657,7 @@ export default function FleetStatisticsPanel({
                             <strong>{compactDate(point.located_at)}</strong>
                             <span>{point.display_label || point.address || point.description || "Unknown area"}</span>
                             <small>{point.speed_mph !== null && point.speed_mph !== undefined ? formatSpeed(point.speed_mph) : point.event_type || "No speed"}</small>
+                            <small className="statistics-data-date">{dataDateText(historyDataDate(point))}</small>
                           </div>
                         ))}
                       </div>
