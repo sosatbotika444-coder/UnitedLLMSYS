@@ -30,6 +30,7 @@ const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";
+const APPEARANCE_KEY = "unitedlane_appearance_v1";
 const PRODUCT_KEY = "unitedlane_active_product";
 const SIDEBAR_STATE_KEY = "unitedlane_workspace_sidebar_state_v1";
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
@@ -111,6 +112,19 @@ const themeOptions = [
   { id: "light", label: "Luxe Light", detail: "Bright executive workspace", accent: "Ivory, blue, emerald" },
   { id: "dark", label: "Night Ops", detail: "Low-glare premium console", accent: "Graphite, cyan, lime" },
   { id: "blue", label: "Skyline Blue", detail: "Cool logistics dashboard", accent: "Frost, navy, electric blue" }
+];
+const fontOptions = [
+  { id: "default", label: "Default", detail: "Original project font", preview: "Aa" },
+  { id: "system", label: "System", detail: "Clean Windows/browser UI", preview: "Aa" },
+  { id: "soft", label: "Soft", detail: "Modern rounded Manrope", preview: "Aa" },
+  { id: "mono", label: "Ops Mono", detail: "Technical dispatch feel", preview: "01" }
+];
+const backgroundOptions = [
+  { id: "default", label: "Default", detail: "Original project background", swatch: "default" },
+  { id: "clean", label: "Clean White", detail: "Simple light workspace", swatch: "clean" },
+  { id: "steel", label: "Steel", detail: "Cool gray logistics desk", swatch: "steel" },
+  { id: "warm", label: "Warm", detail: "Soft beige operations view", swatch: "warm" },
+  { id: "midnight", label: "Midnight", detail: "Dark background without changing data cards", swatch: "midnight" }
 ];
 const workspaceCopy = {
   command: {
@@ -537,6 +551,19 @@ function readStoredSidebarState() {
   }
 }
 
+function readStoredAppearance() {
+  try {
+    const rawValue = localStorage.getItem(APPEARANCE_KEY);
+    if (!rawValue) return { font: "default", background: "default" };
+    const parsed = JSON.parse(rawValue);
+    const font = fontOptions.some((option) => option.id === parsed?.font) ? parsed.font : "default";
+    const background = backgroundOptions.some((option) => option.id === parsed?.background) ? parsed.background : "default";
+    return { font, background };
+  } catch {
+    return { font: "default", background: "default" };
+  }
+}
+
 async function apiRequest(path, options = {}, token = "") {
   const { timeoutMs, ...fetchOptions } = options;
   const headers = {
@@ -615,6 +642,66 @@ function DepartmentCard({ option, active, onSelect }) {
       <strong>{option.label}</strong>
       <small>{option.detail}</small>
     </button>
+  );
+}
+
+function AppearanceSettings({ appearance, onChange, compact = false }) {
+  const selectedFont = fontOptions.find((option) => option.id === appearance.font) || fontOptions[0];
+  const selectedBackground = backgroundOptions.find((option) => option.id === appearance.background) || backgroundOptions[0];
+
+  return (
+    <article className={`panel settings-panel-card appearance-settings-card${compact ? " compact" : ""}`.trim()}>
+      <div className="panel-head">
+        <div>
+          <h2>Appearance</h2>
+          <span>Choose project font and background.</span>
+        </div>
+      </div>
+
+      <div className="appearance-settings-grid">
+        <section>
+          <div className="appearance-settings-head">
+            <strong>Font</strong>
+            <span>{selectedFont.label}</span>
+          </div>
+          <div className="appearance-option-grid">
+            {fontOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`appearance-option-card appearance-font-preview-${option.id}${appearance.font === option.id ? " active" : ""}`.trim()}
+                onClick={() => onChange({ font: option.id })}
+              >
+                <span className="appearance-option-preview">{option.preview}</span>
+                <strong>{option.label}</strong>
+                <small>{option.detail}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <div className="appearance-settings-head">
+            <strong>Background</strong>
+            <span>{selectedBackground.label}</span>
+          </div>
+          <div className="appearance-option-grid">
+            {backgroundOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`appearance-option-card${appearance.background === option.id ? " active" : ""}`.trim()}
+                onClick={() => onChange({ background: option.id })}
+              >
+                <span className={`appearance-background-preview appearance-background-preview-${option.swatch}`} />
+                <strong>{option.label}</strong>
+                <small>{option.detail}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </article>
   );
 }
 
@@ -1084,7 +1171,7 @@ function MobileQuickActions({ onSelect, onCreateLoad }) {
     </section>
   );
 }
-function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, smartFillId, fleetLoading, fleetVehicles, createRow, deleteRow, saveRow, updateLocalRow, syncRowVehicle, smartFillRow, theme, setTheme, onSelectWorkspace }) {
+function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, smartFillId, fleetLoading, fleetVehicles, createRow, deleteRow, saveRow, updateLocalRow, syncRowVehicle, smartFillRow, theme, setTheme, appearance, updateAppearance, onSelectWorkspace }) {
   if (activeWorkspace === "tracking") {
     return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
   }
@@ -1170,6 +1257,7 @@ function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filter
             ))}
           </div>
         </article>
+        <AppearanceSettings appearance={appearance} onChange={updateAppearance} compact />
         <DesignSystemShowcase compact />
       </section>
     );
@@ -1201,6 +1289,7 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
   const [user, setUser] = useState(() => readStoredUser());
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || "light");
+  const [appearance, setAppearance] = useState(() => readStoredAppearance());
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
     const savedDepartment = localStorage.getItem(PRODUCT_KEY);
     return departmentOptions.some((option) => option.id === savedDepartment) ? savedDepartment : "fuel";
@@ -1220,6 +1309,10 @@ export default function App() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sitePanel, setSitePanel] = useState("");
   const [sidebarExpandedByDepartment, setSidebarExpandedByDepartment] = useState(() => readStoredSidebarState());
+
+  function updateAppearance(patch) {
+    setAppearance((current) => ({ ...current, ...patch }));
+  }
 
   useEffect(() => {
     if (!token) {
@@ -1358,6 +1451,30 @@ export default function App() {
       delete body.dataset.theme;
     };
   }, [theme]);
+
+  useEffect(() => {
+    const font = fontOptions.some((option) => option.id === appearance.font) ? appearance.font : "default";
+    const background = backgroundOptions.some((option) => option.id === appearance.background) ? appearance.background : "default";
+    const body = document.body;
+    const fontClasses = fontOptions.map((option) => `appearance-font-${option.id}`);
+    const backgroundClasses = backgroundOptions.map((option) => `appearance-bg-${option.id}`);
+
+    body.classList.remove(...fontClasses, ...backgroundClasses);
+    body.classList.add(`appearance-font-${font}`, `appearance-bg-${background}`);
+    body.dataset.appearanceFont = font;
+    body.dataset.appearanceBackground = background;
+    document.documentElement.dataset.appearanceFont = font;
+    document.documentElement.dataset.appearanceBackground = background;
+    localStorage.setItem(APPEARANCE_KEY, JSON.stringify({ font, background }));
+
+    return () => {
+      body.classList.remove(...fontClasses, ...backgroundClasses);
+      delete body.dataset.appearanceFont;
+      delete body.dataset.appearanceBackground;
+      delete document.documentElement.dataset.appearanceFont;
+      delete document.documentElement.dataset.appearanceBackground;
+    };
+  }, [appearance]);
 
   useEffect(() => {
     localStorage.setItem(PRODUCT_KEY, selectedDepartment);
@@ -1945,6 +2062,7 @@ export default function App() {
         </div>
 
         <div className="auth-lock-note">{selectedDepartment === "admin" ? "Admin login accepts username or email." : selectedDepartment === "driver" ? "Driver registration requires a matched Motive truck." : "Office accounts are created by Admin only."}</div>
+        <AppearanceSettings appearance={appearance} onChange={updateAppearance} compact />
         {isRestoringSession ? null : (
           <>
             <div className="tabs">
@@ -2439,6 +2557,8 @@ export default function App() {
           smartFillRow={smartFillRow}
           theme={theme}
           setTheme={setTheme}
+          appearance={appearance}
+          updateAppearance={updateAppearance}
           onSelectWorkspace={openMobileWorkspace}
         />
       </MobileWorkspaceShell>
@@ -3005,6 +3125,8 @@ export default function App() {
                 </div>
               </article>
 
+              <AppearanceSettings appearance={appearance} onChange={updateAppearance} />
+
               <article className="panel settings-panel-card">
                 <div className="panel-head">
                   <h2>Workspace State</h2>
@@ -3014,6 +3136,14 @@ export default function App() {
                   <div>
                     <span>Selected theme</span>
                     <strong>{themeOptions.find((option) => option.id === theme)?.label || "Luxe Light"}</strong>
+                  </div>
+                  <div>
+                    <span>Selected font</span>
+                    <strong>{fontOptions.find((option) => option.id === appearance.font)?.label || "Default"}</strong>
+                  </div>
+                  <div>
+                    <span>Selected background</span>
+                    <strong>{backgroundOptions.find((option) => option.id === appearance.background)?.label || "Default"}</strong>
                   </div>
                   <div>
                     <span>Saved in browser</span>

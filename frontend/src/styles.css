@@ -22503,3 +22503,214 @@ body.theme-dark .workspace-summary-card span,
 body.theme-dark .workspace-main-kicker {
   color: #6b7280 !important;
 }
+
+/* User-controlled appearance preferences */
+.appearance-settings-card {
+  display: grid;
+  gap: 16px;
+}
+
+.commercial-auth-card .appearance-settings-card,
+.appearance-settings-card.compact {
+  padding: 14px !important;
+}
+
+.appearance-settings-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.appearance-settings-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.appearance-settings-head strong {
+  font-size: 14px;
+}
+
+.appearance-settings-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.appearance-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.appearance-option-card {
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  min-height: 112px;
+  padding: 12px !important;
+  text-align: left;
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--text);
+}
+
+.appearance-option-card.active,
+.appearance-option-card:hover {
+  border-color: var(--brand) !important;
+  background: var(--surface-muted) !important;
+}
+
+.appearance-option-preview {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(29, 78, 216, 0.1);
+  color: var(--brand-strong);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.appearance-font-preview-system .appearance-option-preview {
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.appearance-font-preview-soft .appearance-option-preview {
+  font-family: "Manrope", "Segoe UI", sans-serif;
+}
+
+.appearance-font-preview-mono .appearance-option-preview {
+  font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+.appearance-option-card strong {
+  font-size: 13px;
+}
+
+.appearance-option-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.appearance-background-preview {
+  display: block;
+  width: 100%;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.appearance-background-preview-default {
+  background:
+    radial-gradient(circle at top left, rgba(29, 78, 216, 0.18), transparent 32%),
+    linear-gradient(135deg, #eef3f9, #dde6f1);
+}
+
+.appearance-background-preview-clean {
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+}
+
+.appearance-background-preview-steel {
+  background: linear-gradient(135deg, #e5edf6, #cbd5e1);
+}
+
+.appearance-background-preview-warm {
+  background: linear-gradient(135deg, #fff7ed, #f3ead7);
+}
+
+.appearance-background-preview-midnight {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+}
+
+body.appearance-font-system,
+body.appearance-font-system button,
+body.appearance-font-system input,
+body.appearance-font-system select,
+body.appearance-font-system textarea,
+body.appearance-font-system a {
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif !important;
+}
+
+body.appearance-font-soft,
+body.appearance-font-soft button,
+body.appearance-font-soft input,
+body.appearance-font-soft select,
+body.appearance-font-soft textarea,
+body.appearance-font-soft a {
+  font-family: "Manrope", "Google Sans Text", "Segoe UI", sans-serif !important;
+}
+
+body.appearance-font-mono,
+body.appearance-font-mono button,
+body.appearance-font-mono input,
+body.appearance-font-mono select,
+body.appearance-font-mono textarea,
+body.appearance-font-mono a {
+  font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace !important;
+}
+
+body.appearance-bg-clean,
+body.appearance-bg-clean .dashboard-shell,
+body.appearance-bg-clean .auth-shell,
+body.appearance-bg-clean .site-page-shell,
+body.appearance-bg-clean .site-workspace-shell,
+body.appearance-bg-clean .workspace-app-shell,
+body.appearance-bg-clean .workspace-main-shell,
+body.appearance-bg-clean .mobile-workspace-shell {
+  background: #f8fafc !important;
+  background-image: none !important;
+}
+
+body.appearance-bg-steel,
+body.appearance-bg-steel .dashboard-shell,
+body.appearance-bg-steel .auth-shell,
+body.appearance-bg-steel .site-page-shell,
+body.appearance-bg-steel .site-workspace-shell,
+body.appearance-bg-steel .workspace-app-shell,
+body.appearance-bg-steel .workspace-main-shell,
+body.appearance-bg-steel .mobile-workspace-shell {
+  background:
+    radial-gradient(circle at top left, rgba(71, 85, 105, 0.16), transparent 26%),
+    linear-gradient(180deg, #eef3f8 0%, #d7e0ea 100%) !important;
+}
+
+body.appearance-bg-warm,
+body.appearance-bg-warm .dashboard-shell,
+body.appearance-bg-warm .auth-shell,
+body.appearance-bg-warm .site-page-shell,
+body.appearance-bg-warm .site-workspace-shell,
+body.appearance-bg-warm .workspace-app-shell,
+body.appearance-bg-warm .workspace-main-shell,
+body.appearance-bg-warm .mobile-workspace-shell {
+  background:
+    radial-gradient(circle at top left, rgba(217, 119, 6, 0.11), transparent 28%),
+    linear-gradient(180deg, #fff8ed 0%, #efe3d1 100%) !important;
+}
+
+body.appearance-bg-midnight,
+body.appearance-bg-midnight .dashboard-shell,
+body.appearance-bg-midnight .auth-shell,
+body.appearance-bg-midnight .site-page-shell,
+body.appearance-bg-midnight .site-workspace-shell,
+body.appearance-bg-midnight .workspace-app-shell,
+body.appearance-bg-midnight .workspace-main-shell,
+body.appearance-bg-midnight .mobile-workspace-shell {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.24), transparent 30%),
+    linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+}
+
+body.appearance-bg-midnight .workspace-main-header,
+body.appearance-bg-midnight .site-header,
+body.appearance-bg-midnight .startup-access-copy {
+  color: #f8fafc !important;
+}
+
+body.appearance-bg-midnight .workspace-main-heading h1,
+body.appearance-bg-midnight .workspace-main-heading p,
+body.appearance-bg-midnight .workspace-main-kicker {
+  color: #f8fafc !important;
+}
