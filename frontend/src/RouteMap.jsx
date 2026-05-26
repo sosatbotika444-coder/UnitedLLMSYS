@@ -5,14 +5,91 @@ import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 import { getPriceSignalMeta } from "./priceSignals";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
-const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
+const routeColors = ["#0f7cff", "#0f9f6e", "#f97316"];
 const ROUTES_SOURCE_ID = "dispatch-routes";
+const ROUTES_SHADOW_LAYER_ID = "dispatch-routes-shadow";
+const ROUTES_CASING_LAYER_ID = "dispatch-routes-casing";
 const ROUTES_LAYER_ID = "dispatch-routes-line";
 const STOPS_SOURCE_ID = "clustered-fuel-stops";
 const CLUSTERS_LAYER_ID = "fuel-stop-clusters";
 const CLUSTER_COUNT_LAYER_ID = "fuel-stop-cluster-count";
 const UNCLUSTERED_LAYER_ID = "fuel-stop-points";
 const PRICE_LABEL_LAYER_ID = "fuel-stop-price-labels";
+const MAP_PITCH = 22;
+const MAP_BEARING = -7;
+const FUEL_ICON_IMAGES = {
+  "fuel-pin-default": { fill: "#0f9f6e", accent: "#8bf6ce", glyph: "F" },
+  "fuel-pin-best": { fill: "#0f7cff", accent: "#9bd1ff", glyph: "$" },
+  "fuel-pin-strategy": { fill: "#f97316", accent: "#fed7aa", glyph: "GO" },
+  "fuel-pin-independent": { fill: "#64748b", accent: "#cbd5e1", glyph: "I" },
+  "fuel-cluster-hex": { fill: "#111827", accent: "#38bdf8", glyph: "" }
+};
+
+function createShieldImage({ fill, accent, glyph }) {
+  const width = 58;
+  const height = 66;
+  const pixelRatio = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = width * pixelRatio;
+  canvas.height = height * pixelRatio;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return null;
+  }
+
+  context.scale(pixelRatio, pixelRatio);
+  context.clearRect(0, 0, width, height);
+  context.shadowColor = "rgba(15, 23, 42, 0.32)";
+  context.shadowBlur = 8;
+  context.shadowOffsetY = 5;
+
+  context.beginPath();
+  context.moveTo(29, 4);
+  context.lineTo(50, 14);
+  context.lineTo(50, 36);
+  context.bezierCurveTo(50, 48, 38, 57, 29, 62);
+  context.bezierCurveTo(20, 57, 8, 48, 8, 36);
+  context.lineTo(8, 14);
+  context.closePath();
+  context.fillStyle = fill;
+  context.fill();
+
+  context.shadowColor = "transparent";
+  context.lineWidth = 3;
+  context.strokeStyle = "rgba(255, 255, 255, 0.95)";
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(16, 16);
+  context.lineTo(29, 10);
+  context.lineTo(42, 16);
+  context.lineWidth = 3;
+  context.strokeStyle = accent;
+  context.lineCap = "round";
+  context.stroke();
+
+  context.fillStyle = "#ffffff";
+  context.font = glyph.length > 1 ? "900 15px Manrope, Arial, sans-serif" : "900 20px Manrope, Arial, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(glyph, 29, 33);
+
+  return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function ensureFuelStopImages(mapLibreMap) {
+  Object.entries(FUEL_ICON_IMAGES).forEach(([id, options]) => {
+    if (mapLibreMap.hasImage(id)) {
+      return;
+    }
+
+    const image = createShieldImage(options);
+    if (image) {
+      mapLibreMap.addImage(id, image, { pixelRatio: 2 });
+    }
+  });
+}
 
 function createMarkerElement(className, label, title = "") {
   const el = document.createElement("div");
@@ -238,9 +315,11 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         });
       });
 
-      if (mapLibreMap.getLayer(ROUTES_LAYER_ID)) {
-        mapLibreMap.removeLayer(ROUTES_LAYER_ID);
-      }
+      [ROUTES_LAYER_ID, ROUTES_CASING_LAYER_ID, ROUTES_SHADOW_LAYER_ID].forEach((layerId) => {
+        if (mapLibreMap.getLayer(layerId)) {
+          mapLibreMap.removeLayer(layerId);
+        }
+      });
       if (mapLibreMap.getSource(ROUTES_SOURCE_ID)) {
         mapLibreMap.removeSource(ROUTES_SOURCE_ID);
       }
@@ -263,6 +342,37 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       });
 
       mapLibreMap.addLayer({
+        id: ROUTES_SHADOW_LAYER_ID,
+        type: "line",
+        source: ROUTES_SOURCE_ID,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round"
+        },
+        paint: {
+          "line-color": "rgba(15, 23, 42, 0.22)",
+          "line-width": ["+", ["get", "width"], 12],
+          "line-blur": 5,
+          "line-opacity": 0.7
+        }
+      });
+
+      mapLibreMap.addLayer({
+        id: ROUTES_CASING_LAYER_ID,
+        type: "line",
+        source: ROUTES_SOURCE_ID,
+        layout: {
+          "line-cap": "round",
+          "line-join": "round"
+        },
+        paint: {
+          "line-color": "rgba(255, 255, 255, 0.92)",
+          "line-width": ["+", ["get", "width"], 5],
+          "line-opacity": 0.92
+        }
+      });
+
+      mapLibreMap.addLayer({
         id: ROUTES_LAYER_ID,
         type: "line",
         source: ROUTES_SOURCE_ID,
@@ -273,9 +383,11 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         paint: {
           "line-color": ["get", "color"],
           "line-width": ["get", "width"],
-          "line-opacity": 0.9
+          "line-opacity": 0.95
         }
       });
+
+      ensureFuelStopImages(mapLibreMap);
 
       mapLibreMap.addSource(STOPS_SOURCE_ID, {
         type: "geojson",
@@ -290,23 +402,23 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
 
       mapLibreMap.addLayer({
         id: CLUSTERS_LAYER_ID,
-        type: "circle",
+        type: "symbol",
         source: STOPS_SOURCE_ID,
         filter: ["has", "point_count"],
-        paint: {
-          "circle-color": "#16a34a",
-          "circle-radius": [
+        layout: {
+          "icon-image": "fuel-cluster-hex",
+          "icon-size": [
             "step",
             ["get", "point_count"],
-            18,
+            0.84,
             12,
-            24,
+            1,
             32,
-            30
+            1.18
           ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-          "circle-opacity": 0.9
+          "icon-anchor": "center",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true
         }
       });
 
@@ -318,30 +430,45 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         layout: {
           "text-field": ["get", "point_count_abbreviated"],
           "text-font": ["Open Sans Bold"],
-          "text-size": 12
+          "text-size": 12,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true
         },
         paint: {
-          "text-color": "#ffffff"
+          "text-color": "#ffffff",
+          "text-halo-color": "rgba(15, 23, 42, 0.72)",
+          "text-halo-width": 1
         }
       });
 
       mapLibreMap.addLayer({
         id: UNCLUSTERED_LAYER_ID,
-        type: "circle",
+        type: "symbol",
         source: STOPS_SOURCE_ID,
         filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": "#16a34a",
-          "circle-radius": [
+        layout: {
+          "icon-image": [
             "case",
             ["boolean", ["get", "isStrategyStop"], false],
-            10,
+            "fuel-pin-strategy",
             ["boolean", ["get", "isBest"], false],
-            8,
-            6
+            "fuel-pin-best",
+            ["boolean", ["get", "isIndependent"], false],
+            "fuel-pin-independent",
+            "fuel-pin-default"
           ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff"
+          "icon-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            3, 0.66,
+            7, 0.84,
+            11, 1
+          ],
+          "icon-anchor": "bottom",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "symbol-sort-key": ["-", ["get", "score"]]
         }
       });
 
@@ -362,8 +489,8 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
             8, 11,
             10, 12
           ],
-          "text-offset": [0, 1.8],
-          "text-anchor": "top",
+          "text-offset": [1.25, -1.65],
+          "text-anchor": "left",
           "text-line-height": 1.1,
           "text-allow-overlap": true,
           "text-ignore-placement": true,
@@ -373,16 +500,16 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
           "text-color": [
             "case",
             ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "below"]],
-            "#4ade80",
+            "#047857",
             ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "above"]],
-            "#f87171",
+            "#b91c1c",
             ["all", ["boolean", ["get", "hasPriceTarget"], false], ["==", ["get", "priceSignal"], "unknown"]],
-            "#e2e8f0",
-            "#ffffff"
+            "#475569",
+            "#0f172a"
           ],
-          "text-halo-color": "rgba(15, 23, 42, 0.9)",
-          "text-halo-width": 4,
-          "text-halo-blur": 1
+          "text-halo-color": "rgba(255, 255, 255, 0.96)",
+          "text-halo-width": 3,
+          "text-halo-blur": 0.5
         }
       });
 
@@ -401,12 +528,18 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
           bounds.extend([marker.lon, marker.lat]);
         }
       });
-      mapLibreMap.fitBounds(bounds, { padding: 50, duration: 0 });
+      mapLibreMap.fitBounds(bounds, {
+        padding: isFullscreen ? 78 : 58,
+        duration: 450,
+        bearing: MAP_BEARING,
+        pitch: isFullscreen ? 28 : MAP_PITCH,
+        maxZoom: isFullscreen ? 13 : 12
+      });
 
-      const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A", startMarkerTitle) })
+      const startMarker = new maplibregl.Marker({ element: createMarkerElement("marker-start", "A", startMarkerTitle), anchor: "bottom" })
         .setLngLat([plan.origin.lon, plan.origin.lat])
         .addTo(mapLibreMap);
-      const endMarker = new maplibregl.Marker({ element: createMarkerElement("marker-end", "B", endMarkerTitle) })
+      const endMarker = new maplibregl.Marker({ element: createMarkerElement("marker-end", "B", endMarkerTitle), anchor: "bottom" })
         .setLngLat([plan.destination.lon, plan.destination.lat])
         .addTo(mapLibreMap);
 
@@ -417,6 +550,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
           return;
         }
         const extraMarker = new maplibregl.Marker({
+          anchor: "bottom",
           element: createMarkerElement(marker.className || "marker-mid", marker.label || "•", marker.title || "")
         })
           .setLngLat([marker.lon, marker.lat])
@@ -431,12 +565,15 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
 
         mapInstance = new TomTomMap({
-          style: "drivingLight",
+          style: "standardLight",
           language: "en-US",
           mapLibre: {
             container: containerRef.current,
             center: [plan.origin.lon, plan.origin.lat],
-            zoom: 4
+            zoom: 4,
+            pitch: MAP_PITCH,
+            bearing: MAP_BEARING,
+            antialias: true
           }
         });
 
@@ -468,7 +605,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
       }
       mapRef.current = null;
     };
-  }, [allStops, endMarkerTitle, extraMarkers, plan, priceTarget, startMarkerTitle, strategyStopIds]);
+  }, [allStops, endMarkerTitle, extraMarkers, isFullscreen, plan, priceTarget, startMarkerTitle, strategyStopIds]);
 
   if (mapError) {
     return <div className="empty-route-card">Map failed to load: {mapError}</div>;

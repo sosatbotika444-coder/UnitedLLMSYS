@@ -6,7 +6,9 @@ import { buildVehicleLocationLabel } from "./locationFormatting";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const STREET_FOCUS_ZOOM = 15;
-const STREET_FOCUS_PITCH = 42;
+const STREET_FOCUS_PITCH = 52;
+const FLEET_MAP_PITCH = 20;
+const FLEET_MAP_BEARING = -6;
 
 function markerTone(vehicle) {
   if (vehicle.is_stale) return "stale";
@@ -121,12 +123,15 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
     try {
       TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
       mapRef.current = new TomTomMap({
-        style: "drivingLight",
+        style: "standardLight",
         language: "en-US",
         mapLibre: {
           container: containerRef.current,
           center: [-96, 39],
           zoom: 3,
+          pitch: FLEET_MAP_PITCH,
+          bearing: FLEET_MAP_BEARING,
+          antialias: true,
         },
       });
       setMapError("");
@@ -194,7 +199,7 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
         showVehiclePopup(vehicle);
       });
 
-      const marker = new maplibregl.Marker({ element })
+      const marker = new maplibregl.Marker({ element, anchor: "bottom" })
         .setLngLat([vehicle.location.lon, vehicle.location.lat])
         .addTo(mapLibreMap);
       markersRef.current.push(marker);
@@ -214,7 +219,7 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
     }
 
     if (!bounds.isEmpty()) {
-      mapLibreMap.fitBounds(bounds, { padding: 50, maxZoom: 10, duration: 500, bearing: 0, pitch: 0 });
+      mapLibreMap.fitBounds(bounds, { padding: 62, maxZoom: 10.5, duration: 600, bearing: FLEET_MAP_BEARING, pitch: FLEET_MAP_PITCH });
     }
   }, [onSelect, plottedVehicles, selectedVehicleId, viewMode]);
 

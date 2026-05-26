@@ -4,12 +4,16 @@ import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
+const SERVICE_MAP_PITCH = 22;
+const SERVICE_MAP_BEARING = -6;
 
 function hasCoordinates(item) {
   return item && item.lat !== null && item.lat !== undefined && item.lon !== null && item.lon !== undefined;
 }
 
 function markerLabel(item) {
+  if (item?.emergency_ready) return "911";
+  if (item?.kind === "poi") return "POI";
   if (!item?.name) return "S";
   const compact = String(item.name).trim();
   return compact.length > 2 ? compact.slice(0, 2).toUpperCase() : compact.toUpperCase();
@@ -106,12 +110,15 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     try {
       TomTomConfig.instance.put({ apiKey: TOMTOM_KEY });
       mapRef.current = new TomTomMap({
-        style: "drivingLight",
+        style: "standardLight",
         language: "en-US",
         mapLibre: {
           container: containerRef.current,
           center: [-96, 39],
           zoom: 3,
+          pitch: SERVICE_MAP_PITCH,
+          bearing: SERVICE_MAP_BEARING,
+          antialias: true,
         },
       });
       setMapError("");
@@ -149,7 +156,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
       if (popupRef.current) {
         popupRef.current.remove();
       }
-      popupRef.current = new maplibregl.Popup({ offset: 16 }).setLngLat([lng, lat]).setHTML(html).addTo(mapLibreMap);
+      popupRef.current = new maplibregl.Popup({ offset: 22 }).setLngLat([lng, lat]).setHTML(html).addTo(mapLibreMap);
     };
 
     markersRef.current.forEach((marker) => marker.remove());
@@ -164,7 +171,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     if (centerVehicle && hasCoordinates(centerVehicle)) {
       const vehicleElement = createMarkerElement("vehicle", "DR", false, vehicleMarkerTitle(centerVehicle));
       vehicleElement.addEventListener("click", () => showPopup(centerVehicle.lon, centerVehicle.lat, vehiclePopup(centerVehicle)));
-      markersRef.current.push(new maplibregl.Marker({ element: vehicleElement }).setLngLat([centerVehicle.lon, centerVehicle.lat]).addTo(mapLibreMap));
+      markersRef.current.push(new maplibregl.Marker({ element: vehicleElement, anchor: "bottom" }).setLngLat([centerVehicle.lon, centerVehicle.lat]).addTo(mapLibreMap));
       bounds.extend([centerVehicle.lon, centerVehicle.lat]);
     }
 
@@ -175,7 +182,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
         onSelect?.(item.id);
         showPopup(item.lon, item.lat, servicePopup(item));
       });
-      markersRef.current.push(new maplibregl.Marker({ element }).setLngLat([item.lon, item.lat]).addTo(mapLibreMap));
+      markersRef.current.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat([item.lon, item.lat]).addTo(mapLibreMap));
       bounds.extend([item.lon, item.lat]);
     });
 
@@ -184,7 +191,7 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     }
 
     if (!bounds.isEmpty()) {
-      mapLibreMap.fitBounds(bounds, { padding: 52, maxZoom: 11, duration: 450, bearing: 0, pitch: 0 });
+      mapLibreMap.fitBounds(bounds, { padding: 64, maxZoom: 12, duration: 560, bearing: SERVICE_MAP_BEARING, pitch: SERVICE_MAP_PITCH });
     }
   }, [centerVehicle, onSelect, plottedItems, selectedItemId]);
 
