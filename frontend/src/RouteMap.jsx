@@ -48,8 +48,8 @@ function createShieldImage({ fill, accent, glyph }) {
   context.moveTo(29, 4);
   context.lineTo(50, 14);
   context.lineTo(50, 36);
-  context.bezierCurveTo(50, 48, 38, 57, 29, 62);
-  context.bezierCurveTo(20, 57, 8, 48, 8, 36);
+  context.bezierCurveTo(50, 48, 38, 59, 29, 65);
+  context.bezierCurveTo(20, 59, 8, 48, 8, 36);
   context.lineTo(8, 14);
   context.closePath();
   context.fillStyle = fill;
@@ -91,7 +91,22 @@ function ensureFuelStopImages(mapLibreMap) {
   });
 }
 
+function escapePopupHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
 function createMarkerElement(className, label, title = "") {
+  const anchor = document.createElement("div");
+  anchor.className = `map-marker-anchor${title ? " map-marker-anchor-labeled" : ""}`;
+  anchor.setAttribute("aria-label", title || label);
+  anchor.title = title || label;
+
   const el = document.createElement("div");
   el.className = `tt-marker ${className}${title ? " tt-marker-labeled" : ""}`;
 
@@ -107,7 +122,8 @@ function createMarkerElement(className, label, title = "") {
     el.append(text);
   }
 
-  return el;
+  anchor.append(el);
+  return anchor;
 }
 function formatMoney(value) {
   return value !== null && value !== undefined ? `$${Number(value).toFixed(3)}` : "N/A";
@@ -123,7 +139,7 @@ function buildStopPopup(stop, priceTarget) {
       : null;
 
   return [
-    `<strong>${title}</strong>`,
+    `<strong>${escapePopupHtml(title)}</strong>`,
     subtitle,
     stop.address,
     stop.phone ? `Phone: ${stop.phone}` : null,
@@ -140,6 +156,7 @@ function buildStopPopup(stop, priceTarget) {
     `Coords: ${Number(stop.lat).toFixed(5)}, ${Number(stop.lon).toFixed(5)}`
   ]
     .filter(Boolean)
+    .map((line, index) => (index === 0 ? line : escapePopupHtml(line)))
     .join("<br/>");
 }
 
@@ -528,8 +545,16 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
           bounds.extend([marker.lon, marker.lat]);
         }
       });
+      const mapWidth = mapLibreMap.getContainer().clientWidth;
+      const horizontalPadding = mapWidth < 640 ? 68 : isFullscreen ? 156 : 132;
+      const verticalPadding = mapWidth < 640 ? 56 : isFullscreen ? 86 : 70;
       mapLibreMap.fitBounds(bounds, {
-        padding: isFullscreen ? 78 : 58,
+        padding: {
+          top: verticalPadding,
+          right: horizontalPadding,
+          bottom: verticalPadding,
+          left: horizontalPadding
+        },
         duration: 450,
         bearing: MAP_BEARING,
         pitch: isFullscreen ? 28 : MAP_PITCH,
@@ -551,7 +576,7 @@ export default function RouteMap({ plan, isFullscreen = false, active = true, pr
         }
         const extraMarker = new maplibregl.Marker({
           anchor: "bottom",
-          element: createMarkerElement(marker.className || "marker-mid", marker.label || "•", marker.title || "")
+          element: createMarkerElement(marker.className || "marker-mid", marker.label || "PT", marker.title || "")
         })
           .setLngLat([marker.lon, marker.lat])
           .addTo(mapLibreMap);

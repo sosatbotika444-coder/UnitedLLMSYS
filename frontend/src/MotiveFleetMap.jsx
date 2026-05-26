@@ -10,6 +10,16 @@ const STREET_FOCUS_PITCH = 52;
 const FLEET_MAP_PITCH = 20;
 const FLEET_MAP_BEARING = -6;
 
+function escapePopupHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
 function markerTone(vehicle) {
   if (vehicle.is_stale) return "stale";
   if (vehicle.is_moving) return "moving";
@@ -38,7 +48,7 @@ function markerTitle(vehicle) {
 function markerPopup(vehicle) {
   const location = vehicle.location || {};
   return [
-    `<strong>${vehicle.number || "Vehicle"}</strong>`,
+    vehicle.number || "Vehicle",
     vehicle.source_connection_name ? `Source: ${vehicle.source_connection_name}` : null,
     driverName(vehicle) ? `Driver: ${driverName(vehicle)}` : null,
     vehicle.make || vehicle.model ? `${vehicle.make || ""} ${vehicle.model || ""}`.trim() : null,
@@ -50,6 +60,7 @@ function markerPopup(vehicle) {
     location.located_at ? `Updated: ${location.located_at}` : null,
   ]
     .filter(Boolean)
+    .map((line, index) => (index === 0 ? `<strong>${escapePopupHtml(line)}</strong>` : escapePopupHtml(line)))
     .join("<br/>");
 }
 
@@ -64,10 +75,15 @@ function hasCoordinates(vehicle) {
 }
 
 function createMarkerElement(vehicle, isSelected) {
+  const anchor = document.createElement("div");
+  anchor.className = "map-marker-anchor map-marker-anchor-labeled";
+  anchor.setAttribute("role", "button");
+  anchor.tabIndex = 0;
+  anchor.setAttribute("aria-label", markerTitle(vehicle));
+  anchor.title = markerTitle(vehicle);
+
   const marker = document.createElement("div");
   marker.className = `motive-map-marker motive-map-driver-marker motive-map-marker-${markerTone(vehicle)} ${isSelected ? "selected" : ""}`.trim();
-  marker.setAttribute("role", "button");
-  marker.tabIndex = 0;
 
   const badge = document.createElement("span");
   badge.className = "motive-map-marker-badge";
@@ -78,14 +94,14 @@ function createMarkerElement(vehicle, isSelected) {
   label.textContent = markerTitle(vehicle);
 
   marker.append(badge, label);
-  marker.addEventListener("keydown", (event) => {
+  anchor.append(marker);
+  anchor.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      marker.click();
+      anchor.click();
     }
   });
-  marker.setAttribute("aria-label", markerTitle(vehicle));
-  return marker;
+  return anchor;
 }
 
 export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, active = true, viewMode = "fleet" }) {
@@ -219,7 +235,21 @@ export default function MotiveFleetMap({ vehicles, selectedVehicleId, onSelect, 
     }
 
     if (!bounds.isEmpty()) {
-      mapLibreMap.fitBounds(bounds, { padding: 62, maxZoom: 10.5, duration: 600, bearing: FLEET_MAP_BEARING, pitch: FLEET_MAP_PITCH });
+      const mapWidth = mapLibreMap.getContainer().clientWidth;
+      const horizontalPadding = mapWidth < 640 ? 70 : 126;
+      const verticalPadding = mapWidth < 640 ? 58 : 72;
+      mapLibreMap.fitBounds(bounds, {
+        padding: {
+          top: verticalPadding,
+          right: horizontalPadding,
+          bottom: verticalPadding,
+          left: horizontalPadding
+        },
+        maxZoom: 10.5,
+        duration: 600,
+        bearing: FLEET_MAP_BEARING,
+        pitch: FLEET_MAP_PITCH
+      });
     }
   }, [onSelect, plottedVehicles, selectedVehicleId, viewMode]);
 

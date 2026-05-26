@@ -7,6 +7,16 @@ const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEs
 const SERVICE_MAP_PITCH = 22;
 const SERVICE_MAP_BEARING = -6;
 
+function escapePopupHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
 function hasCoordinates(item) {
   return item && item.lat !== null && item.lat !== undefined && item.lon !== null && item.lon !== undefined;
 }
@@ -21,7 +31,7 @@ function markerLabel(item) {
 
 function servicePopup(item) {
   return [
-    `<strong>${item.name || "Service"}</strong>`,
+    item.name || "Service",
     item.brand ? `${item.brand}${item.location_type ? ` - ${item.location_type}` : ""}` : item.location_type || null,
     item.address || null,
     item.phone ? `Phone: ${item.phone}` : null,
@@ -32,17 +42,19 @@ function servicePopup(item) {
     item.official_match ? "Official station data" : "Live POI result",
   ]
     .filter(Boolean)
+    .map((line, index) => (index === 0 ? `<strong>${escapePopupHtml(line)}</strong>` : escapePopupHtml(line)))
     .join("<br/>");
 }
 
 function vehiclePopup(vehicle) {
   return [
-    `<strong>${vehicle?.label || vehicle?.number || "Truck"}</strong>`,
+    vehicle?.label || vehicle?.number || "Truck",
     vehicle?.driver_name ? `Driver: ${vehicle.driver_name}` : null,
     vehicle?.address || null,
     vehicle?.is_stale ? "Telemetry stale" : "Live coordinates",
   ]
     .filter(Boolean)
+    .map((line, index) => (index === 0 ? `<strong>${escapePopupHtml(line)}</strong>` : escapePopupHtml(line)))
     .join("<br/>");
 }
 
@@ -51,10 +63,15 @@ function vehicleMarkerTitle(vehicle) {
 }
 
 function createMarkerElement(type, label, selected = false, title = "") {
+  const anchor = document.createElement("div");
+  anchor.className = `map-marker-anchor${title ? " map-marker-anchor-labeled" : ""}`;
+  anchor.setAttribute("role", "button");
+  anchor.tabIndex = 0;
+  anchor.setAttribute("aria-label", title || label);
+  anchor.title = title || label;
+
   const marker = document.createElement("div");
   marker.className = `safety-service-map-marker safety-service-map-marker-${type}${selected ? " selected" : ""}${title ? " labeled" : ""}`;
-  marker.setAttribute("role", "button");
-  marker.tabIndex = 0;
 
   const badge = document.createElement("span");
   badge.className = "safety-service-map-marker-badge";
@@ -68,14 +85,14 @@ function createMarkerElement(type, label, selected = false, title = "") {
     marker.append(text);
   }
 
-  marker.addEventListener("keydown", (event) => {
+  anchor.append(marker);
+  anchor.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      marker.click();
+      anchor.click();
     }
   });
-  marker.setAttribute("aria-label", title || label);
-  return marker;
+  return anchor;
 }
 export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedItemId, onSelect, active = true }) {
   const containerRef = useRef(null);
@@ -191,7 +208,21 @@ export default function SafetyServiceMapCanvas({ centerVehicle, items, selectedI
     }
 
     if (!bounds.isEmpty()) {
-      mapLibreMap.fitBounds(bounds, { padding: 64, maxZoom: 12, duration: 560, bearing: SERVICE_MAP_BEARING, pitch: SERVICE_MAP_PITCH });
+      const mapWidth = mapLibreMap.getContainer().clientWidth;
+      const horizontalPadding = mapWidth < 640 ? 70 : 126;
+      const verticalPadding = mapWidth < 640 ? 58 : 72;
+      mapLibreMap.fitBounds(bounds, {
+        padding: {
+          top: verticalPadding,
+          right: horizontalPadding,
+          bottom: verticalPadding,
+          left: horizontalPadding
+        },
+        maxZoom: 12,
+        duration: 560,
+        bearing: SERVICE_MAP_BEARING,
+        pitch: SERVICE_MAP_PITCH
+      });
     }
   }, [centerVehicle, onSelect, plottedItems, selectedItemId]);
 

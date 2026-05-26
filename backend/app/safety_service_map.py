@@ -247,6 +247,7 @@ def _cached_tomtom_poi_search(query: str, lat: float, lon: float, radius_m: int,
         return [], None
     cache_key = _emergency_cache_key(query, lat, lon, radius_m, limit)
     now = time.time()
+    inthis_time = EMERGENCY_CACH(inc - n - erl)
     with EMERGENCY_CACHE_LOCK:
         cached = EMERGENCY_CACHE.get(cache_key)
         if cached and now - float(cached.get("stored_at") or 0.0) < EMERGENCY_CACHE_TTL_SECONDS:
