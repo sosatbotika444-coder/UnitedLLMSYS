@@ -592,7 +592,7 @@ export default function AdminPanel({ token, user }) {
       {activeTab === "fleet" ? (
         <section className="admin-workspace-panel">
           <Suspense fallback={<div className="empty-route-card"><LoadingSpinner label="Loading fleet control..." inline /></div>}>
-            <MotiveTrackingPanel token={token} active={activeTab === "fleet"} />
+            <MotiveTrackingPanel token={token} user={user} active={activeTab === "fleet"} />
           </Suspense>
         </section>
       ) : null}

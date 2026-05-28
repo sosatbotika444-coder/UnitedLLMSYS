@@ -80,6 +80,7 @@ def ensure_runtime_schema() -> None:
         add_user_column("username", "VARCHAR(80)")
         add_user_column("is_banned", "BOOLEAN NOT NULL DEFAULT FALSE" if settings.database_backend == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0")
         add_user_column("ban_reason", "TEXT NOT NULL DEFAULT ''")
+        add_user_column("motive_connection_name", "VARCHAR(160) NOT NULL DEFAULT 'UnitedLane'")
         add_user_column("created_at", "TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP" if settings.database_backend == "postgresql" else "DATETIME")
         add_user_column("updated_at", "TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP" if settings.database_backend == "postgresql" else "DATETIME")
         add_user_column("last_login_at", "TIMESTAMP WITH TIME ZONE" if settings.database_backend == "postgresql" else "DATETIME")

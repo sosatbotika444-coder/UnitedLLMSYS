@@ -570,7 +570,7 @@ function VehicleListCard({ vehicle, selected, onSelect }) {
   );
 }
 
-export default function MotiveTrackingPanel({ token, active = true }) {
+export default function MotiveTrackingPanel({ token, user = null, active = true }) {
   const [integration, setIntegration] = useState(null);
   const [connections, setConnections] = useState([]);
   const [connectionName, setConnectionName] = useState("");
@@ -594,6 +594,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
   const [mapView, setMapView] = useState("fleet");
   const [selectedIncidentId, setSelectedIncidentId] = useState("");
   const [selectedIncidentVideoKey, setSelectedIncidentVideoKey] = useState("");
+  const canManageConnections = user?.department === "admin";
 
   useEffect(() => {
     setIntegration(null);
@@ -1108,7 +1109,7 @@ export default function MotiveTrackingPanel({ token, active = true }) {
         <div className="motive-connection-head">
           <div>
             <h3>Motive API keys</h3>
-            <span>{connections.length ? `${connections.length} saved key${connections.length === 1 ? "" : "s"}` : "No saved keys yet"}</span>
+            <span>{connections.length ? `${connections.length} saved key${connections.length === 1 ? "" : "s"}` : `Using ${integration?.selected_connection_name || "UnitedLane"}`}</span>
           </div>
           {connections.length ? (
             <button type="button" className="secondary-button" onClick={() => loadSnapshot(true)} disabled={refreshing}>
@@ -1117,31 +1118,33 @@ export default function MotiveTrackingPanel({ token, active = true }) {
           ) : null}
         </div>
 
-        <form className="motive-connection-form" onSubmit={createConnection}>
-          <label>
-            Name
-            <input
-              type="text"
-              value={connectionName}
-              onChange={(event) => setConnectionName(event.target.value)}
-              placeholder="Company, branch, or fleet group"
-              maxLength={160}
-            />
-          </label>
-          <label>
-            Motive API key
-            <input
-              type="password"
-              value={connectionApiKey}
-              onChange={(event) => setConnectionApiKey(event.target.value)}
-              placeholder="Paste x-api-key"
-              autoComplete="off"
-            />
-          </label>
-          <button type="submit" className="primary-button" disabled={connectionSaving || !connectionName.trim() || !connectionApiKey.trim()}>
-            <LoadingButtonLabel loading={connectionSaving} loadingLabel="Adding...">Add and sync</LoadingButtonLabel>
-          </button>
-        </form>
+        {canManageConnections ? (
+          <form className="motive-connection-form" onSubmit={createConnection}>
+            <label>
+              Name
+              <input
+                type="text"
+                value={connectionName}
+                onChange={(event) => setConnectionName(event.target.value)}
+                placeholder="Company, branch, or fleet group"
+                maxLength={160}
+              />
+            </label>
+            <label>
+              Motive API key
+              <input
+                type="password"
+                value={connectionApiKey}
+                onChange={(event) => setConnectionApiKey(event.target.value)}
+                placeholder="Paste x-api-key"
+                autoComplete="off"
+              />
+            </label>
+            <button type="submit" className="primary-button" disabled={connectionSaving || !connectionName.trim() || !connectionApiKey.trim()}>
+              <LoadingButtonLabel loading={connectionSaving} loadingLabel="Adding...">Add and sync</LoadingButtonLabel>
+            </button>
+          </form>
+        ) : null}
 
         {connectionMessage ? <div className="notice success inline-notice">{connectionMessage}</div> : null}
 
@@ -1158,12 +1161,16 @@ export default function MotiveTrackingPanel({ token, active = true }) {
                   <button type="button" className="secondary-button" onClick={() => refreshConnection(connection.id)} disabled={connectionRefreshingId === connection.id || !connection.isActive}>
                     <LoadingButtonLabel loading={connectionRefreshingId === connection.id} loadingLabel="Syncing...">Sync</LoadingButtonLabel>
                   </button>
-                  <button type="button" className="secondary-button" onClick={() => patchConnection(connection.id, { isActive: !connection.isActive })}>
-                    {connection.isActive ? "Disable" : "Enable"}
-                  </button>
-                  <button type="button" className="delete-button" onClick={() => deleteConnection(connection.id)}>
-                    Delete
-                  </button>
+                  {canManageConnections ? (
+                    <>
+                      <button type="button" className="secondary-button" onClick={() => patchConnection(connection.id, { isActive: !connection.isActive })}>
+                        {connection.isActive ? "Disable" : "Enable"}
+                      </button>
+                      <button type="button" className="delete-button" onClick={() => deleteConnection(connection.id)}>
+                        Delete
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </article>
             ))}

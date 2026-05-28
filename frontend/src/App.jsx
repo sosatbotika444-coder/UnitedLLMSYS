@@ -33,8 +33,9 @@ const THEME_KEY = "dpsearchfuels_theme";
 const APPEARANCE_KEY = "unitedlane_appearance_v1";
 const PRODUCT_KEY = "unitedlane_active_product";
 const SIDEBAR_STATE_KEY = "unitedlane_workspace_sidebar_state_v1";
-const AUTH_REQUEST_TIMEOUT_MS = 15000;
+const AUTH_REQUEST_TIMEOUT_MS = 180000;
 const ROUTE_REQUEST_TIMEOUT_MS = 120000;
+const DEFAULT_MOTIVE_CONNECTION_NAME = "UnitedLane";
 const DEFAULT_TANK_CAPACITY_GALLONS = 200;
 const DEFAULT_TRUCK_MPG = 6.0;
 const DEFAULT_CURRENT_FUEL_GALLONS = 100;
@@ -195,7 +196,7 @@ const workspaceCopy = {
   }
 };
 const emptyRegister = { full_name: "", email: "", password: "" };
-const emptyLogin = { email: "", password: "" };
+const emptyLogin = { email: "", password: "", motiveConnectionName: DEFAULT_MOTIVE_CONNECTION_NAME };
 const emptyRow = {
   vehicle_id: null,
   driver: "",
@@ -1173,7 +1174,7 @@ function MobileQuickActions({ onSelect, onCreateLoad }) {
 }
 function MobileFuelWorkspaceContent({ activeWorkspace, token, user, rows, filteredRows, metrics, search, setSearch, statusFilter, setStatusFilter, loadStatusTabs, gridLoading, savingId, smartFillId, fleetLoading, fleetVehicles, createRow, deleteRow, saveRow, updateLocalRow, syncRowVehicle, smartFillRow, theme, setTheme, appearance, updateAppearance, onSelectWorkspace }) {
   if (activeWorkspace === "tracking") {
-    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} active /></Suspense></section>;
+    return <section className="mobile-workspace-section"><Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}><MotiveTrackingPanel token={token} user={user} active /></Suspense></section>;
   }
 
   if (activeWorkspace === "statistics") {
@@ -1303,6 +1304,9 @@ export default function App() {
   const [fleetLoading, setFleetLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [motiveKeyOptions, setMotiveKeyOptions] = useState([]);
+  const [motiveKeyOptionsLoading, setMotiveKeyOptionsLoading] = useState(true);
+  const [motiveKeyOptionsError, setMotiveKeyOptionsError] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [smartFillId, setSmartFillId] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("command");
@@ -1313,6 +1317,63 @@ export default function App() {
   function updateAppearance(patch) {
     setAppearance((current) => ({ ...current, ...patch }));
   }
+
+  useEffect(() => {
+    if (user || mode !== "login" || selectedDepartment === "driver") {
+      setMotiveKeyOptionsLoading(false);
+      setMotiveKeyOptionsError("");
+      return undefined;
+    }
+
+    let ignore = false;
+
+    async function loadMotiveKeyOptions() {
+      setMotiveKeyOptionsLoading(true);
+      setMotiveKeyOptionsError("");
+      try {
+        const data = await apiRequest("/auth/motive-key-options");
+        const seen = new Set();
+        const options = (Array.isArray(data) ? data : [])
+          .map((item) => ({ name: String(item?.name || "").trim() }))
+          .filter((item) => {
+            if (!item.name) return false;
+            const key = item.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
+        if (!ignore) {
+          const nextOptions = options.length ? options : [{ name: DEFAULT_MOTIVE_CONNECTION_NAME }];
+          setMotiveKeyOptions(nextOptions);
+          setLoginForm((current) => {
+            const currentName = String(current.motiveConnectionName || "").trim();
+            const hasCurrent = nextOptions.some((option) => option.name.toLowerCase() === currentName.toLowerCase());
+            if (currentName && hasCurrent) {
+              return current;
+            }
+            const fallback = nextOptions.find((option) => option.name === DEFAULT_MOTIVE_CONNECTION_NAME) || nextOptions[0];
+            return { ...current, motiveConnectionName: fallback?.name || DEFAULT_MOTIVE_CONNECTION_NAME };
+          });
+        }
+      } catch (optionsError) {
+        if (!ignore) {
+          setMotiveKeyOptions([]);
+          setMotiveKeyOptionsError(optionsError.message || "Could not load Motive API names.");
+        }
+      } finally {
+        if (!ignore) {
+          setMotiveKeyOptionsLoading(false);
+        }
+      }
+    }
+
+    loadMotiveKeyOptions();
+
+    return () => {
+      ignore = true;
+    };
+  }, [mode, selectedDepartment, user]);
 
   useEffect(() => {
     if (!token) {
@@ -1740,7 +1801,11 @@ export default function App() {
         body: JSON.stringify({ ...payload, department: selectedDepartment })
       });
 
-      handleAuthenticated(data, path === "/auth/register" ? "Account created." : "Signed in.");
+      const connectionName = data?.user?.motive_connection_name || payload?.motiveConnectionName || DEFAULT_MOTIVE_CONNECTION_NAME;
+      handleAuthenticated(
+        data,
+        path === "/auth/register" ? "Account created." : `Signed in with ${connectionName}. Motive data is ready.`
+      );
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -2032,6 +2097,8 @@ export default function App() {
 
   if (!user) {
     const isRestoringSession = Boolean(token);
+    const motiveKeySelectionReady = mode !== "login" || selectedDepartment === "driver" || (!motiveKeyOptionsLoading && motiveKeyOptions.length > 0);
+    const selectedMotiveConnectionValue = motiveKeyOptions.length ? loginForm.motiveConnectionName : "";
     const authTitle = mode === "login" ? "Secure sign in" : "Create driver access";
     const authLead = selectedDepartment === "driver"
       ? "Match your Motive truck first, then continue into the mobile-first driver workspace."
@@ -2090,6 +2157,7 @@ export default function App() {
                 className="auth-form"
                 onSubmit={(event) => {
                   event.preventDefault();
+                  if (!motiveKeySelectionReady) return;
                   submitAuth("/auth/login", loginForm);
                 }}
               >
@@ -2113,8 +2181,24 @@ export default function App() {
                     required
                   />
                 </label>
-                <button type="submit" className="primary-button auth-submit" disabled={loading}>
-                  <LoadingButtonLabel loading={loading} loadingLabel="Signing in...">Continue</LoadingButtonLabel>
+                <label>
+                  Motive API
+                  <select
+                    value={selectedMotiveConnectionValue}
+                    onChange={(event) => setLoginForm({ ...loginForm, motiveConnectionName: event.target.value })}
+                    disabled={motiveKeyOptionsLoading || !motiveKeyOptions.length}
+                    required
+                  >
+                    {motiveKeyOptionsLoading ? <option value="">Loading Motive API names...</option> : null}
+                    {!motiveKeyOptionsLoading && !motiveKeyOptions.length ? <option value="">No Motive API names available</option> : null}
+                    {motiveKeyOptions.map((option) => (
+                      <option key={option.name} value={option.name}>{option.name}</option>
+                    ))}
+                  </select>
+                  {motiveKeyOptionsError ? <small className="auth-field-hint error">{motiveKeyOptionsError}</small> : null}
+                </label>
+                <button type="submit" className="primary-button auth-submit" disabled={loading || !motiveKeySelectionReady}>
+                  <LoadingButtonLabel loading={loading} loadingLabel="Signing in and syncing Motive...">Continue</LoadingButtonLabel>
                 </button>
               </form>
             ) : (
@@ -2681,7 +2765,7 @@ export default function App() {
 
           <section className="workspace-content-stack workspace-tab-panel" hidden={activeWorkspace !== "tracking"}>
             <Suspense fallback={<ModuleLoader label="Loading Motive fleet tracking..." />}>
-              <MotiveTrackingPanel token={token} active={activeWorkspace === "tracking"} />
+              <MotiveTrackingPanel token={token} user={user} active={activeWorkspace === "tracking"} />
             </Suspense>
           </section>
 

@@ -18,6 +18,11 @@ class UserLogin(BaseModel):
     email: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     department: DepartmentName
+    motiveConnectionName: str = Field(default="UnitedLane", max_length=160)
+
+
+class MotiveKeyOption(BaseModel):
+    name: str
 
 
 class UserResponse(BaseModel):
@@ -28,6 +33,7 @@ class UserResponse(BaseModel):
     department: DepartmentName
     is_banned: bool = False
     ban_reason: str = ""
+    motive_connection_name: str = "UnitedLane"
     created_at: datetime | None = None
     updated_at: datetime | None = None
     last_login_at: datetime | None = None
@@ -727,6 +733,7 @@ class MotiveIntegrationStatus(BaseModel):
     connection_count: int = 0
     active_connection_count: int = 0
     managed_connections: bool = False
+    selected_connection_name: str = "UnitedLane"
 
 
 class MotiveApiConnectionCreate(BaseModel):

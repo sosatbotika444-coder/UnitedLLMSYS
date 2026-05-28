@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.driver_identity import parse_driver_vehicle_id
 from app.models import SafetyDocument, SafetyInvestigationCase, SafetyNote, SafetyShiftBrief, User
-from app.motive import MotiveClient
+from app.routes.motive import _fleet_snapshot_for_user
 from app.safety_fleet import build_safety_fleet_snapshot
 from app.safety_service_map import build_service_map_snapshot
 from app.schemas import (
@@ -29,7 +29,6 @@ from app.schemas import (
 
 router = APIRouter(prefix="/safety", tags=["safety"])
 settings = get_settings()
-motive_client = MotiveClient(settings)
 
 QUEUE_LABELS = {
     "critical": "Immediate Action",
@@ -413,8 +412,9 @@ def export_safety_shift_brief(brief_id: int, current_user: User = Depends(requir
 def export_safety_risky_people(
     refresh: bool = Query(default=False, description="Force a fresh Motive fetch before exporting risky people."),
     current_user: User = Depends(require_user_department("safety")),
+    db: Session = Depends(get_db),
 ):
-    snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=not refresh, wait_for_refresh=refresh)
     fleet_data = build_safety_fleet_snapshot(snapshot)
     return _excel_response(_risk_export_rows(fleet_data, "Safety"), "safety_risky_people.xlsx", "Risky People")
 
@@ -423,8 +423,9 @@ def export_safety_risky_people(
 def get_safety_fleet(
     refresh: bool = Query(default=False, description="Force a fresh Motive fetch instead of the cached safety fleet snapshot."),
     current_user: User = Depends(require_user_department("safety")),
+    db: Session = Depends(get_db),
 ):
-    snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=True, wait_for_refresh=refresh)
     return build_safety_fleet_snapshot(snapshot)
 
 
@@ -437,6 +438,7 @@ def get_safety_services(
     scenario_id: str = Query(default="mechanical"),
     refresh: bool = Query(default=False, description="Force a fresh Motive fetch before building the service map."),
     current_user: User = Depends(require_user_department("safety", "driver")),
+    db: Session = Depends(get_db),
 ):
     if current_user.department == "driver":
         driver_vehicle_id = parse_driver_vehicle_id(current_user.email)
@@ -444,7 +446,7 @@ def get_safety_services(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Driver profile is not linked to a Motive vehicle")
         vehicle_id = driver_vehicle_id
 
-    snapshot = motive_client.fetch_snapshot(force_refresh=refresh)
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=True, wait_for_refresh=refresh)
     return build_service_map_snapshot(
         snapshot,
         settings,

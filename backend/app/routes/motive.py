@@ -5,7 +5,7 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import require_user_department
@@ -24,6 +24,8 @@ settings = get_settings()
 client = MotiveClient(settings)
 CONNECTION_REFRESH_LOCK = threading.Lock()
 CONNECTION_REFRESHING_IDS: set[int] = set()
+DEFAULT_MOTIVE_CONNECTION_NAME = "UnitedLane"
+LOGIN_SYNC_DEPARTMENTS = {"fuel", "statistics", "safety"}
 
 
 def _clean_text(value: object, fallback: str = "") -> str:
@@ -31,6 +33,22 @@ def _clean_text(value: object, fallback: str = "") -> str:
         return fallback
     text = str(value).strip()
     return text or fallback
+
+
+def _normalize_connection_name(value: object, fallback: str = DEFAULT_MOTIVE_CONNECTION_NAME) -> str:
+    return _clean_text(value, fallback)[:160] or fallback
+
+
+def _connection_name_key(value: object) -> str:
+    return _normalize_connection_name(value).casefold()
+
+
+def _selected_connection_name(user: User | None) -> str:
+    return _normalize_connection_name(getattr(user, "motive_connection_name", "") if user else "")
+
+
+def _uses_settings_connection(connection_name: str) -> bool:
+    return _connection_name_key(connection_name) == DEFAULT_MOTIVE_CONNECTION_NAME.casefold()
 
 
 def _normal_base_url(value: object) -> str:
@@ -107,24 +125,42 @@ def _connection_response(row: MotiveApiConnection) -> dict:
     }
 
 
-def _connections_for_user(db: Session, user: User, *, active_only: bool = False) -> list[MotiveApiConnection]:
-    statement = select(MotiveApiConnection).where(MotiveApiConnection.user_id == user.id)
+def _connections_for_user(
+    db: Session,
+    user: User,
+    *,
+    active_only: bool = False,
+    connection_name: str | None = None,
+) -> list[MotiveApiConnection]:
+    statement = select(MotiveApiConnection).join(User, User.id == MotiveApiConnection.user_id)
+    statement = statement.where(User.department == "admin")
+    if connection_name:
+        statement = statement.where(func.lower(MotiveApiConnection.name) == _connection_name_key(connection_name))
     if active_only:
         statement = statement.where(MotiveApiConnection.is_active.is_(True))
     return list(db.scalars(statement.order_by(MotiveApiConnection.created_at.asc(), MotiveApiConnection.id.asc())).all())
 
 
-def _detached_connections_for_user(db: Session, user: User, *, active_only: bool = False) -> list[SimpleNamespace]:
-    connections = [_detach_connection(row) for row in _connections_for_user(db, user, active_only=active_only)]
+def _detached_connections_for_user(
+    db: Session,
+    user: User,
+    *,
+    active_only: bool = False,
+    connection_name: str | None = None,
+) -> list[SimpleNamespace]:
+    connections = [
+        _detach_connection(row)
+        for row in _connections_for_user(db, user, active_only=active_only, connection_name=connection_name)
+    ]
     _release_db_connection(db)
     return connections
 
 
 def _connection_for_user(db: Session, user: User, connection_id: int) -> MotiveApiConnection:
     row = db.scalar(
-        select(MotiveApiConnection).where(
+        select(MotiveApiConnection).join(User, User.id == MotiveApiConnection.user_id).where(
             MotiveApiConnection.id == connection_id,
-            MotiveApiConnection.user_id == user.id,
+            User.department == "admin",
         )
     )
     if not row:
@@ -201,6 +237,16 @@ def _tag_snapshot(row: MotiveApiConnection | SimpleNamespace, snapshot: dict, *,
 
 def _snapshot_is_ready(snapshot: object) -> bool:
     return isinstance(snapshot, dict) and isinstance(snapshot.get("vehicles"), list)
+
+
+def _connection_snapshot_is_stale(row: MotiveApiConnection | SimpleNamespace) -> bool:
+    synced_at = getattr(row, "last_synced_at", None)
+    if not synced_at:
+        return True
+    if synced_at.tzinfo is None:
+        synced_at = synced_at.replace(tzinfo=timezone.utc)
+    ttl_seconds = max(30, int(getattr(settings, "motive_snapshot_ttl_seconds", 300) or 300))
+    return (datetime.now(timezone.utc) - synced_at.astimezone(timezone.utc)).total_seconds() >= ttl_seconds
 
 
 def _exception_message(prefix: str, exc: Exception) -> str:
@@ -317,6 +363,8 @@ def _refresh_connection_snapshot(
     connection = _detach_connection(row)
     cached_snapshot = connection.last_snapshot_payload if _snapshot_is_ready(connection.last_snapshot_payload) else None
     if cached_snapshot and not refresh:
+        if connection.is_active and _connection_snapshot_is_stale(connection):
+            _start_connection_refresh(connection)
         status_label = "refreshing" if _connection_is_refreshing(connection.id) else "cached"
         return _tag_snapshot(connection, cached_snapshot, cache_status=status_label)
 
@@ -470,14 +518,20 @@ def _fleet_snapshot_for_user(
     allow_stale: bool = True,
     wait_for_refresh: bool = False,
 ) -> dict:
-    all_connections = _detached_connections_for_user(db, user, active_only=False)
+    selected_name = _selected_connection_name(user)
+    selected_filter = None if user.department == "admin" else selected_name
+    all_connections = _detached_connections_for_user(db, user, active_only=False, connection_name=selected_filter)
     active_connections = [row for row in all_connections if row.is_active]
 
     if not all_connections:
-        return client.fetch_snapshot(force_refresh=refresh, allow_stale=allow_stale)
+        if _uses_settings_connection(selected_name):
+            return client.fetch_snapshot(force_refresh=refresh, allow_stale=allow_stale)
+        return _empty_multi_snapshot([], [f"No Motive API key named {selected_name!r} is active. Ask Admin to create it, or sign in with UnitedLane."])
 
     if not active_connections:
-        return _empty_multi_snapshot(all_connections, ["No active Motive API connections. Enable at least one key to sync fleet data."])
+        if _uses_settings_connection(selected_name) and client.is_configured:
+            return client.fetch_snapshot(force_refresh=refresh, allow_stale=allow_stale)
+        return _empty_multi_snapshot(all_connections, [f"No active Motive API key named {selected_name!r}. Enable it in Admin before syncing fleet data."])
 
     snapshots: list[dict] = []
     warnings: list[str] = []
@@ -502,20 +556,52 @@ def _fleet_snapshot_for_user(
     return _combine_connection_snapshots(snapshots, active_connections, warnings)
 
 
+def sync_motive_login_selection(db: Session, user: User, connection_name: str) -> dict:
+    selected_name = _normalize_connection_name(connection_name)
+    if user.department not in LOGIN_SYNC_DEPARTMENTS:
+        return {"connectionName": selected_name, "status": "saved", "vehicleCount": 0}
+
+    active_connections = _detached_connections_for_user(db, user, active_only=True, connection_name=selected_name)
+    if active_connections:
+        snapshots = [
+            _refresh_connection_snapshot(db, row, refresh=True, allow_stale=True, wait_for_refresh=True)
+            for row in active_connections
+        ]
+        vehicle_count = sum(len(snapshot.get("vehicles") or []) for snapshot in snapshots)
+        return {"connectionName": selected_name, "status": "synced", "vehicleCount": vehicle_count}
+
+    if _uses_settings_connection(selected_name):
+        snapshot = client.fetch_snapshot(force_refresh=True, allow_stale=False, light_mode=True)
+        return {
+            "connectionName": selected_name,
+            "status": "synced",
+            "vehicleCount": len(snapshot.get("vehicles") or []),
+        }
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"No active Motive API key named {selected_name!r}. Ask Admin to create it, then sign in with that key name.",
+    )
+
+
 @router.get("/status", response_model=MotiveIntegrationStatus)
 def motive_status(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    connections = _detached_connections_for_user(db, current_user, active_only=False)
+    selected_name = _selected_connection_name(current_user)
+    selected_filter = None if current_user.department == "admin" else selected_name
+    connections = _detached_connections_for_user(db, current_user, active_only=False, connection_name=selected_filter)
     active_count = sum(1 for row in connections if row.is_active)
     status_payload = client.integration_status()
+    settings_selected = _uses_settings_connection(selected_name) and bool(status_payload.get("configured"))
     status_payload.update({
-        "configured": bool(active_count) or bool(status_payload.get("configured")),
+        "configured": bool(active_count) or settings_selected,
         "auth_mode": "multi-api-key" if active_count else status_payload.get("auth_mode", "none"),
         "connection_count": len(connections),
         "active_connection_count": active_count,
         "managed_connections": bool(connections),
+        "selected_connection_name": selected_name,
     })
     return status_payload
 
@@ -525,11 +611,13 @@ def motive_connections(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
-    connections = _detached_connections_for_user(db, current_user, active_only=False)
+    selected_name = None if current_user.department == "admin" else _selected_connection_name(current_user)
+    connections = _detached_connections_for_user(db, current_user, active_only=False, connection_name=selected_name)
     return {
         "connections": [_connection_response(row) for row in connections],
         "total": len(connections),
         "active": sum(1 for row in connections if row.is_active),
+        "selectedConnectionName": _selected_connection_name(current_user),
     }
 
 
@@ -539,6 +627,8 @@ def create_motive_connection(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
+    if current_user.department != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Motive API keys are created by Admin. Sign in with the key name instead.")
     row = MotiveApiConnection(
         user_id=current_user.id,
         name=_clean_text(payload.name, "Motive account")[:160],
@@ -552,6 +642,7 @@ def create_motive_connection(
     db.add(row)
     db.commit()
     db.refresh(row)
+    _start_connection_refresh(row)
     return _connection_response(row)
 
 
@@ -571,6 +662,8 @@ def update_motive_connection(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
+    if current_user.department != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Motive API keys are managed by Admin.")
     row = _connection_for_user(db, current_user, connection_id)
     fields = payload.model_fields_set
     if "name" in fields and payload.name is not None:
@@ -602,6 +695,8 @@ def delete_motive_connection(
     current_user: User = Depends(require_user_department("fuel", "statistics")),
     db: Session = Depends(get_db),
 ):
+    if current_user.department != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Motive API keys are managed by Admin.")
     row = _connection_for_user(db, current_user, connection_id)
     db.delete(row)
     db.commit()
@@ -651,7 +746,22 @@ def motive_vehicle_detail(
         detail = MotiveClient(_connection_settings(connection)).build_vehicle_detail_from_snapshot(snapshot, vehicle_id)
         detail["vehicle"] = _tag_snapshot(connection, {"vehicles": [detail.get("vehicle") or {}]}, cache_status="detail")["vehicles"][0]
     else:
-        detail = client.fetch_vehicle_detail(vehicle_id=vehicle_id, force_refresh=refresh)
+        selected_name = _selected_connection_name(current_user)
+        selected_filter = None if current_user.department == "admin" else selected_name
+        active_connections = _detached_connections_for_user(db, current_user, active_only=True, connection_name=selected_filter)
+        detail = None
+        for connection in active_connections:
+            snapshot = _refresh_connection_snapshot(db, connection, refresh=refresh, allow_stale=True, wait_for_refresh=refresh)
+            vehicles = snapshot.get("vehicles") or []
+            if not any(str(vehicle.get("id")) == str(vehicle_id) or str(vehicle.get("original_vehicle_id")) == str(vehicle_id) for vehicle in vehicles):
+                continue
+            detail = MotiveClient(_connection_settings(connection)).build_vehicle_detail_from_snapshot(snapshot, vehicle_id)
+            detail["vehicle"] = _tag_snapshot(connection, {"vehicles": [detail.get("vehicle") or {}]}, cache_status="detail")["vehicles"][0]
+            break
+        if detail is None:
+            if active_connections or not _uses_settings_connection(selected_name):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found in the selected Motive API key.")
+            detail = client.fetch_vehicle_detail(vehicle_id=vehicle_id, force_refresh=refresh)
     detail["statistics"] = build_vehicle_statistics_detail(db, detail.get("vehicle") or {})
     return detail
 

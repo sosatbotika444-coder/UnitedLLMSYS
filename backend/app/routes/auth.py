@@ -16,12 +16,40 @@ from app.auth import (
 )
 from app.config import get_settings
 from app.database import get_db
-from app.models import User
-from app.schemas import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.models import MotiveApiConnection, User
+from app.routes.motive import DEFAULT_MOTIVE_CONNECTION_NAME, sync_motive_login_selection
+from app.schemas import MotiveKeyOption, TokenResponse, UserCreate, UserLogin, UserResponse
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _motive_key_options(db: Session) -> list[MotiveKeyOption]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def add_name(value: object) -> None:
+        name = str(value or "").strip()[:160]
+        if not name:
+            return
+        key = name.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(name)
+
+    add_name(DEFAULT_MOTIVE_CONNECTION_NAME)
+    rows = db.scalars(
+        select(MotiveApiConnection.name)
+        .join(User, User.id == MotiveApiConnection.user_id)
+        .where(MotiveApiConnection.is_active.is_(True), User.department == "admin")
+        .order_by(MotiveApiConnection.name.asc())
+    ).all()
+    for name in rows:
+        add_name(name)
+
+    return [MotiveKeyOption(name=name) for name in names]
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -58,6 +86,11 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return TokenResponse(access_token=create_access_token(user.id), user=user)
 
 
+@router.get("/motive-key-options", response_model=list[MotiveKeyOption])
+def motive_key_options(db: Session = Depends(get_db)):
+    return _motive_key_options(db)
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = find_user_by_identifier(db, payload.email)
@@ -70,6 +103,12 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
         department_label = DEPARTMENT_LABELS.get(user.department, user.department.title())
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"This account belongs to {department_label}.")
 
+    motive_connection_name = (payload.motiveConnectionName or DEFAULT_MOTIVE_CONNECTION_NAME).strip()[:160] or DEFAULT_MOTIVE_CONNECTION_NAME
+    user.motive_connection_name = motive_connection_name
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    sync_motive_login_selection(db, user, motive_connection_name)
     mark_user_login(db, user)
     return TokenResponse(access_token=create_access_token(user.id), user=user)
 

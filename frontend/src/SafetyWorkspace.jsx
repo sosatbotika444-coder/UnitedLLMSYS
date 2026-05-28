@@ -8,6 +8,7 @@ import { UnitedIcon } from "./UnitedLaneIcons";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
+const SAFETY_FLEET_REFRESH_INTERVAL_MS = 300000;
 const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif";
 const safetyMobilePrimaryTabs = [
   { id: "fleet", label: "Fleet", icon: "fleet" },
@@ -1988,7 +1989,7 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
   const [fleetError, setFleetError] = useState("");
 
   const loadFleet = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, quiet = false) => {
       if (!token) {
         setFleetData(null);
         setFleetLoading(false);
@@ -1998,7 +1999,7 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
 
       if (forceRefresh) {
         setFleetRefreshing(true);
-      } else {
+      } else if (!quiet) {
         setFleetLoading(true);
       }
       setFleetError("");
@@ -2026,6 +2027,16 @@ export default function SafetyWorkspace({ token, user, mobile = false }) {
       return;
     }
     loadFleet(false);
+  }, [loadFleet, token]);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      loadFleet(false, true);
+    }, SAFETY_FLEET_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, [loadFleet, token]);
 
   const mobilePrimaryIds = new Set(safetyMobilePrimaryTabs.map((tab) => tab.id));
