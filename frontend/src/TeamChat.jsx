@@ -3,7 +3,7 @@ import { useConfirmDialog } from "./feedback";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { useIsMobileViewport } from "./useViewportMode";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const MESSAGE_LIMIT = 120;
 const departmentLabels = {
   fuel: "Fuel Service",

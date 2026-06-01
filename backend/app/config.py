@@ -17,9 +17,10 @@ class Settings(BaseSettings):
     comspg: str = "inlike asd"
     device: str = "142 Carbondale Rd SW, Dalton, GA, 30721"
     secret_key: str = "change-me"
-    access_token_expire_minutes: int = 0
+    access_token_expire_minutes: int = 60
     public_registration_enabled: bool = False
     admin_bootstrap_enabled: bool = True
+    admin_bootstrap_reset_password: bool = False
     admin_username: str = "redevil"
     admin_password: str = "reddevil"
     admin_email: str = "redevil@admin.unitedlanellc.com"

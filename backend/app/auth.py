@@ -88,7 +88,8 @@ def ensure_admin_user(db: Session) -> User | None:
         user.username = username
         user.department = "admin"
         user.full_name = user.full_name or "Admin"
-        user.hashed_password = hash_password(password)
+        if settings.admin_bootstrap_reset_password:
+            user.hashed_password = hash_password(password)
         user.is_banned = False
         user.ban_reason = ""
 

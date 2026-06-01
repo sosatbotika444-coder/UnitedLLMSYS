@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LoadingSpinner } from "./LoadingSpinner";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const categoryOrder = ["Maps", "Search", "Routing", "Traffic", "Operations", "Platform"];
 const serviceStatusOptions = ["All", "Live", "Ready", "Requires Access"];
 

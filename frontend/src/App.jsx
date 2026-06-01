@@ -13,6 +13,7 @@ import { getAutoDieselPrice } from "./priceSignals";
 import { UnitedIcon } from "./UnitedLaneIcons";
 import { useIsMobileViewport } from "./useViewportMode";
 import { SiteDialog, SiteHeader, UnitedLaneMark, sitePanels } from "./UnitedLaneSiteChrome";
+import { API_URL } from "./apiConfig";
 import authTruckImage from "../truck.jpg";
 
 const AdminPanel = lazy(() => import("./AdminPanel"));
@@ -26,7 +27,6 @@ const FleetStatisticsPanel = lazy(() => import("./FleetStatisticsPanel"));
 const ProfitabilityPanel = lazy(() => import("./ProfitabilityPanel"));
 const FuelAuthorizations = lazy(() => import("./FuelAuthorizations"));
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const THEME_KEY = "dpsearchfuels_theme";

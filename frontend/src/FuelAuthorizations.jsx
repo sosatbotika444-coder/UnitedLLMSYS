@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useConfirmDialog } from "./feedback";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const statusOptions = [
   { id: "open", label: "Open" },
   { id: "approved", label: "Approved" },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 import { LoadingSpinner } from "./LoadingSpinner";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const DASHBOARD_REFRESH_INTERVAL_MS = 300000;
 const watchlistFocusOptions = ["All", "Low Fuel", "Faults", "Stale", "Safety"];
 

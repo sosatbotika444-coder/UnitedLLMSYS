@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine, delete, func, inspect, select, text
+from sqlalchemy import JSON, MetaData, Table, create_engine, delete, func, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = BACKEND_ROOT.parent
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.append(str(BACKEND_ROOT))
 
 from app.config import get_settings
 from app.database import Base
-from app.models import FuelAuthorization, Load, RoutingFuelStop, RoutingRequest, RoutingRoute, User
+import app.models  # noqa: F401
 
-MODELS_IN_ORDER = [User, Load, RoutingRequest, RoutingRoute, RoutingFuelStop, FuelAuthorization]
+TABLES_IN_ORDER = list(Base.metadata.sorted_tables)
 
 
 def normalize_database_url(value: str) -> str:
@@ -27,11 +28,29 @@ def normalize_database_url(value: str) -> str:
     return value
 
 
-def row_payload(instance, model):
-    payload = {}
-    for column in model.__table__.columns:
-        payload[column.name] = getattr(instance, column.name)
-    return payload
+def default_sqlite_path() -> Path:
+    candidates = [BACKEND_ROOT / "app.db", REPO_ROOT / "app.db"]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def coerce_value(value, target_column):
+    if value is None:
+        return None
+    if isinstance(target_column.type, JSON) and isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def should_omit_value(value, target_column) -> bool:
+    if value is not None:
+        return False
+    return not target_column.nullable and (target_column.default is not None or target_column.server_default is not None)
 
 
 def reset_postgres_sequence(session, table_name: str, column_name: str = "id"):
@@ -40,6 +59,11 @@ def reset_postgres_sequence(session, table_name: str, column_name: str = "id"):
             f"SELECT setval(pg_get_serial_sequence('\"{table_name}\"', '{column_name}'), COALESCE(MAX({column_name}), 1), MAX({column_name}) IS NOT NULL) FROM \"{table_name}\""
         )
     )
+
+
+def reflected_source_table(source_engine, table_name: str) -> Table:
+    metadata = MetaData()
+    return Table(table_name, metadata, autoload_with=source_engine)
 
 
 def migrate(source_sqlite_url: str, target_postgres_url: str, truncate: bool):
@@ -55,38 +79,60 @@ def migrate(source_sqlite_url: str, target_postgres_url: str, truncate: bool):
 
     with SourceSession() as source_session, TargetSession() as target_session:
         if truncate:
-            for model in reversed(MODELS_IN_ORDER):
-                target_session.execute(delete(model))
+            for table in reversed(TABLES_IN_ORDER):
+                target_session.execute(delete(table))
             target_session.commit()
 
-        for model in MODELS_IN_ORDER:
-            if model.__tablename__ not in source_tables:
-                print(f"{model.__tablename__}: source table missing, skipped")
+        for target_table in TABLES_IN_ORDER:
+            table_name = target_table.name
+            if table_name not in source_tables:
+                print(f"{table_name}: source table missing, skipped")
                 continue
 
-            rows = source_session.scalars(select(model).order_by(model.id.asc())).all()
+            source_table = reflected_source_table(source_engine, table_name)
+            source_column_names = {column.name for column in source_table.columns}
+            common_column_names = [column.name for column in target_table.columns if column.name in source_column_names]
+            if not common_column_names:
+                print(f"{table_name}: no shared columns, skipped")
+                continue
+
+            statement = select(source_table)
+            if "id" in source_column_names:
+                statement = statement.order_by(source_table.c.id.asc())
+            rows = source_session.execute(statement).all()
             if not rows:
-                print(f"{model.__tablename__}: 0 rows")
+                print(f"{table_name}: 0 rows")
                 continue
 
-            existing_ids = set(target_session.scalars(select(model.id)).all())
+            existing_ids = set()
+            if "id" in target_table.columns and "id" in common_column_names:
+                existing_ids = set(target_session.scalars(select(target_table.c.id)).all())
+
             inserted = 0
             for row in rows:
-                payload = row_payload(row, model)
-                if payload.get("id") in existing_ids:
+                row_mapping = row._mapping
+                payload = {}
+                for column_name in common_column_names:
+                    target_column = target_table.c[column_name]
+                    value = coerce_value(row_mapping[column_name], target_column)
+                    if should_omit_value(value, target_column):
+                        continue
+                    payload[column_name] = value
+                if "id" in payload and payload["id"] in existing_ids:
                     continue
-                target_session.add(model(**payload))
+                target_session.execute(target_table.insert().values(**payload))
                 inserted += 1
 
             target_session.commit()
-            print(f"{model.__tablename__}: inserted {inserted} rows")
+            print(f"{table_name}: inserted {inserted} rows")
 
-        for model in MODELS_IN_ORDER:
-            if "id" in model.__table__.columns:
-                reset_postgres_sequence(target_session, model.__tablename__)
-        target_session.commit()
+        if target_engine.dialect.name == "postgresql":
+            for table in TABLES_IN_ORDER:
+                if "id" in table.columns:
+                    reset_postgres_sequence(target_session, table.name)
+            target_session.commit()
 
-        summary = {model.__tablename__: target_session.scalar(select(func.count()).select_from(model)) or 0 for model in MODELS_IN_ORDER}
+        summary = {table.name: target_session.scalar(select(func.count()).select_from(table)) or 0 for table in TABLES_IN_ORDER}
         print("migration-summary")
         for table_name, count in summary.items():
             print(f"  {table_name}: {count}")
@@ -96,8 +142,8 @@ def main():
     parser = argparse.ArgumentParser(description="Migrate current SQLite data into PostgreSQL")
     parser.add_argument(
         "--source-sqlite",
-        default=f"sqlite:///{(PROJECT_ROOT / 'app.db').as_posix()}",
-        help="SQLite source URL. Default points to backend/app.db",
+        default=f"sqlite:///{default_sqlite_path().as_posix()}",
+        help="SQLite source URL. Default uses backend/app.db, or repo-root app.db if that is the existing local database.",
     )
     parser.add_argument(
         "--target-url",

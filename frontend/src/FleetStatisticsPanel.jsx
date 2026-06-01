@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
 const quickFocusOptions = [
   { id: "all", label: "All Trucks" },

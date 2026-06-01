@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const ACTIVITY_SESSION_KEY = "unitedlane_activity_session_id";
 const throttleMap = new Map();
 

@@ -4,7 +4,7 @@ import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import MotiveFleetMap from "./MotiveFleetMap";
 import MapStage from "./MapStage";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
 const MOTIVE_REQUEST_TIMEOUT_MS = 25000;
 const MOTIVE_EXPORT_TIMEOUT_MS = 120000;

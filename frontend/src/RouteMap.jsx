@@ -4,7 +4,7 @@ import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 import { getPriceSignalMeta } from "./priceSignals";
 
-const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
+import { TOMTOM_KEY } from "./apiConfig";
 const routeColors = ["#0f7cff", "#0f9f6e", "#f97316"];
 const ROUTES_SOURCE_ID = "dispatch-routes";
 const ROUTES_SHADOW_LAYER_ID = "dispatch-routes-shadow";

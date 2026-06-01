@@ -9,10 +9,10 @@ import {
 import { buildVehicleLocationLabel, buildVehicleLocationQuery } from "./locationFormatting";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import MapStage from "./MapStage";
+import { API_URL } from "./apiConfig";
 
 const RouteMap = lazy(() => import("./RouteMap"));
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
 const routeColors = ["#1d4ed8", "#0f766e", "#ea580c"];
 const defaultFilters = {
   sort_by: "best",

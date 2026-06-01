@@ -4,7 +4,7 @@ import { useConfirmDialog } from "./feedback";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const MotiveTrackingPanel = lazy(() => import("./MotiveTrackingPanel"));
 const SafetyServiceTools = lazy(() => import("./SafetyServiceTools"));
 const departmentOptions = ["admin", "fuel", "statistics", "safety", "driver"];

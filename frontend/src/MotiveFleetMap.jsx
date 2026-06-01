@@ -4,7 +4,7 @@ import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 import { buildVehicleLocationLabel } from "./locationFormatting";
 
-const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
+import { TOMTOM_KEY } from "./apiConfig";
 const STREET_FOCUS_ZOOM = 15;
 const STREET_FOCUS_PITCH = 52;
 const FLEET_MAP_PITCH = 20;

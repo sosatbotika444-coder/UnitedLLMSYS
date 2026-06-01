@@ -1,8 +1,12 @@
 import json
+import os
 import requests
 
-API_KEY = "fc058946-3b9e-4abb-aef5-02732102776e".strip()
-VEHICLE_ID = 2076182
+API_KEY = os.getenv("MOTIVE_API_KEY", "").strip()
+VEHICLE_ID = int(os.getenv("MOTIVE_TEST_VEHICLE_ID", "2076182"))
+
+if not API_KEY:
+    raise SystemExit("Set MOTIVE_API_KEY before running this diagnostic script.")
 
 headers = {
     "x-api-key": API_KEY,
@@ -25,4 +29,3 @@ for url in urls:
     except Exception as e:
         print("ERROR:", url, e)
 
-    

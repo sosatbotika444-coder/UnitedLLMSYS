@@ -5,7 +5,7 @@ import {
   normalizeText,
 } from "./profitability";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const viewOptions = [
   { id: "loads", label: "Loads" },
   { id: "lanes", label: "Lanes" },

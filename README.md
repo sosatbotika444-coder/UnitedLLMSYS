@@ -24,6 +24,11 @@ Required values:
 DATABASE_URL=postgresql://postgres:password@host:5432/railway
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+ADMIN_BOOTSTRAP_ENABLED=true
+ADMIN_BOOTSTRAP_RESET_PASSWORD=false
+ADMIN_USERNAME=redevil
+ADMIN_PASSWORD=replace-with-initial-admin-password
+ADMIN_EMAIL=redevil@admin.unitedlanellc.com
 CORS_ORIGINS=http://localhost:5173,https://your-netlify-site.netlify.app
 DATABASE_POOL_SIZE=5
 DATABASE_MAX_OVERFLOW=5
@@ -135,6 +140,11 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```env
 SECRET_KEY=replace-with-a-long-random-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+ADMIN_BOOTSTRAP_ENABLED=true
+ADMIN_BOOTSTRAP_RESET_PASSWORD=false
+ADMIN_USERNAME=redevil
+ADMIN_PASSWORD=replace-with-initial-admin-password
+ADMIN_EMAIL=redevil@admin.unitedlanellc.com
 CORS_ORIGINS=https://your-netlify-site.netlify.app
 WEB_CONCURRENCY=1
 DATABASE_POOL_SIZE=5
@@ -160,6 +170,7 @@ Notes:
 
 - Railway often gives a `postgresql://` URL; backend config normalizes it for SQLAlchemy automatically.
 - Tables are created automatically on backend startup.
+- The bootstrap admin is created on first startup. Existing admin passwords are not overwritten unless `ADMIN_BOOTSTRAP_RESET_PASSWORD=true`.
 - If you use a custom Netlify domain, add it to `CORS_ORIGINS` too.
 - Railway service-to-service startup ordering works best when the backend references Postgres with `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
 - For around 100 simultaneous users, use `PostgreSQL` in Railway, not local SQLite.

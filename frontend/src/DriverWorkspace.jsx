@@ -5,9 +5,9 @@ import { LoadingSpinner } from './LoadingSpinner';
 import SafetyServiceTools from './SafetyServiceTools';
 import TeamChat from './TeamChat';
 import { UnitedIcon } from './UnitedLaneIcons';
+import { API_URL } from "./apiConfig";
 
 const RouteAssistant = lazy(() => import('./RouteAssistantUnited'));
-const API_URL = import.meta.env.VITE_API_URL || 'https://unitedllmsys-production-f470.up.railway.app/api';
 const driverMobileTabs = [
   { id: 'fuel', label: 'Fuel', icon: 'fuel' },
   { id: 'planner', label: 'Planner', icon: 'docs' },

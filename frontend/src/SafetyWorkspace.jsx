@@ -6,7 +6,7 @@ import { useConfirmDialog } from "./feedback";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://unitedllmsys-production-f470.up.railway.app/api";
+import { API_URL } from "./apiConfig";
 const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024;
 const SAFETY_FLEET_REFRESH_INTERVAL_MS = 300000;
 const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp,.gif";

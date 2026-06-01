@@ -5,8 +5,12 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+*.log
+*.err.log
+*.out.log
 backend/.env
 frontend/.env
+frontend/.env.production
 backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
