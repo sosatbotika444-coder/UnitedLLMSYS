@@ -42,6 +42,8 @@ function normalizeText(value) {
 }
 
 function numberValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && !value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -62,6 +64,9 @@ function decimalValue(value, digits = 1) {
 
 function compactDate(value) {
   if (!value) return "Unknown";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+    return shortDate(value);
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return new Intl.DateTimeFormat("en-US", {
@@ -76,7 +81,10 @@ function compactDate(value) {
 
 function shortDate(value) {
   if (!value) return "N/A";
-  const parsed = new Date(value);
+  const dateOnlyMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const parsed = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -737,6 +745,7 @@ export default function FleetStatisticsPanel({
         currentSpeedMph: Number.isFinite(currentSpeedMph) ? currentSpeedMph : null,
         averageSpeedMph7d: Number.isFinite(averageSpeedMph7d) ? averageSpeedMph7d : null,
         todayMiles: Number(numberValue(archive.today_miles) || 0),
+        todayDate: archive.today_date || "",
         weekMiles: Number(numberValue(archive.week_miles) || 0),
         monthMiles: Number(numberValue(archive.month_miles) || 0),
         trackedMiles: Number(numberValue(archive.tracked_miles) || 0),
@@ -898,6 +907,7 @@ export default function FleetStatisticsPanel({
     : selectedRow
       ? {
           today_miles: selectedRow.todayMiles,
+          today_date: selectedRow.todayDate,
           week_miles: selectedRow.weekMiles,
           month_miles: selectedRow.monthMiles,
           tracked_miles: selectedRow.trackedMiles,
@@ -955,12 +965,15 @@ export default function FleetStatisticsPanel({
   const leaderboards = snapshotStatistics.leaders || {};
   const recentSafetyEvents = (snapshot?.recent_activity?.performance_events || []).slice(0, 8);
   const fleetDataDate = firstDateValue(snapshot?.fetched_at, snapshot?.cache?.served_at);
-  const archiveDataDate = firstDateValue(statisticsArchive.last_tracked_at, fleetDataDate);
+  const archiveDataDate = firstDateValue(statisticsArchive.last_tracked_at, statisticsArchive.reporting_day, fleetDataDate);
   const archiveStartDate = firstDateValue(statisticsArchive.first_tracked_at);
   const selectedArchiveDataDate = firstDateValue(
     selectedStatistics?.coverage?.archive_last_seen_at,
+    selectedStatistics?.coverage?.reporting_day,
     selectedStatistics?.archive_last_seen_at,
+    selectedStatistics?.today_date,
     selectedRow?.archiveLastSeenAt,
+    selectedRow?.todayDate,
     fleetDataDate
   );
   const selectedLiveDataDate = firstDateValue(
@@ -985,7 +998,7 @@ export default function FleetStatisticsPanel({
   }
 
   function rowArchiveDataDate(row) {
-    return firstDateValue(row?.archiveLastSeenAt, rowLiveDataDate(row), fleetDataDate);
+    return firstDateValue(row?.archiveLastSeenAt, row?.todayDate, rowLiveDataDate(row), fleetDataDate);
   }
 
   function rowLoadDataDate(row) {

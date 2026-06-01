@@ -12,10 +12,10 @@ from app.auth import require_user_department
 from app.config import get_settings
 from app.database import SessionLocal, get_db
 from app.models import MotiveApiConnection, User
-from app.motive_archive import build_vehicle_archive
+from app.motive_archive import build_vehicle_archive, sync_motive_vehicle_archive
 from app.motive import MotiveClient, format_http_error, iso_now, sort_by_recent
 from app.motive_export import build_motive_snapshot_workbook
-from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics
+from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics, sync_motive_daily_statistics
 from app.schemas import MotiveApiConnectionCreate, MotiveApiConnectionResponse, MotiveApiConnectionUpdate, MotiveIntegrationStatus
 
 
@@ -285,10 +285,26 @@ def _store_connection_success(db: Session, connection_id: int, snapshot: dict) -
         db.add(row)
         db.commit()
         db.refresh(row)
-        return _detach_connection(row)
+        detached = _detach_connection(row)
     except Exception:
         db.rollback()
         return None
+
+    try:
+        sync_motive_vehicle_archive(
+            db,
+            snapshot,
+            retention_days=max(1, int(getattr(settings, "motive_snapshot_archive_retention_days", 7) or 7)),
+        )
+    except Exception:
+        db.rollback()
+
+    try:
+        sync_motive_daily_statistics(db, snapshot)
+    except Exception:
+        db.rollback()
+
+    return detached
 
 
 def _store_connection_error(db: Session, connection_id: int, message: str) -> None:

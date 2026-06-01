@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import MotiveVehicleDailyStat
 
 
@@ -14,8 +16,42 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _today_key() -> str:
-    return _now_utc().date().isoformat()
+def _motive_zone() -> ZoneInfo:
+    zone_name = getattr(get_settings(), "motive_time_zone", "America/New_York") or "America/New_York"
+    try:
+        return ZoneInfo(zone_name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _snapshot_recorded_at(snapshot: dict) -> datetime:
+    return _parse_datetime(snapshot.get("fetched_at")) or _now_utc()
+
+
+def _local_date(value: datetime | None = None) -> date:
+    return (value or _now_utc()).astimezone(_motive_zone()).date()
+
+
+def _today_key(value: datetime | None = None) -> str:
+    return _local_date(value).isoformat()
 
 
 def _safe_float(value: object) -> float | None:
@@ -121,8 +157,11 @@ def _daily_delta(end_value: float | None, start_value: float | None) -> float:
     return round(end_value - start_value, 1)
 
 
-def _parse_snapshot_date(value: str) -> datetime.date:
-    return datetime.strptime(value, "%Y-%m-%d").date()
+def _parse_snapshot_date(value: str) -> date | None:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
 
 
 def _average_speed_7d(vehicle: dict) -> float | None:
@@ -162,8 +201,8 @@ def sync_motive_daily_statistics(db: Session, snapshot: dict) -> None:
     if not vehicle_ids:
         return
 
-    today_key = _today_key()
-    now = _now_utc()
+    now = _snapshot_recorded_at(snapshot)
+    today_key = _today_key(now)
     existing_rows = db.scalars(
         select(MotiveVehicleDailyStat).where(
             MotiveVehicleDailyStat.snapshot_date == today_key,
@@ -277,11 +316,12 @@ def _load_history_rows(db: Session, vehicle_ids: list[int]) -> dict[int, list[Mo
 
 
 def _build_vehicle_statistics_summary(vehicle: dict, history_rows: list[MotiveVehicleDailyStat]) -> dict:
-    today = _now_utc().date()
-    week_cutoff = today - timedelta(days=6)
-    month_cutoff = today - timedelta(days=29)
-
     daily_rows = sorted(history_rows, key=lambda item: item.snapshot_date)
+    latest_row = daily_rows[-1] if daily_rows else None
+    report_date = _parse_snapshot_date(latest_row.snapshot_date) if latest_row else _local_date()
+    report_date = report_date or _local_date()
+    week_cutoff = report_date - timedelta(days=6)
+    month_cutoff = report_date - timedelta(days=29)
     today_miles = 0.0
     week_miles = 0.0
     month_miles = 0.0
@@ -293,7 +333,9 @@ def _build_vehicle_statistics_summary(vehicle: dict, history_rows: list[MotiveVe
         tracked_miles += daily_miles
         max_daily_miles = max(max_daily_miles, daily_miles)
         row_date = _parse_snapshot_date(row.snapshot_date)
-        if row_date == today:
+        if row_date is None:
+            continue
+        if row_date == report_date:
             today_miles += daily_miles
         if row_date >= week_cutoff:
             week_miles += daily_miles
@@ -301,12 +343,12 @@ def _build_vehicle_statistics_summary(vehicle: dict, history_rows: list[MotiveVe
             month_miles += daily_miles
 
     tracked_days = len(daily_rows)
-    latest_row = daily_rows[-1] if daily_rows else None
     avg_daily_miles = round(tracked_miles / tracked_days, 1) if tracked_days else 0.0
     average_speed_mph_7d = _average_speed_7d(vehicle)
 
     return {
         "today_miles": round(today_miles, 1),
+        "today_date": report_date.isoformat(),
         "week_miles": round(week_miles, 1),
         "month_miles": round(month_miles, 1),
         "tracked_miles": round(tracked_miles, 1),
@@ -362,6 +404,7 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
     enriched_vehicles: list[dict] = []
     first_dates: list[str] = []
     last_timestamps: list[str] = []
+    report_dates: list[str] = []
     vehicles_with_history = 0
     vehicle_days = 0
 
@@ -377,6 +420,8 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
             vehicles_with_history += 1
             vehicle_days += len(history_rows)
             first_dates.append(history_rows[0].snapshot_date)
+            if summary.get("today_date"):
+                report_dates.append(str(summary["today_date"]))
             if history_rows[-1].last_recorded_at:
                 last_timestamps.append(history_rows[-1].last_recorded_at.isoformat())
 
@@ -404,6 +449,7 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
         "archive": {
             "first_tracked_at": min(first_dates) if first_dates else "",
             "last_tracked_at": max(last_timestamps) if last_timestamps else "",
+            "reporting_day": max(report_dates) if report_dates else _today_key(),
             "vehicle_days": vehicle_days,
             "vehicles_with_history": vehicles_with_history,
         },
@@ -443,5 +489,6 @@ def build_vehicle_statistics_detail(db: Session, vehicle: dict) -> dict:
             "tracked_days": summary.get("tracked_days") or 0,
             "archive_started_at": summary.get("archive_started_at") or "",
             "archive_last_seen_at": summary.get("archive_last_seen_at") or "",
+            "reporting_day": summary.get("today_date") or "",
         },
     }
