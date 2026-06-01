@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import MotiveVehicleDailyStat
 
+DEFAULT_TANK_CAPACITY_GALLONS = 200.0
+MIN_REASONABLE_MPG = 1.0
+MAX_REASONABLE_MPG = 20.0
+
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -149,12 +153,52 @@ def _vehicle_mpg(vehicle: dict) -> float | None:
     return None
 
 
+def _reasonable_mpg(value: float | None) -> float | None:
+    if value is None:
+        return None
+    if MIN_REASONABLE_MPG <= value <= MAX_REASONABLE_MPG:
+        return round(value, 2)
+    return None
+
+
 def _daily_delta(end_value: float | None, start_value: float | None) -> float:
     if end_value is None or start_value is None:
         return 0.0
     if end_value < start_value:
         return 0.0
     return round(end_value - start_value, 1)
+
+
+def _fuel_used_gallons(row: MotiveVehicleDailyStat, tank_capacity_gallons: float = DEFAULT_TANK_CAPACITY_GALLONS) -> float:
+    if row.opening_fuel_percent is None or row.latest_fuel_percent is None:
+        return 0.0
+    fuel_percent_delta = row.opening_fuel_percent - row.latest_fuel_percent
+    if fuel_percent_delta <= 0:
+        return 0.0
+    return round((tank_capacity_gallons * fuel_percent_delta) / 100.0, 2)
+
+
+def _daily_mpg(row: MotiveVehicleDailyStat) -> float | None:
+    miles = _daily_delta(row.closing_odometer_miles, row.opening_odometer_miles)
+    gallons = _fuel_used_gallons(row)
+    if miles <= 0 or gallons <= 0:
+        return None
+    return _reasonable_mpg(miles / gallons)
+
+
+def _rolling_mpg(rows: list[MotiveVehicleDailyStat]) -> tuple[float | None, float, float]:
+    total_miles = 0.0
+    total_gallons = 0.0
+    for row in rows:
+        miles = _daily_delta(row.closing_odometer_miles, row.opening_odometer_miles)
+        gallons = _fuel_used_gallons(row)
+        if miles <= 0 or gallons <= 0:
+            continue
+        total_miles += miles
+        total_gallons += gallons
+    if total_miles <= 0 or total_gallons <= 0:
+        return None, round(total_miles, 1), round(total_gallons, 2)
+    return _reasonable_mpg(total_miles / total_gallons), round(total_miles, 1), round(total_gallons, 2)
 
 
 def _parse_snapshot_date(value: str) -> date | None:
@@ -187,6 +231,8 @@ def _trend_points(rows: list[MotiveVehicleDailyStat], limit: int = 14) -> list[d
             "opening_fuel_percent": row.opening_fuel_percent,
             "latest_fuel_percent": row.latest_fuel_percent,
             "min_fuel_percent": row.min_fuel_percent,
+            "estimated_fuel_used_gallons": _fuel_used_gallons(row),
+            "estimated_mpg": _daily_mpg(row),
             "latest_active_faults": row.latest_active_faults,
             "max_active_faults": row.max_active_faults,
             "last_recorded_at": row.last_recorded_at.isoformat() if row.last_recorded_at else "",
@@ -327,6 +373,9 @@ def _build_vehicle_statistics_summary(vehicle: dict, history_rows: list[MotiveVe
     month_miles = 0.0
     tracked_miles = 0.0
     max_daily_miles = 0.0
+    today_rows: list[MotiveVehicleDailyStat] = []
+    week_rows: list[MotiveVehicleDailyStat] = []
+    month_rows: list[MotiveVehicleDailyStat] = []
 
     for row in daily_rows:
         daily_miles = _daily_delta(row.closing_odometer_miles, row.opening_odometer_miles)
@@ -337,24 +386,73 @@ def _build_vehicle_statistics_summary(vehicle: dict, history_rows: list[MotiveVe
             continue
         if row_date == report_date:
             today_miles += daily_miles
+            today_rows.append(row)
         if row_date >= week_cutoff:
             week_miles += daily_miles
+            week_rows.append(row)
         if row_date >= month_cutoff:
             month_miles += daily_miles
+            month_rows.append(row)
 
     tracked_days = len(daily_rows)
     avg_daily_miles = round(tracked_miles / tracked_days, 1) if tracked_days else 0.0
     average_speed_mph_7d = _average_speed_7d(vehicle)
+    current_motive_mpg = _reasonable_mpg(_vehicle_mpg(vehicle))
+    today_mpg, today_mpg_miles, today_fuel_used = _rolling_mpg(today_rows)
+    week_mpg, week_mpg_miles, week_fuel_used = _rolling_mpg(week_rows)
+    month_mpg, month_mpg_miles, month_fuel_used = _rolling_mpg(month_rows)
+    tracked_mpg, tracked_mpg_miles, tracked_fuel_used = _rolling_mpg(daily_rows)
+    calculated_mpg = week_mpg or month_mpg or tracked_mpg or today_mpg
+    saved_mpg = _reasonable_mpg(latest_row.latest_mpg if latest_row else None)
+    motive_mpg = current_motive_mpg or saved_mpg
+    motive_mpg_source = ""
+    calculated_mpg_source = ""
+    if current_motive_mpg is not None:
+        motive_mpg_source = str(vehicle.get("mpg_source") or "Motive fuel efficiency")
+    elif saved_mpg is not None:
+        motive_mpg_source = "Last saved Motive MPG"
+    if calculated_mpg is not None:
+        calculated_mpg_source = "Calculated from archive odometer miles and fuel percent"
+    best_mpg = motive_mpg or calculated_mpg
+    best_mpg_source = ""
+    if motive_mpg is not None:
+        best_mpg_source = motive_mpg_source
+    elif calculated_mpg is not None:
+        best_mpg_source = calculated_mpg_source
+    elif saved_mpg is not None:
+        best_mpg_source = "Last saved Motive MPG"
 
     return {
         "today_miles": round(today_miles, 1),
         "today_date": report_date.isoformat(),
+        "today_mpg": today_mpg,
         "week_miles": round(week_miles, 1),
+        "week_mpg": week_mpg,
         "month_miles": round(month_miles, 1),
+        "month_mpg": month_mpg,
         "tracked_miles": round(tracked_miles, 1),
+        "tracked_mpg": tracked_mpg,
         "tracked_days": tracked_days,
         "average_daily_miles": avg_daily_miles,
         "max_daily_miles": round(max_daily_miles, 1),
+        "motive_mpg": motive_mpg,
+        "motive_mpg_source": motive_mpg_source,
+        "calculated_mpg": calculated_mpg,
+        "calculated_mpg_source": calculated_mpg_source,
+        "best_mpg": best_mpg,
+        "best_mpg_source": best_mpg_source,
+        "auto_mpg": best_mpg,
+        "latest_mpg": motive_mpg,
+        "mpg_source": best_mpg_source,
+        "tank_capacity_gallons": DEFAULT_TANK_CAPACITY_GALLONS,
+        "today_fuel_used_gallons": today_fuel_used,
+        "week_fuel_used_gallons": week_fuel_used,
+        "month_fuel_used_gallons": month_fuel_used,
+        "tracked_fuel_used_gallons": tracked_fuel_used,
+        "today_mpg_miles": today_mpg_miles,
+        "week_mpg_miles": week_mpg_miles,
+        "month_mpg_miles": month_mpg_miles,
+        "tracked_mpg_miles": tracked_mpg_miles,
         "current_speed_mph": _vehicle_speed_mph(vehicle),
         "average_speed_mph_7d": average_speed_mph_7d,
         "archive_started_at": daily_rows[0].snapshot_date if daily_rows else "",
@@ -414,6 +512,9 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
         summary = _build_vehicle_statistics_summary(vehicle, history_rows)
         next_vehicle = dict(vehicle)
         next_vehicle["statistics_summary"] = summary
+        if _safe_float(next_vehicle.get("mpg")) is None and summary.get("motive_mpg") is not None:
+            next_vehicle["mpg"] = summary["motive_mpg"]
+            next_vehicle["mpg_source"] = summary.get("motive_mpg_source") or "Motive MPG"
         enriched_vehicles.append(next_vehicle)
 
         if history_rows:
@@ -429,6 +530,24 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
     total_week_miles = round(sum((vehicle.get("statistics_summary") or {}).get("week_miles") or 0 for vehicle in enriched_vehicles), 1)
     total_month_miles = round(sum((vehicle.get("statistics_summary") or {}).get("month_miles") or 0 for vehicle in enriched_vehicles), 1)
     total_tracked_miles = round(sum((vehicle.get("statistics_summary") or {}).get("tracked_miles") or 0 for vehicle in enriched_vehicles), 1)
+    motive_mpg_values = [
+        _safe_float((vehicle.get("statistics_summary") or {}).get("motive_mpg"))
+        for vehicle in enriched_vehicles
+    ]
+    motive_mpg_values = [value for value in motive_mpg_values if value is not None]
+    avg_motive_mpg = round(sum(motive_mpg_values) / len(motive_mpg_values), 2) if motive_mpg_values else None
+    calculated_mpg_values = [
+        _safe_float((vehicle.get("statistics_summary") or {}).get("calculated_mpg"))
+        for vehicle in enriched_vehicles
+    ]
+    calculated_mpg_values = [value for value in calculated_mpg_values if value is not None]
+    avg_calculated_mpg = round(sum(calculated_mpg_values) / len(calculated_mpg_values), 2) if calculated_mpg_values else None
+    best_mpg_values = [
+        _safe_float((vehicle.get("statistics_summary") or {}).get("best_mpg"))
+        for vehicle in enriched_vehicles
+    ]
+    best_mpg_values = [value for value in best_mpg_values if value is not None]
+    avg_mpg = round(sum(best_mpg_values) / len(best_mpg_values), 2) if best_mpg_values else None
 
     moving_speeds = [
         _safe_float((vehicle.get("statistics_summary") or {}).get("current_speed_mph"))
@@ -458,6 +577,9 @@ def enrich_snapshot_with_statistics(db: Session, snapshot: dict) -> dict:
             "week_miles": total_week_miles,
             "month_miles": total_month_miles,
             "tracked_miles": total_tracked_miles,
+            "avg_mpg": avg_mpg,
+            "avg_motive_mpg": avg_motive_mpg,
+            "avg_calculated_mpg": avg_calculated_mpg,
             "avg_speed_now_mph": avg_speed_now,
             "avg_speed_7d_mph": avg_speed_7d,
         },

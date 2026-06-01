@@ -14,7 +14,7 @@ from app.database import SessionLocal, get_db
 from app.models import MotiveApiConnection, User
 from app.motive_archive import build_vehicle_archive, sync_motive_vehicle_archive
 from app.motive import MotiveClient, format_http_error, iso_now, sort_by_recent
-from app.motive_export import build_motive_snapshot_workbook
+from app.motive_export import build_motive_snapshot_workbook, build_motive_statistics_workbook
 from app.motive_statistics import build_vehicle_statistics_detail, enrich_snapshot_with_statistics, sync_motive_daily_statistics
 from app.schemas import MotiveApiConnectionCreate, MotiveApiConnectionResponse, MotiveApiConnectionUpdate, MotiveIntegrationStatus
 
@@ -806,4 +806,22 @@ def motive_export(
         BytesIO(workbook_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )#contnutrh increasing 
+    )
+
+
+@router.get("/statistics/export")
+def motive_statistics_export(
+    refresh: bool = Query(default=False, description="Force a fresh Motive fetch before creating the Statistics Excel export."),
+    current_user: User = Depends(require_user_department("fuel", "statistics")),
+    db: Session = Depends(get_db),
+):
+    snapshot = _fleet_snapshot_for_user(db, current_user, refresh=refresh, allow_stale=not refresh, wait_for_refresh=refresh)
+    enriched_snapshot = enrich_snapshot_with_statistics(db, snapshot)
+    workbook_bytes = build_motive_statistics_workbook(enriched_snapshot)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"fleet_statistics_export_{timestamp}.xlsx"
+    return StreamingResponse(
+        BytesIO(workbook_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

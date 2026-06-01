@@ -4,6 +4,7 @@ import { buildVehicleLocationLabel } from "./locationFormatting";
 
 import { API_URL } from "./apiConfig";
 const MOTIVE_BACKGROUND_POLL_INTERVAL_MS = 300000;
+const STATISTICS_EXPORT_TIMEOUT_MS = 120000;
 const quickFocusOptions = [
   { id: "all", label: "All Trucks" },
   { id: "moving", label: "Moving Now" },
@@ -35,6 +36,52 @@ async function apiRequest(path, options = {}, token = "") {
   }
 
   return data;
+}
+
+function fileNameFromDisposition(headerValue, fallback = "fleet_statistics_export.xlsx") {
+  if (!headerValue) return fallback;
+  const utf8Match = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+  const basicMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] || fallback;
+}
+
+async function downloadStatisticsFile(path, token = "", fallbackFileName = "fleet_statistics_export.xlsx") {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), STATISTICS_EXPORT_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { headers, signal: controller.signal });
+  } catch (requestError) {
+    if (requestError?.name === "AbortError") {
+      throw new Error("Statistics export is taking too long. Try again after fleet sync finishes.");
+    }
+    throw requestError;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Statistics export failed");
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileNameFromDisposition(response.headers.get("Content-Disposition"), fallbackFileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
 }
 
 function normalizeText(value) {
@@ -226,6 +273,14 @@ function resolveVehicleMpgInfo(vehicle, matchedLoad) {
     return {
       value: drivingDistanceMiles / drivingFuelGallons,
       source: "Motive 7-day driving distance vs driving fuel",
+    };
+  }
+
+  const calculatedMpg = positiveNumber(vehicle?.statistics_summary?.calculated_mpg);
+  if (calculatedMpg !== null) {
+    return {
+      value: calculatedMpg,
+      source: vehicle?.statistics_summary?.calculated_mpg_source || "Calculated MPG from archive miles and fuel",
     };
   }
 
@@ -611,6 +666,7 @@ export default function FleetStatisticsPanel({
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [quickFocus, setQuickFocus] = useState("all");
@@ -735,6 +791,18 @@ export default function FleetStatisticsPanel({
         fuelPercent: Number.isFinite(fuelPercent) ? fuelPercent : null,
         mpg: mpgInfo.value !== null ? Number(mpgInfo.value) : null,
         mpgSource: mpgInfo.source,
+        motiveMpg: numberValue(archive.motive_mpg ?? vehicle?.mpg),
+        motiveMpgSource: archive.motive_mpg_source || vehicle?.mpg_source || "",
+        calculatedMpg: numberValue(archive.calculated_mpg),
+        calculatedMpgSource: archive.calculated_mpg_source || "",
+        bestMpg: numberValue(archive.best_mpg ?? archive.auto_mpg),
+        bestMpgSource: archive.best_mpg_source || archive.mpg_source || "",
+        autoMpg: numberValue(archive.best_mpg ?? archive.auto_mpg),
+        todayMpg: numberValue(archive.today_mpg),
+        weekMpg: numberValue(archive.week_mpg),
+        monthMpg: numberValue(archive.month_mpg),
+        trackedMpg: numberValue(archive.tracked_mpg),
+        fuelUsedGallons: numberValue(archive.week_fuel_used_gallons ?? archive.tracked_fuel_used_gallons),
         activeFaults,
         totalFaults,
         utilizationPct: Number.isFinite(utilizationPct) ? utilizationPct : null,
@@ -911,6 +979,17 @@ export default function FleetStatisticsPanel({
           week_miles: selectedRow.weekMiles,
           month_miles: selectedRow.monthMiles,
           tracked_miles: selectedRow.trackedMiles,
+          motive_mpg: selectedRow.motiveMpg,
+          motive_mpg_source: selectedRow.motiveMpgSource,
+          calculated_mpg: selectedRow.calculatedMpg,
+          calculated_mpg_source: selectedRow.calculatedMpgSource,
+          best_mpg: selectedRow.bestMpg,
+          best_mpg_source: selectedRow.bestMpgSource,
+          auto_mpg: selectedRow.bestMpg,
+          today_mpg: selectedRow.todayMpg,
+          week_mpg: selectedRow.weekMpg,
+          month_mpg: selectedRow.monthMpg,
+          tracked_mpg: selectedRow.trackedMpg,
           tracked_days: selectedRow.trackedDays,
           average_daily_miles: selectedRow.averageDailyMiles,
           max_daily_miles: selectedRow.maxDailyMiles,
@@ -947,6 +1026,8 @@ export default function FleetStatisticsPanel({
       total: filteredRows.length,
       avgFuel: average(filteredRows.map((row) => row.fuelPercent)),
       avgMpg: average(filteredRows.map((row) => row.mpg)),
+      avgMotiveMpg: average(filteredRows.map((row) => row.motiveMpg)),
+      avgCalculatedMpg: average(filteredRows.map((row) => row.calculatedMpg)),
       avgSpeedNow: average(filteredRows.map((row) => row.currentSpeedMph)),
       avgSpeed7d: average(filteredRows.map((row) => row.averageSpeedMph7d)),
       lowFuel: filteredRows.filter((row) => row.fuelPercent !== null && row.fuelPercent <= 25).length,
@@ -1116,6 +1197,21 @@ export default function FleetStatisticsPanel({
       .finally(() => setDetailLoading(false));
   }
 
+  async function exportStatisticsExcel() {
+    if (!token || exporting) {
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      await downloadStatisticsFile("/motive/statistics/export", token, "fleet_statistics_export.xlsx");
+    } catch (exportError) {
+      setError(exportError.message || "Statistics export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function updateFilter(key, value) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
@@ -1156,6 +1252,9 @@ export default function FleetStatisticsPanel({
           {fleetDataDate ? <small>{dataDateText(fleetDataDate)}</small> : null}
           <button className="secondary-button" type="button" onClick={clearFilters}>
             Clear filters
+          </button>
+          <button className="secondary-button" type="button" onClick={exportStatisticsExcel} disabled={loading || exporting}>
+            <LoadingButtonLabel loading={exporting} loadingLabel="Exporting...">Export Excel</LoadingButtonLabel>
           </button>
           <button className="primary-button" type="button" onClick={() => {
             setRefreshing(true);
@@ -1219,6 +1318,8 @@ export default function FleetStatisticsPanel({
             <HeroStat label="Miles today" value={formatMiles(statisticsTotals.today_miles ?? visibleMetrics.todayMiles)} detail="Archive-based daily movement" dataDate={dataDateText(archiveDataDate)} tone="emerald" />
             <HeroStat label="Miles 7d" value={formatMiles(statisticsTotals.week_miles ?? visibleMetrics.weekMiles)} detail="Rolling weekly movement" dataDate={dataDateText(archiveDataDate)} tone="sky" />
             <HeroStat label="Miles 30d" value={formatMiles(statisticsTotals.month_miles ?? visibleMetrics.monthMiles)} detail="Rolling monthly movement" dataDate={dataDateText(archiveDataDate)} tone="amber" />
+            <HeroStat label="MPG Motive" value={statisticsTotals.avg_motive_mpg !== null && statisticsTotals.avg_motive_mpg !== undefined ? decimalValue(statisticsTotals.avg_motive_mpg) : (visibleMetrics.avgMotiveMpg !== null ? decimalValue(visibleMetrics.avgMotiveMpg) : "-")} detail="Motive fuel economy" dataDate={dataDateText(archiveDataDate)} tone="emerald" />
+            <HeroStat label="MPG Calc" value={statisticsTotals.avg_calculated_mpg !== null && statisticsTotals.avg_calculated_mpg !== undefined ? decimalValue(statisticsTotals.avg_calculated_mpg) : (visibleMetrics.avgCalculatedMpg !== null ? decimalValue(visibleMetrics.avgCalculatedMpg) : "-")} detail="Odometer plus fuel percent" dataDate={dataDateText(archiveDataDate)} tone="sky" />
             <HeroStat label="Speed now" value={formatSpeed(statisticsTotals.avg_speed_now_mph ?? visibleMetrics.avgSpeedNow)} detail={`${metricValue(visibleMetrics.moving)} trucks moving now`} dataDate={dataDateText(fleetDataDate)} tone="violet" />
             <HeroStat label="Avg speed 7d" value={formatSpeed(statisticsTotals.avg_speed_7d_mph ?? visibleMetrics.avgSpeed7d)} detail="Rolling driving average" dataDate={dataDateText(archiveDataDate)} tone="blue" />
             <HeroStat label="Low fuel units" value={metricValue(visibleMetrics.lowFuel)} detail="25% or below" dataDate={dataDateText(fleetDataDate)} tone={visibleMetrics.lowFuel ? "amber" : "blue"} />
@@ -1453,6 +1554,8 @@ export default function FleetStatisticsPanel({
                           <th>Month</th>
                           <th>Speed</th>
                           <th>Fuel</th>
+                          <th>MPG Motive</th>
+                          <th>MPG Calc</th>
                           <th>Faults</th>
                           <th>Load</th>
                           <th>Location</th>
@@ -1502,6 +1605,16 @@ export default function FleetStatisticsPanel({
                               <small>{row.fuelType || "Fuel n/a"}</small>
                             </td>
                             <td>
+                              <strong>{row.motiveMpg !== null ? decimalValue(row.motiveMpg) : "-"}</strong>
+                              <small>{dataDateText(rowArchiveDataDate(row))}</small>
+                              <small>{row.motiveMpgSource || "No Motive MPG"}</small>
+                            </td>
+                            <td>
+                              <strong>{row.calculatedMpg !== null ? decimalValue(row.calculatedMpg) : "-"}</strong>
+                              <small>{dataDateText(rowArchiveDataDate(row))}</small>
+                              <small>{row.calculatedMpgSource || "No calculated MPG"}</small>
+                            </td>
+                            <td>
                               <strong>{metricValue(row.activeFaults)}</strong>
                               <small>{dataDateText(fleetDataDate)}</small>
                               <small>{metricValue(row.totalFaults)} total recent</small>
@@ -1524,7 +1637,7 @@ export default function FleetStatisticsPanel({
                           </tr>
                         )) : (
                       <tr>
-                        <td colSpan="11">
+                        <td colSpan="13">
                           <div className="empty-route-card compact">
                             <strong>No trucks match the current filters.</strong>
                             <span>{hasActiveFilters ? "Clear or relax the filters to bring the fleet back into the matrix." : "Live fleet data is available, but no rows are ready yet. Use Fleet Violation Center above to open videos directly."}</span>
@@ -1567,7 +1680,8 @@ export default function FleetStatisticsPanel({
                       <FocusMetric label="Miles 30d" value={formatMiles(selectedStatistics?.month_miles ?? selectedRow.monthMiles)} detail="Rolling monthly distance" dataDate={dataDateText(selectedArchiveDataDate)} tone="amber" />
                       <FocusMetric label="Tracked total" value={formatMiles(selectedStatistics?.tracked_miles ?? selectedRow.trackedMiles)} detail={`${metricValue(selectedStatistics?.tracked_days ?? selectedRow.trackedDays)} tracked day(s)`} dataDate={dataDateText(selectedArchiveDataDate)} tone="dark" />
                       <FocusMetric label="Fuel" value={formatPercent(selectedRow.fuelPercent)} detail={selectedRow.fuelType || "Fuel type unavailable"} dataDate={dataDateText(selectedLiveDataDate)} tone={fuelFilterTone(selectedRow.fuelPercent)} />
-                      <FocusMetric label="MPG" value={selectedRow.mpg !== null ? decimalValue(selectedRow.mpg) : "-"} detail={selectedRow.mpgSource || "No MPG source"} dataDate={dataDateText(firstDateValue(selectedArchiveDataDate, selectedLiveDataDate))} tone="blue" />
+                      <FocusMetric label="MPG Motive" value={(selectedStatistics?.motive_mpg ?? selectedRow.motiveMpg) !== null && (selectedStatistics?.motive_mpg ?? selectedRow.motiveMpg) !== undefined ? decimalValue(selectedStatistics?.motive_mpg ?? selectedRow.motiveMpg) : "-"} detail={selectedStatistics?.motive_mpg_source || selectedRow.motiveMpgSource || "No Motive MPG"} dataDate={dataDateText(firstDateValue(selectedArchiveDataDate, selectedLiveDataDate))} tone="blue" />
+                      <FocusMetric label="MPG Calc" value={(selectedStatistics?.calculated_mpg ?? selectedRow.calculatedMpg) !== null && (selectedStatistics?.calculated_mpg ?? selectedRow.calculatedMpg) !== undefined ? decimalValue(selectedStatistics?.calculated_mpg ?? selectedRow.calculatedMpg) : "-"} detail={selectedStatistics?.calculated_mpg_source || selectedRow.calculatedMpgSource || "No calculated MPG"} dataDate={dataDateText(selectedArchiveDataDate)} tone="emerald" />
                       <FocusMetric
                         label="Faults"
                         value={metricValue(selectedRow.activeFaults)}

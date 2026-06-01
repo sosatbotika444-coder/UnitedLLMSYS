@@ -140,6 +140,50 @@ def build_motive_snapshot_workbook(snapshot: dict) -> bytes:
     return stream.getvalue()
 
 
+def build_motive_statistics_workbook(snapshot: dict) -> bytes:
+    Workbook = _load_openpyxl()
+    workbook = Workbook()
+    overview = workbook.active
+    overview.title = "Statistics Overview"
+
+    vehicles = sorted(
+        snapshot.get("vehicles") or [],
+        key=lambda row: (
+            -float(((row.get("statistics_summary") or {}).get("today_miles") or 0) or 0),
+            str(row.get("number") or ""),
+        ),
+    )
+    statistics = snapshot.get("statistics") or {}
+
+    _write_statistics_overview_sheet(overview, snapshot=snapshot, statistics=statistics)
+    _write_table_sheet(
+        workbook,
+        title="Truck Statistics",
+        columns=_statistics_vehicle_columns(),
+        rows=vehicles,
+        empty_message="No truck statistics were available for export.",
+    )
+    _write_table_sheet(
+        workbook,
+        title="Leaderboards",
+        columns=_statistics_leaderboard_columns(),
+        rows=_statistics_leaderboard_rows(statistics.get("leaders") or {}),
+        empty_message="No leaderboard rows were available for export.",
+    )
+    _write_table_sheet(
+        workbook,
+        title="Daily Trend",
+        columns=_statistics_trend_columns(),
+        rows=_statistics_trend_rows(vehicles),
+        empty_message="No daily trend rows were available for export.",
+    )
+
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    return stream.getvalue()
+
+
 def _write_overview_sheet(
     sheet: Worksheet,
     *,
@@ -263,6 +307,201 @@ def _write_table_sheet(workbook: Workbook, *, title: str, columns: list[ColumnSp
         sheet.cell(row=2, column=1).alignment = WRAP_ALIGNMENT
 
     _apply_sheet_formatting(sheet)
+
+
+def _write_statistics_overview_sheet(sheet: Worksheet, *, snapshot: dict, statistics: dict) -> None:
+    generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    archive = statistics.get("archive") or {}
+    totals = statistics.get("totals") or {}
+    metrics = snapshot.get("metrics") or {}
+    company = snapshot.get("company") or {}
+    warnings = snapshot.get("warnings") or []
+
+    sheet["A1"] = "Fleet Statistics Export"
+    sheet["A1"].font = TITLE_FONT
+    overview_rows = [
+        ("Generated At", generated_at),
+        ("Snapshot Fetched At", snapshot.get("fetched_at")),
+        ("Company", company.get("name") or metrics.get("company_name")),
+        ("Reporting Day", archive.get("reporting_day")),
+        ("Archive Started", archive.get("first_tracked_at")),
+        ("Last Archive Ping", archive.get("last_tracked_at")),
+        ("Tracked Units", archive.get("vehicles_with_history")),
+        ("Archived Vehicle Days", archive.get("vehicle_days")),
+        ("Total Live Trucks", metrics.get("total_vehicles") or len(snapshot.get("vehicles") or [])),
+    ]
+    for row_index, (label, value) in enumerate(overview_rows, start=3):
+        sheet.cell(row=row_index, column=1, value=label).font = SECTION_FONT
+        sheet.cell(row=row_index, column=2, value=_cell_value(value))
+
+    current_row = len(overview_rows) + 5
+    sheet.cell(row=current_row, column=1, value="Statistics Totals").font = SECTION_FONT
+    sheet.cell(row=current_row, column=1).fill = SECTION_FILL
+    current_row += 1
+    sheet.cell(row=current_row, column=1, value="Metric")
+    sheet.cell(row=current_row, column=2, value="Value")
+    _style_header_row(sheet, current_row, 2)
+    current_row += 1
+    for key in ("today_miles", "week_miles", "month_miles", "tracked_miles", "avg_motive_mpg", "avg_calculated_mpg", "avg_mpg", "avg_speed_now_mph", "avg_speed_7d_mph"):
+        sheet.cell(row=current_row, column=1, value=_humanize(key))
+        sheet.cell(row=current_row, column=2, value=_cell_value(totals.get(key)))
+        current_row += 1
+
+    current_row += 1
+    sheet.cell(row=current_row, column=1, value="Workbook Sheets").font = SECTION_FONT
+    sheet.cell(row=current_row, column=1).fill = SECTION_FILL
+    current_row += 1
+    sheet.cell(row=current_row, column=1, value="Truck Statistics")
+    sheet.cell(row=current_row, column=2, value="One row per truck with live telemetry plus archive-backed miles and dates.")
+    current_row += 1
+    sheet.cell(row=current_row, column=1, value="Leaderboards")
+    sheet.cell(row=current_row, column=2, value="Top Today Miles, speed, faults, low fuel, week, and month leaderboard rows.")
+    current_row += 1
+    sheet.cell(row=current_row, column=1, value="Daily Trend")
+    sheet.cell(row=current_row, column=2, value="Per-truck daily archive points used for the Statistics panel.")
+
+    current_row += 2
+    sheet.cell(row=current_row, column=1, value="Warnings").font = SECTION_FONT
+    sheet.cell(row=current_row, column=1).fill = SECTION_FILL
+    current_row += 1
+    if warnings:
+        for warning in warnings:
+            sheet.cell(row=current_row, column=1, value=warning)
+            current_row += 1
+    else:
+        sheet.cell(row=current_row, column=1, value="No warnings were present in the snapshot.")
+
+    _apply_sheet_formatting(sheet)
+
+
+def _statistics_vehicle_columns() -> list[ColumnSpec]:
+    return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
+        ("Vehicle ID", lambda row: row.get("id")),
+        ("Truck #", lambda row: row.get("number")),
+        ("Driver", lambda row: _tracked_driver_name(row)),
+        ("Status", lambda row: row.get("status")),
+        ("Movement", lambda row: _movement_label(row)),
+        ("Stale", lambda row: "Yes" if row.get("is_stale") else "No"),
+        ("Live Data Date", lambda row: (row.get("location") or {}).get("located_at") or row.get("updated_at")),
+        ("Reporting Day", lambda row: (row.get("statistics_summary") or {}).get("today_date")),
+        ("Archive Last Seen", lambda row: (row.get("statistics_summary") or {}).get("archive_last_seen_at")),
+        ("Today Miles", lambda row: (row.get("statistics_summary") or {}).get("today_miles")),
+        ("Week Miles", lambda row: (row.get("statistics_summary") or {}).get("week_miles")),
+        ("Month Miles", lambda row: (row.get("statistics_summary") or {}).get("month_miles")),
+        ("Tracked Miles", lambda row: (row.get("statistics_summary") or {}).get("tracked_miles")),
+        ("MPG Motive", lambda row: (row.get("statistics_summary") or {}).get("motive_mpg")),
+        ("MPG Motive Source", lambda row: (row.get("statistics_summary") or {}).get("motive_mpg_source")),
+        ("MPG Calculated", lambda row: (row.get("statistics_summary") or {}).get("calculated_mpg")),
+        ("MPG Calculated Source", lambda row: (row.get("statistics_summary") or {}).get("calculated_mpg_source")),
+        ("MPG Best", lambda row: (row.get("statistics_summary") or {}).get("best_mpg")),
+        ("MPG Best Source", lambda row: (row.get("statistics_summary") or {}).get("best_mpg_source")),
+        ("Today MPG", lambda row: (row.get("statistics_summary") or {}).get("today_mpg")),
+        ("Week MPG", lambda row: (row.get("statistics_summary") or {}).get("week_mpg")),
+        ("Month MPG", lambda row: (row.get("statistics_summary") or {}).get("month_mpg")),
+        ("Tracked MPG", lambda row: (row.get("statistics_summary") or {}).get("tracked_mpg")),
+        ("Today Fuel Used Gal", lambda row: (row.get("statistics_summary") or {}).get("today_fuel_used_gallons")),
+        ("Week Fuel Used Gal", lambda row: (row.get("statistics_summary") or {}).get("week_fuel_used_gallons")),
+        ("Month Fuel Used Gal", lambda row: (row.get("statistics_summary") or {}).get("month_fuel_used_gallons")),
+        ("Tracked Fuel Used Gal", lambda row: (row.get("statistics_summary") or {}).get("tracked_fuel_used_gallons")),
+        ("Tracked Days", lambda row: (row.get("statistics_summary") or {}).get("tracked_days")),
+        ("Avg Daily Miles", lambda row: (row.get("statistics_summary") or {}).get("average_daily_miles")),
+        ("Max Daily Miles", lambda row: (row.get("statistics_summary") or {}).get("max_daily_miles")),
+        ("Speed Now MPH", lambda row: (row.get("statistics_summary") or {}).get("current_speed_mph")),
+        ("Avg Speed 7D MPH", lambda row: (row.get("statistics_summary") or {}).get("average_speed_mph_7d")),
+        ("Fuel %", lambda row: (row.get("location") or {}).get("fuel_level_percent")),
+        ("Raw Vehicle MPG", lambda row: row.get("mpg")),
+        ("Active Faults", lambda row: (row.get("fault_summary") or {}).get("active_count")),
+        ("Total Faults", lambda row: (row.get("fault_summary") or {}).get("count")),
+        ("Utilization %", lambda row: (row.get("utilization_summary") or {}).get("utilization_percentage")),
+        ("Latest Odometer", lambda row: (row.get("statistics_summary") or {}).get("latest_odometer_miles")),
+        ("Engine Hours", lambda row: (row.get("statistics_summary") or {}).get("latest_engine_hours")),
+        ("Location", lambda row: (row.get("location") or {}).get("display_label") or (row.get("location") or {}).get("address")),
+        ("City", lambda row: (row.get("location") or {}).get("city")),
+        ("State", lambda row: (row.get("location") or {}).get("state")),
+        ("VIN", lambda row: row.get("vin")),
+        ("Make", lambda row: row.get("make")),
+        ("Model", lambda row: row.get("model")),
+        ("Year", lambda row: row.get("year")),
+    ]
+
+
+def _statistics_leaderboard_rows(leaders: dict) -> list[dict]:
+    labels = {
+        "today_miles": "Top Today Miles",
+        "week_miles": "Top Week Miles",
+        "month_miles": "Top Month Miles",
+        "speed_now": "Fastest Right Now",
+        "faults": "Most Faults",
+        "fuel_low": "Lowest Fuel",
+    }
+    rows: list[dict] = []
+    for key, items in leaders.items():
+        for rank, item in enumerate(items or [], start=1):
+            rows.append({
+                "category": labels.get(key, _humanize(key)),
+                "rank": rank,
+                "vehicle_id": item.get("vehicle_id"),
+                "truck_number": item.get("truck_number"),
+                "driver_name": item.get("driver_name"),
+                "value": item.get("value"),
+                "unit": item.get("unit"),
+            })
+    return rows
+
+
+def _statistics_leaderboard_columns() -> list[ColumnSpec]:
+    return [
+        ("Category", lambda row: row.get("category")),
+        ("Rank", lambda row: row.get("rank")),
+        ("Vehicle ID", lambda row: row.get("vehicle_id")),
+        ("Truck #", lambda row: row.get("truck_number")),
+        ("Driver", lambda row: row.get("driver_name")),
+        ("Value", lambda row: row.get("value")),
+        ("Unit", lambda row: row.get("unit")),
+    ]
+
+
+def _statistics_trend_rows(vehicles: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for vehicle in vehicles:
+        summary = vehicle.get("statistics_summary") or {}
+        for point in summary.get("daily_trend_14d") or []:
+            rows.append({
+                **point,
+                "source_connection_name": vehicle.get("source_connection_name"),
+                "source_key_label": vehicle.get("source_key_label"),
+                "vehicle_id": vehicle.get("id"),
+                "truck_number": vehicle.get("number"),
+                "driver_name": _tracked_driver_name(vehicle),
+            })
+    rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("truck_number") or "")), reverse=True)
+    return rows
+
+
+def _statistics_trend_columns() -> list[ColumnSpec]:
+    return [
+        ("Source Account", lambda row: row.get("source_connection_name")),
+        ("Source Key", lambda row: row.get("source_key_label")),
+        ("Vehicle ID", lambda row: row.get("vehicle_id")),
+        ("Truck #", lambda row: row.get("truck_number")),
+        ("Driver", lambda row: row.get("driver_name")),
+        ("Date", lambda row: row.get("date")),
+        ("Miles", lambda row: row.get("miles")),
+        ("Opening Odometer", lambda row: row.get("opening_odometer_miles")),
+        ("Closing Odometer", lambda row: row.get("closing_odometer_miles")),
+        ("Latest Speed MPH", lambda row: row.get("latest_speed_mph")),
+        ("Max Speed MPH", lambda row: row.get("max_speed_mph")),
+        ("Opening Fuel %", lambda row: row.get("opening_fuel_percent")),
+        ("Latest Fuel %", lambda row: row.get("latest_fuel_percent")),
+        ("Min Fuel %", lambda row: row.get("min_fuel_percent")),
+        ("Estimated Fuel Used Gal", lambda row: row.get("estimated_fuel_used_gallons")),
+        ("Calculated Daily MPG", lambda row: row.get("estimated_mpg")),
+        ("Latest Active Faults", lambda row: row.get("latest_active_faults")),
+        ("Max Active Faults", lambda row: row.get("max_active_faults")),
+        ("Last Recorded At", lambda row: row.get("last_recorded_at")),
+    ]
 
 
 def _fleet_status_columns(roster_by_name: dict[str, dict]) -> list[ColumnSpec]:
