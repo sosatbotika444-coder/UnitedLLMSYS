@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import { TomTomConfig } from "@tomtom-org/maps-sdk/core";
 import { TomTomMap } from "@tomtom-org/maps-sdk/map";
 
-import { TOMTOM_KEY } from "./apiConfig";
+const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || "fu7pxv1akLSodE8K53xEsMMx7aPKLmOl";
 const SERVICE_MAP_PITCH = 22;
 const SERVICE_MAP_BEARING = -6;
 
