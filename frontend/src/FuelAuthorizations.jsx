@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DataFreshnessStrip, firstDataDate, latestDataDate } from "./DataFreshnessStrip";
 import { useConfirmDialog } from "./feedback";
 import { LoadingButtonLabel, LoadingSpinner } from "./LoadingSpinner";
 
@@ -148,6 +149,7 @@ export default function FuelAuthorizations({ token, active = true }) {
   const [statusFilter, setStatusFilter] = useState("open");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
+  const [authorizationsLoadedAt, setAuthorizationsLoadedAt] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -159,9 +161,11 @@ export default function FuelAuthorizations({ token, active = true }) {
       const params = new URLSearchParams({ status: nextStatus });
       const data = await apiRequest(`/fuel-authorizations?${params.toString()}`, {}, token);
       setItems(Array.isArray(data) ? data : []);
+      setAuthorizationsLoadedAt(new Date().toISOString());
     } catch (fetchError) {
       setError(fetchError.message);
       setItems([]);
+      setAuthorizationsLoadedAt("");
     } finally {
       setLoading(false);
     }
@@ -189,6 +193,56 @@ export default function FuelAuthorizations({ token, active = true }) {
       used: count("used")
     };
   }, [items]);
+  const authorizationDataDate = useMemo(
+    () => latestDataDate(items.flatMap((item) => [item.updated_at, item.created_at, item.approved_at, item.sent_at])),
+    [items]
+  );
+  const purchaseCheckDataDate = useMemo(
+    () => latestDataDate(items.flatMap((item) => [
+      item.reconciliation_details?.snapshot_fetched_at,
+      item.reconciled_at,
+      item.actual_purchased_at,
+    ])),
+    [items]
+  );
+  const stationPriceDataDate = useMemo(
+    () => latestDataDate(items.flatMap((item) => [
+      item.station_snapshot?.relay_price_updated_at,
+      item.station_snapshot?.price_updated_at,
+      item.station_snapshot?.price_date,
+      item.strategy_snapshot?.price_updated_at,
+      item.strategy_snapshot?.price_date,
+    ])),
+    [items]
+  );
+  const fuelAuthorizationDataDates = useMemo(
+    () => [
+      {
+        id: "approvals",
+        label: "Approvals list",
+        value: firstDataDate(authorizationDataDate, authorizationsLoadedAt),
+        detail: `${items.length} approval(s), ${statusFilter === "all" ? "All" : statusLabel(statusFilter)} filter`,
+        loading,
+        tone: "blue"
+      },
+      {
+        id: "purchases",
+        label: "Motive purchase checks",
+        value: purchaseCheckDataDate,
+        detail: "Reconcile snapshot and matched purchases",
+        loading: busyId === "bulk",
+        tone: "green"
+      },
+      {
+        id: "prices",
+        label: "Fuel price snapshots",
+        value: stationPriceDataDate,
+        detail: "Saved station/route price dates",
+        tone: "amber"
+      }
+    ],
+    [authorizationDataDate, authorizationsLoadedAt, busyId, items.length, loading, purchaseCheckDataDate, stationPriceDataDate, statusFilter]
+  );
 
   async function runAction(item, path, options = {}) {
     setBusyId(String(item.id));
@@ -286,6 +340,8 @@ export default function FuelAuthorizations({ token, active = true }) {
           <button className="primary-button" type="button" onClick={reconcileOpen} disabled={busyId === "bulk"}><LoadingButtonLabel loading={busyId === "bulk"} loadingLabel="Checking...">Reconcile open</LoadingButtonLabel></button>
         </div>
       </div>
+
+      <DataFreshnessStrip className="fuel-auth-data-dates" items={fuelAuthorizationDataDates} />
 
       {message ? <div className="notice success inline-notice">{message}</div> : null}
       {error ? <div className="notice error inline-notice">{error}</div> : null}

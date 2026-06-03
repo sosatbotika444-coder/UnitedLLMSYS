@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import AuthShiftPlanner, { DEFAULT_SHIFT_PLANNER_STORAGE_KEY } from './AuthShiftPlanner';
+import { DataFreshnessStrip, firstDataDate } from './DataFreshnessStrip';
 import { buildVehicleLocationLabel } from './locationFormatting';
 import { LoadingSpinner } from './LoadingSpinner';
 import SafetyServiceTools from './SafetyServiceTools';
@@ -169,6 +170,48 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
     [user?.id]
   );
   const plannerMigrationKeys = useMemo(() => [DEFAULT_SHIFT_PLANNER_STORAGE_KEY], []);
+  const snapshotDate = firstDataDate(
+    profile?.fleetSnapshot?.fetched_at,
+    profile?.fleetSnapshot?.cache?.fetched_at,
+    profile?.fleetSnapshot?.cache?.served_at
+  );
+  const locationDataDate = firstDataDate(
+    vehicle?.location?.located_at,
+    vehicle?.location?.updated_at,
+    vehicle?.location?.time,
+    snapshotDate
+  );
+  const vehicleDataDate = firstDataDate(vehicle?.updated_at, vehicle?.created_at, snapshotDate);
+  const hosDataDate = firstDataDate(
+    eldHours?.last_status?.time,
+    eldHours?.last_hos_status?.time,
+    eldHours?.available_time?.updated_at,
+    eldHours?.updated_at,
+    snapshotDate
+  );
+  const driverDataDates = [
+    {
+      id: 'truck',
+      label: 'Truck profile',
+      value: firstDataDate(vehicleDataDate, snapshotDate),
+      detail: fixedVehicleId ? `Vehicle ${fixedVehicleId}` : truckNumber,
+      tone: 'blue'
+    },
+    {
+      id: 'fuel',
+      label: 'Fuel/location',
+      value: firstDataDate(locationDataDate, snapshotDate),
+      detail: `${fuelLabel} fuel, ${locationLabel}`,
+      tone: 'green'
+    },
+    {
+      id: 'hos',
+      label: 'HOS clocks',
+      value: firstDataDate(hosDataDate, snapshotDate),
+      detail: `${driveLeft} drive, ${shiftLeft} shift`,
+      tone: 'amber'
+    }
+  ];
 
   if (loading) {
     return <ModuleLoader label='Loading driver workspace...' />;
@@ -206,6 +249,8 @@ export default function DriverWorkspace({ token, user, mobile = false }) {
           <DriverMetric label='HOS' value={eldStatus(vehicle)} detail={eldHours.summary || 'Motive ELD clock'} tone={eldTone(vehicle)} />
         </section>
       )}
+
+      <DataFreshnessStrip className='driver-data-dates' items={driverDataDates} />
 
       <div className={mobile ? 'mobile-internal-tabs driver-mobile-tabs' : 'workspace-inline-tabs driver-workspace-tabs'}>
         {(mobile ? driverMobileTabs : driverTabs).map((tab) => (

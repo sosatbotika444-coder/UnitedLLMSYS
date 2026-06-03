@@ -23085,3 +23085,105 @@ body.appearance-bg-midnight .workspace-main-kicker {
     max-width: calc(100vw - 56px) !important;
   }
 }
+
+.data-freshness-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.workspace-data-dates {
+  margin-top: 2px;
+  max-width: 760px;
+}
+
+.driver-data-dates,
+.fuel-auth-data-dates {
+  margin: 0;
+}
+
+.mobile-data-dates {
+  grid-template-columns: 1fr;
+}
+
+.data-freshness-item {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px 10px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--surface-strong, #ffffff), var(--surface, #f8fafc));
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+}
+
+.data-freshness-item::before {
+  content: "";
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 4px;
+  border-radius: 0 999px 999px 0;
+  background: #64748b;
+}
+
+.data-freshness-blue::before {
+  background: #2563eb;
+}
+
+.data-freshness-green::before {
+  background: #0f9f6e;
+}
+
+.data-freshness-amber::before {
+  background: #d97706;
+}
+
+.data-freshness-item span {
+  color: var(--muted, #64748b);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.data-freshness-item strong {
+  color: var(--text, #0f172a);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.data-freshness-item small {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+body.theme-dark .data-freshness-item {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.9));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+}
+
+body.theme-dark .data-freshness-item strong {
+  color: #f8fafc;
+}
+
+body.theme-dark .data-freshness-item span,
+body.theme-dark .data-freshness-item small {
+  color: #cbd5e1;
+}
+
+@media (max-width: 720px) {
+  .data-freshness-strip {
+    grid-template-columns: 1fr;
+  }
+}

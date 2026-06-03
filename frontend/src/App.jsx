@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import CommercialLanding from "./CommercialLanding";
+import { DataFreshnessStrip, firstDataDate, latestDataDate } from "./DataFreshnessStrip";
 import DesignSystemShowcase from "./DesignSystemShowcase";
 import DriverAuth from "./DriverAuth";
 import DriverWorkspace from "./DriverWorkspace";
@@ -983,7 +984,7 @@ function MobileBottomNav({ items, activeId, onSelect }) {
   );
 }
 
-function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, message, error, onLogout, action, navItems = [], activeId = "", onSelect, morePanel = null, children }) {
+function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, message, error, onLogout, action, navItems = [], activeId = "", onSelect, morePanel = null, dataDates = [], children }) {
   return (
     <div className="mobile-workspace-shell">
       <header className="mobile-workspace-topbar">
@@ -1012,6 +1013,8 @@ function MobileWorkspaceShell({ kicker, title, subtitle, user, currentDate, mess
             <strong>{user?.full_name || "Account"}</strong>
           </article>
         </section>
+
+        <DataFreshnessStrip className="mobile-data-dates" items={dataDates} />
 
         {action ? <div className="mobile-primary-action">{action}</div> : null}
         {message ? <div className="notice success inline-notice">{message}</div> : null}
@@ -1297,6 +1300,9 @@ export default function App() {
   });
   const [rows, setRows] = useState([]);
   const [fleetVehicles, setFleetVehicles] = useState([]);
+  const [loadsLoadedAt, setLoadsLoadedAt] = useState("");
+  const [fleetSnapshotAt, setFleetSnapshotAt] = useState("");
+  const [fleetServedAt, setFleetServedAt] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [loading, setLoading] = useState(false);
@@ -1381,6 +1387,9 @@ export default function App() {
       setUser(null);
       setRows([]);
       setFleetVehicles([]);
+      setLoadsLoadedAt("");
+      setFleetSnapshotAt("");
+      setFleetServedAt("");
       return;
     }
 
@@ -1404,6 +1413,9 @@ export default function App() {
             setUser(null);
             setRows([]);
             setFleetVehicles([]);
+            setLoadsLoadedAt("");
+            setFleetSnapshotAt("");
+            setFleetServedAt("");
             setError("Session ended. Please sign in again.");
           } else if (user) {
             setError("Connection check failed, but your workspace stayed on screen.");
@@ -1431,6 +1443,7 @@ export default function App() {
   useEffect(() => {
     if (!token || !["fuel", "statistics"].includes(user?.department || "")) {
       setRows([]);
+      setLoadsLoadedAt("");
       setGridLoading(false);
       return;
     }
@@ -1444,11 +1457,13 @@ export default function App() {
         const loads = await apiRequest(endpoint, {}, token);
         if (!ignore) {
           setRows(loads.map(normalizeRow));
+          setLoadsLoadedAt(new Date().toISOString());
           setError("");
         }
       } catch (fetchError) {
         if (!ignore) {
           setRows([]);
+          setLoadsLoadedAt("");
           setError(fetchError.message);
         }
       } finally {
@@ -1468,6 +1483,8 @@ export default function App() {
   useEffect(() => {
     if (!token || !["fuel", "statistics"].includes(user?.department || "")) {
       setFleetVehicles([]);
+      setFleetSnapshotAt("");
+      setFleetServedAt("");
       setFleetLoading(false);
       return;
     }
@@ -1480,10 +1497,14 @@ export default function App() {
         const data = await apiRequest("/motive/fleet", {}, token);
         if (!ignore) {
           setFleetVehicles(Array.isArray(data?.vehicles) ? data.vehicles : []);
+          setFleetSnapshotAt(firstDataDate(data?.fetched_at, data?.cache?.fetched_at, data?.cache?.served_at, new Date().toISOString()));
+          setFleetServedAt(firstDataDate(data?.cache?.served_at, data?.fetched_at, new Date().toISOString()));
         }
       } catch {
         if (!ignore) {
           setFleetVehicles([]);
+          setFleetSnapshotAt("");
+          setFleetServedAt("");
         }
       } finally {
         if (!ignore) {
@@ -1606,6 +1627,49 @@ export default function App() {
       readiness
     };
   }, [rows]);
+
+  const latestLoadDataDate = useMemo(
+    () => latestDataDate(rows.flatMap((row) => [row.updated_at, row.updatedAt, row.created_at, row.createdAt])),
+    [rows]
+  );
+  const latestFleetTelemetryDate = useMemo(
+    () => latestDataDate(fleetVehicles.flatMap((vehicle) => [
+      vehicle?.location?.located_at,
+      vehicle?.location?.updated_at,
+      vehicle?.updated_at,
+      vehicle?.created_at,
+    ])),
+    [fleetVehicles]
+  );
+  const fuelServiceDataDates = useMemo(
+    () => [
+      {
+        id: "fleet",
+        label: "Motive snapshot",
+        value: firstDataDate(fleetSnapshotAt, fleetServedAt),
+        detail: `${fleetVehicles.length} truck(s) loaded`,
+        loading: fleetLoading,
+        tone: "blue"
+      },
+      {
+        id: "fuel",
+        label: "Truck fuel/location",
+        value: firstDataDate(latestFleetTelemetryDate, fleetSnapshotAt, fleetServedAt),
+        detail: "Fuel percent, GPS, truck status",
+        loading: fleetLoading,
+        tone: "green"
+      },
+      {
+        id: "loads",
+        label: "Loads sheet",
+        value: firstDataDate(latestLoadDataDate, loadsLoadedAt),
+        detail: `${rows.length} dispatch row(s)`,
+        loading: gridLoading,
+        tone: "amber"
+      }
+    ],
+    [fleetLoading, fleetServedAt, fleetSnapshotAt, fleetVehicles.length, gridLoading, latestFleetTelemetryDate, latestLoadDataDate, loadsLoadedAt, rows.length]
+  );
 
   const currentDate = useMemo(
     () =>
@@ -2614,6 +2678,7 @@ export default function App() {
             ))}
           </section>
         ) : null}
+        dataDates={fuelServiceDataDates}
         action={activeWorkspace === "loads" ? <button className="primary-button" type="button" onClick={createRow}><UnitedIcon name="plus" size={16} />New Load</button> : null}
       >
         <MobileFuelWorkspaceContent
@@ -2688,6 +2753,7 @@ export default function App() {
                 <strong>What to do here</strong>
                 <span>{activeWorkspaceCopy.helper}</span>
               </div>
+              <DataFreshnessStrip className="workspace-data-dates" items={fuelServiceDataDates} />
             </div>
 
             <div className="workspace-main-meta">
