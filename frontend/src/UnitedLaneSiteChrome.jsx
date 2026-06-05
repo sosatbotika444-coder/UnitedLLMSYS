@@ -1,3 +1,4 @@
+import { useEffect, useId, useState } from "react";
 import { UnitedIcon } from "./UnitedLaneIcons";
 
 const safetyEmail = <a href="mailto:safety@unitedlanellc.com">safety@unitedlanellc.com</a>;
@@ -393,18 +394,51 @@ export function UnitedLaneMark({ className = "" }) {
 }
 
 export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = "", action = null, navItems = null }) {
+  const [isNavOpen, setIsNavOpen] = useState(false);
+  const navId = useId();
   const items = navItems || [
     { id: "home", label: "HOME", icon: "home", onClick: onHome },
     { id: "about", label: "ABOUT US", icon: "about", onClick: onAbout },
     { id: "docs", label: "DOCS", icon: "docs", onClick: onDocs },
     { id: "privacy", label: "PRIVACY & TERMS", icon: "privacy", onClick: onPrivacy },
   ];
+  const headerClassName = `site-header${isNavOpen ? " site-nav-open" : ""}`;
+
+  useEffect(() => {
+    if (!isNavOpen) {
+      return undefined;
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        setIsNavOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isNavOpen]);
+
+  function handleNavItemClick(item) {
+    setIsNavOpen(false);
+    item.onClick?.();
+  }
+
+  function handleHomeClick() {
+    setIsNavOpen(false);
+    onHome?.();
+  }
+
+  function handleActionClick() {
+    setIsNavOpen(false);
+    action?.onClick?.();
+  }
 
   return (
-    <header className="site-header">
+    <header className={headerClassName}>
       <div className="site-header-frame">
         <div className="site-header-inner">
-          <button className="site-brand" type="button" onClick={onHome}>
+          <button className="site-brand" type="button" onClick={handleHomeClick}>
             <UnitedLaneMark className="site-brand-mark-svg" />
             <span className="site-brand-copy" aria-label="United Lane LLC">
               <strong>UNITED</strong>
@@ -412,9 +446,9 @@ export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = ""
             </span>
           </button>
 
-          <nav className="site-nav" aria-label="Site navigation">
+          <nav className="site-nav" id={navId} aria-label="Site navigation">
             {items.map((item) => (
-              <button className={getNavButtonClass(activeItem, item.id)} type="button" onClick={item.onClick} key={item.id}>
+              <button className={getNavButtonClass(activeItem, item.id)} type="button" onClick={() => handleNavItemClick(item)} key={item.id}>
                 <UnitedIcon name={item.icon || "spark"} size={16} />
                 {item.label}
               </button>
@@ -422,11 +456,23 @@ export function SiteHeader({ onHome, onAbout, onDocs, onPrivacy, activeItem = ""
           </nav>
 
           {action ? (
-            <button className="primary-button site-header-cta" type="button" onClick={action.onClick}>
+            <button className="primary-button site-header-cta" type="button" onClick={handleActionClick}>
               <UnitedIcon name={action.icon || "spark"} size={16} />
               {action.label}
             </button>
           ) : null}
+
+          <button
+            className="site-nav-toggle"
+            type="button"
+            aria-label={isNavOpen ? "Close menu" : "Open menu"}
+            aria-expanded={isNavOpen}
+            aria-controls={navId}
+            onClick={() => setIsNavOpen((current) => !current)}
+          >
+            <UnitedIcon name={isNavOpen ? "error" : "menu"} size={17} />
+            <span>{isNavOpen ? "Close" : "Menu"}</span>
+          </button>
         </div>
 
         <div className="site-header-divider" />
